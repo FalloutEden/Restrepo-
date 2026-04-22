@@ -9,17 +9,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing OpenAI API key" }, { status: 500 });
     }
 
-    const body = (await request.json()) as { prompt?: string };
+    const body = (await request.json()) as { prompt?: string; size?: "1024x1024" | "1024x1536" | "1536x1024" };
     const prompt = body.prompt?.trim();
+    const size = body.size ?? "1024x1024";
 
     if (!prompt) {
-      return NextResponse.json({ error: "Missing mockup prompt" }, { status: 400 });
+      return NextResponse.json({ error: "Missing image prompt" }, { status: 400 });
     }
 
     const response = await openai.images.generate({
       model: "gpt-image-1",
       prompt,
-      size: "1024x1024"
+      size
     });
 
     const imageBase64 = response.data?.[0]?.b64_json;

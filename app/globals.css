@@ -1228,6 +1228,10 @@ a {
   line-height: 1.75;
 }
 
+.warning-copy {
+  color: #ffd479;
+}
+
 .detail-list {
   display: grid;
   gap: 0.9rem;
@@ -1252,6 +1256,10 @@ a {
   color: #86f0be;
 }
 
+.status-retrying {
+  color: #ffd479;
+}
+
 .status-idle {
   color: #ffd479;
 }
@@ -1264,6 +1272,10 @@ a {
   color: #d6a2ff;
 }
 
+.status-failed {
+  color: #ff7b83;
+}
+
 .status-error {
   color: #ff7b83;
 }
@@ -1271,6 +1283,11 @@ a {
 .dot-running {
   background: #86f0be;
   color: #86f0be;
+}
+
+.dot-retrying {
+  background: #ffd479;
+  color: #ffd479;
 }
 
 .dot-idle {
@@ -1286,6 +1303,11 @@ a {
 .dot-blocked {
   background: #d6a2ff;
   color: #d6a2ff;
+}
+
+.dot-failed {
+  background: #ff7b83;
+  color: #ff7b83;
 }
 
 .dot-error {
@@ -1388,5 +1410,293 @@ a {
 
   .agent-visual-modal {
     min-height: 300px;
+  }
+}
+.memorial-shell {
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0 auto 4rem;
+  padding: 0 0 1rem;
+}
+
+.memorial-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.memorial-kicker {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.memorial-toggle {
+  min-height: 2.5rem;
+  padding: 0.6rem 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(12, 14, 15, 0.72);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.memorial-toggle:hover,
+.memorial-toggle:focus-visible {
+  border-color: rgba(255, 255, 255, 0.16);
+  outline: none;
+}
+
+.memorial-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) 1fr;
+  align-items: center;
+  gap: 1.4rem;
+  padding: 1.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 28%),
+    rgba(10, 12, 13, 0.76);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+}
+
+.memorial-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  filter: saturate(0.92) brightness(0.94);
+}
+
+.memorial-copy {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+  text-align: center;
+}
+
+.memorial-title,
+.memorial-dates,
+.memorial-message {
+  margin: 0;
+}
+
+.memorial-title {
+  color: var(--white);
+  font-size: clamp(1.2rem, 2vw, 1.8rem);
+  letter-spacing: 0.04em;
+}
+
+.memorial-dates {
+  color: var(--text-soft);
+  font-size: 0.98rem;
+  letter-spacing: 0.14em;
+}
+
+.memorial-message {
+  color: #e5ddd3;
+  font-size: 1.02rem;
+}
+
+@media (max-width: 720px) {
+  .memorial-shell {
+    width: min(100% - 1rem, 100%);
+  }
+
+  .memorial-header-row,
+  .memorial-card {
+    grid-template-columns: 1fr;
+  }
+
+  .memorial-header-row {
+    display: grid;
+  }
+
+  .memorial-toggle {
+    justify-self: start;
+  }
+
+  .memorial-card {
+    justify-items: center;
+  }
+
+  .memorial-image {
+    max-width: 240px;
+  }
+}
+
+.reference-board-grid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.reference-board-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.reference-board-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.reference-example-card {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.reference-board-preview {
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media (min-width: 960px) {
+  .reference-board-grid {
+    grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.05fr);
+    align-items: start;
+  }
+}
+
+.tab-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+}
+
+.tab-button {
+  min-height: 2.9rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.tab-button:hover,
+.tab-button:focus-visible,
+.tab-button-active {
+  border-color: rgba(227, 56, 65, 0.5);
+  color: #ffe5e6;
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.tab-button-active {
+  background: rgba(179, 19, 27, 0.18);
+}
+
+.dashboard-stats-wide {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.advanced-shell summary {
+  cursor: pointer;
+}
+
+.queue-board-grid,
+.queue-column-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.queue-board-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.queue-column-title {
+  margin: 1rem 0 0.75rem;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.queue-opportunity-card {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.catalogue-toolbar,
+.catalogue-grid,
+.catalogue-preview-list,
+.workflow-stage-strip,
+.workflow-stage-editor,
+.log-list,
+.catalogue-metrics-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.catalogue-toolbar {
+  grid-template-columns: 1.2fr 0.7fr 0.7fr;
+  margin-top: 1rem;
+}
+
+.catalogue-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.catalogue-card,
+.workflow-stage-card,
+.log-card {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.catalogue-card-selected {
+  border-color: rgba(227, 56, 65, 0.45);
+  box-shadow: 0 0 18px rgba(179, 19, 27, 0.16);
+}
+
+.catalogue-preview-list,
+.workflow-stage-editor,
+.log-list {
+  margin-top: 0.5rem;
+}
+
+.catalogue-preview-item,
+.workflow-stage-card,
+.log-card,
+.dataset-error-shell {
+  padding: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dataset-error-shell {
+  border-color: rgba(227, 56, 65, 0.32);
+  background: rgba(179, 19, 27, 0.08);
+}
+
+.workflow-stage-strip {
+  grid-template-columns: repeat(2, minmax(0, max-content));
+}
+
+.workflow-editor-shell {
+  margin-top: 1rem;
+}
+
+.catalogue-metrics-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1080px) {
+  .dashboard-stats-wide,
+  .queue-board-grid,
+  .catalogue-grid,
+  .catalogue-toolbar,
+  .catalogue-metrics-grid {
+    grid-template-columns: 1fr;
   }
 }

@@ -1,0 +1,12 @@
+{
+  "agents": {
+    "defaults": {
+      "models": ["openai/gpt-4.1-mini", "openai/gpt-5-chat"],
+      "model": {
+        "primary": "openai/gpt-5-chat",
+        "fallback": "openai/gpt-4.1-mini"
+      }
+    },
+    "registered": {}
+  }
+}

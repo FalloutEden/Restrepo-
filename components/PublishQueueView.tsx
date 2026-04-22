@@ -28,23 +28,19 @@ export function PublishQueueView({ queue, onApprove, onReject }: PublishQueueVie
     setQueueItems(queue);
   }, [queue]);
 
-  useEffect(() => {
-    console.log("QUEUE LOADED", queueItems);
-  }, [queueItems]);
-
   return (
     <section className="archive-shell">
       <div className="status-header">
         <div>
           <span className="eyebrow">Approval Queue</span>
-          <h2 className="section-title">Review Etsy listings before any future publishing step</h2>
+          <h2 className="section-title">Review product and service outputs before any future outbound step</h2>
         </div>
       </div>
 
       {queueItems.length === 0 ? (
         <div className="empty-shell">
           <h3 className="runner-title">Queue empty</h3>
-          <p className="detail-body">Completed Etsy pipeline runs can stage one listing draft here for approval without posting anywhere.</p>
+          <p className="detail-body">Completed autonomous runs can stage draft outputs here for approval without posting anywhere.</p>
         </div>
       ) : (
         <div className="archive-grid">
@@ -53,6 +49,9 @@ export function PublishQueueView({ queue, onApprove, onReject }: PublishQueueVie
               <p className="detail-body">
                 <strong>{item.title}</strong>
               </p>
+              <p className="detail-body">Channel: {item.channel}</p>
+              <p className="detail-body">Format: {item.format}</p>
+              <p className="detail-body">Deliverable type: {item.deliverableType}</p>
               <p className="detail-body">Status: {item.status}</p>
 
               <div className="export-actions">

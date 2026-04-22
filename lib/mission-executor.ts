@@ -134,8 +134,8 @@ export function runMissionExecution({ mission, tasks, agents, onUpdate, onFinish
           ...currentMission,
           status: "Completed",
           completedAt,
-          summary: `${currentMission.executionMode} Etsy pipeline completed locally. One listing package, its supporting artifacts, and approval notes were preserved for review.`,
-          recommendedNextAction: "Review the final Etsy listing, inspect each agent handoff, and approve only if the product is ready."
+          summary: `${currentMission.executionMode} product pipeline completed locally. One listing package, its supporting artifacts, and approval notes were preserved for review.`,
+          recommendedNextAction: "Review the final listing output, inspect each agent handoff, and approve only if the product is ready."
         },
         currentTasks,
         currentArtifacts
@@ -178,7 +178,7 @@ export function runMissionExecution({ mission, tasks, agents, onUpdate, onFinish
           summary: `${finishedTask.assignedAgent} completed ${finishedTask.title.toLowerCase()}.`,
           recommendedNextAction:
             taskIndex === currentTasks.length - 1
-              ? "Finalizing the Etsy listing packet."
+              ? "Finalizing the listing packet."
               : "Pipeline execution continues across the queued task list."
         };
         emitUpdate();
@@ -203,7 +203,7 @@ export function runMissionExecution({ mission, tasks, agents, onUpdate, onFinish
             ...currentMission,
             status: "Failed",
             completedAt,
-            summary: "Etsy pipeline execution failed locally. Partial outputs were preserved for review.",
+            summary: "Product pipeline execution failed locally. Partial outputs were preserved for review.",
             recommendedNextAction: "Inspect the failed task, review the listing payload, and retry once the local issue is resolved."
           },
           currentTasks,
@@ -223,7 +223,7 @@ export function runMissionExecution({ mission, tasks, agents, onUpdate, onFinish
       ...currentMission,
       status: "Running",
       startedAt,
-      summary: "Local Etsy pipeline executor is live and preparing the first task.",
+      summary: "Local product pipeline executor is live and preparing the first task.",
       recommendedNextAction: "Pipeline execution has started. Monitor the board for live task updates."
     };
     emitUpdate();
@@ -262,3 +262,4 @@ export function runMissionExecution({ mission, tasks, agents, onUpdate, onFinish
     timeouts.clear();
   };
 }
+

@@ -1,23 +1,58 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AgentCard } from "@/components/AgentCard";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
+import { AutonomousQueueBoard } from "@/components/AutonomousQueueBoard";
+import { DatasetCatalogue } from "@/components/DatasetCatalogue";
 import { MissionArchive } from "@/components/MissionArchive";
 import { MissionControlPanel } from "@/components/MissionControlPanel";
 import { MorningReportView } from "@/components/MorningReportView";
 import { MissionStatusBoard } from "@/components/MissionStatusBoard";
 import { PublishQueueView } from "@/components/PublishQueueView";
-import { runMissionExecution } from "@/lib/mission-executor";
-import type { Agent } from "@/lib/mock-agents";
+import { ReferenceBoard } from "@/components/ReferenceBoard";
+import { TestingHarness } from "@/components/TestingHarness";
+import { WorkflowStudio } from "@/components/WorkflowStudio";
+import type { AgentRunTrace } from "@/lib/agent-runtime";
+import type {
+  AutomationStage,
+  DatasetCatalogueEntry,
+  DatasetKind,
+  RuntimeStartupReport,
+  WorkflowRunLog,
+  WorkflowRunMetrics
+} from "@/lib/dataset-models";
+import { AUTONOMOUS_BUILD_THRESHOLD, createQueueJob, type OpportunityQueueJob } from "@/lib/autonomous-research";
 import {
-  createPublishQueueItem,
+  ingestReferenceUrl,
+  setResearchExamplesContext,
+  storeResearchExample,
+  type CommerceChannel,
+  type ResearchExample,
+  type ResearchExampleStatus
+} from "@/lib/market-intelligence";
+import {
+  recordProductTrainingFeedback,
+  recordStyleFeedback,
+  setProductFeedbackContext,
+  setStyleFeedbackContext,
+  type ProductFeedbackRating,
+  type ProductTrainingFeedback,
+  type StyleFeedbackMap
+} from "@/lib/style-intelligence";
+import { WORKFLOW_TEMPLATES, cloneWorkflowStages, getWorkflowTemplateById } from "@/lib/workflow-templates";
+import type { Agent } from "@/lib/mock-agents";
+import { DEFAULT_MAX_TOKENS_PER_MINUTE } from "@/lib/token-batching";
+import {
+  buildMissionRecord,
   createMissionDraft,
   createMissionTasks,
+  createPublishQueueItem,
   hydrateAgentsForMission,
   type ExecutionMode,
   type MissionPriority,
   type MissionRecord,
+  type MissionTask,
   type RunnerState
 } from "@/lib/missions";
 
@@ -25,17 +60,295 @@ type AgentDashboardProps = {
   agents: Agent[];
 };
 
+type DashboardTab =
+  | "overview"
+  | "catalogue"
+  | "workflow"
+  | "testing"
+  | "research"
+  | "validation"
+  | "design_listing"
+  | "approval"
+  | "archive"
+  | "agents"
+  | "settings";
+
+type AutonomousRunResponse = {
+  runtime: {
+    researchSummary: string;
+    sourceSignalSummary: string[];
+    agentRuns: AgentRunTrace[];
+  };
+  workflow: {
+    templateId: string | null;
+    chain: AutomationStage[];
+    runLabel: string;
+    selectedDatasetKeys: string[];
+    selectedDatasetTitles: string[];
+    maxTokensPerMinute: number;
+  };
+  batching?: {
+    maxTokensPerMinute: number;
+    selectedTokenLoad: number;
+    batchCount: number;
+    selectedDatasetKeys: string[];
+    selectedDatasetTitles: string[];
+  };
+  logs: WorkflowRunLog[];
+  metrics: WorkflowRunMetrics;
+  queues: {
+    researchQueue: OpportunityQueueJob[];
+    shortlistQueue: OpportunityQueueJob[];
+    draftBuildQueue: OpportunityQueueJob[];
+    approvalQueue: OpportunityQueueJob[];
+    rejectedSimilar: OpportunityQueueJob[];
+  };
+  confidenceThreshold: number;
+  trainingData?: {
+    fileCount: number;
+    loadedFileCount: number;
+    exampleCount: number;
+    files: Array<{
+      key: string;
+      path: string;
+      loaded: boolean;
+      exampleCount: number;
+      estimatedTokens: number;
+      error?: string;
+    }>;
+    datasets: DatasetCatalogueEntry[];
+  };
+  trainingExamples?: ResearchExample[];
+  startupCheck?: RuntimeStartupReport;
+  error?: string;
+  action?: string;
+};
+
+type DatasetCatalogueResponse = {
+  datasets: DatasetCatalogueEntry[];
+  summary: {
+    fileCount: number;
+    loadedFileCount: number;
+    exampleCount: number;
+  };
+  startupCheck?: RuntimeStartupReport;
+  maxTokensPerMinute?: number;
+  error?: string;
+};
+
+const DEFAULT_TEMPLATE_ID = "mixed-revenue-sprint";
+const DEFAULT_GOAL = "Research and create jobs across all supported channels for sellable products or services.";
+const DEFAULT_CONSTRAINTS = [
+  "Never publish automatically.",
+  "Keep printable image generation, spreadsheet generation, listing generation, the feedback loop, and approval review intact.",
+  "Automatically build only high-confidence drafts.",
+  "Hold every outbound action for manual approval."
+].join("\n");
+
+function timestampLabel(date: Date) {
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function buildNavigationTabs(): Array<{ id: DashboardTab; label: string }> {
+  return [
+    { id: "overview", label: "Overview" },
+    { id: "catalogue", label: "Data Catalogue" },
+    { id: "workflow", label: "Workflow Studio" },
+    { id: "testing", label: "Testing Harness" },
+    { id: "research", label: "Research" },
+    { id: "validation", label: "Validation" },
+    { id: "design_listing", label: "Design & Listing" },
+    { id: "approval", label: "Approval" },
+    { id: "archive", label: "Archive" },
+    { id: "agents", label: "Agents" },
+    { id: "settings", label: "Settings" }
+  ];
+}
+
+function completeMissionTasks(tasks: MissionTask[]) {
+  return tasks.map((task, index) => {
+    const startedAt = timestampLabel(new Date(Date.now() + index * 1000));
+    const completedAt = timestampLabel(new Date(Date.now() + (index + 1) * 1000));
+
+    return {
+      ...task,
+      status: "Completed" as const,
+      startedAt,
+      completedAt,
+      outputSummary: task.plannedOutputSummary
+    };
+  });
+}
+
+function buildAutonomousGoal(job: OpportunityQueueJob, originalGoal: string) {
+  return [
+    `Output type: ${job.outputKind ?? "product"}.`,
+    job.buildGoal || `Build a sellable ${job.channel} ${job.productServiceType} for the ${job.niche} niche.`,
+    `Target buyer: ${job.targetBuyer}.`,
+    `Deliverable type: ${job.deliverableType}.`,
+    `Style direction: ${job.styleDirection}.`,
+    job.styleWhy ? `Why this style: ${job.styleWhy}.` : "",
+    `Why selected: ${job.whySelected}.`,
+    `Why it may sell: ${job.whyItMaySell}.`,
+    `Source signals: ${job.sourceSignals.join(" | ")}.`,
+    `Original autonomous command: ${originalGoal}`
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function buildAutonomousConstraints(baseConstraints: string, job: OpportunityQueueJob) {
+  return [
+    baseConstraints,
+    job.buildConstraints || "",
+    job.designNotes?.length ? `Design notes: ${job.designNotes.join(" | ")}` : "",
+    job.approvalNotes?.length ? `Approval notes: ${job.approvalNotes.join(" | ")}` : "",
+    "Do not publish automatically."
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildDraftRecord(
+  job: OpportunityQueueJob,
+  originalGoal: string,
+  baseConstraints: string,
+  priority: MissionPriority,
+  executionMode: ExecutionMode,
+  agents: Agent[]
+) {
+  const mission = {
+    ...createMissionDraft(
+      buildAutonomousGoal(job, originalGoal),
+      buildAutonomousConstraints(baseConstraints, job),
+      priority,
+      executionMode,
+      job.channel
+    ),
+    status: "Completed" as const,
+    startedAt: timestampLabel(new Date()),
+    completedAt: timestampLabel(new Date(Date.now() + 4000)),
+    summary: `Autonomous draft build completed for ${job.title}.`,
+    recommendedNextAction: "Review the built draft, confirm the opportunity rationale, and approve manually if it looks strong."
+  };
+  const tasks = completeMissionTasks(createMissionTasks(mission));
+  const record = buildMissionRecord(mission, tasks, agents, tasks.flatMap((task) => task.artifacts));
+
+  return {
+    job,
+    record: {
+      ...record,
+      report: {
+        ...record.report,
+        confidenceScore: job.confidenceScore,
+        executiveSummary: `${record.report.executiveSummary} OpenAI agent orchestration selected this opportunity at ${job.confidenceScore}% confidence.`,
+        recommendations: [
+          ...record.report.recommendations,
+          `Opportunity rationale: ${job.whySelected}`,
+          `Source signals: ${job.sourceSignals.join(" | ")}`
+        ]
+      }
+    }
+  };
+}
+
+function buildAgentRoleCopy(agentRuns: AgentRunTrace[]) {
+  return agentRuns.map((run) => `${run.name}: ${run.summary}`);
+}
+
+function incrementUsageMap(current: Record<string, number>, keys: string[]) {
+  const next = { ...current };
+  keys.forEach((key) => {
+    next[key] = (next[key] ?? 0) + 1;
+  });
+  return next;
+}
+
+function toAgentStatus(status: AgentRunTrace["status"]): Agent["status"] {
+  switch (status) {
+    case "running":
+      return "Running";
+    case "retrying":
+      return "Retrying";
+    case "completed":
+      return "Completed";
+    case "failed":
+      return "Failed";
+    default:
+      return "Idle";
+  }
+}
+
+function normalizeRoleLabel(value: string) {
+  return value.toLowerCase().replace(/[^a-z]+/g, " ").trim();
+}
+
+function matchTraceToAgent(agent: Agent, traces: AgentRunTrace[]) {
+  const agentRole = normalizeRoleLabel(agent.role);
+  return traces.find((trace) => {
+    const traceName = normalizeRoleLabel(trace.name);
+    const traceResponsibility = normalizeRoleLabel(trace.responsibility);
+    return agentRole.includes(traceName) || traceName.includes(agentRole) || traceResponsibility.includes(agentRole);
+  });
+}
+
+function compareByUsage<T extends { key?: string; id?: string; loaded?: boolean }>(
+  left: T,
+  right: T,
+  usageMap: Record<string, number>
+) {
+  const leftKey = left.key ?? left.id ?? "";
+  const rightKey = right.key ?? right.id ?? "";
+  const usageDelta = (usageMap[rightKey] ?? 0) - (usageMap[leftKey] ?? 0);
+  if (usageDelta !== 0) {
+    return usageDelta;
+  }
+
+  if ((left.loaded ?? true) !== (right.loaded ?? true)) {
+    return left.loaded ? -1 : 1;
+  }
+
+  return leftKey.localeCompare(rightKey);
+}
+
+function buildExportPayload(payload: object, fileName: string) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  window.URL.revokeObjectURL(url);
+}
+
 export function AgentDashboard({ agents }: AgentDashboardProps) {
-  const cancelExecutionRef = useRef<(() => void) | null>(null);
-  const [missionGoal, setMissionGoal] = useState(
-    "Generate one Etsy digital product listing in planners, trackers, templates, or printable kits that is ready for approval and later publishing."
+  const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState(DEFAULT_TEMPLATE_ID);
+  const [workflowStages, setWorkflowStages] = useState<AutomationStage[]>(() =>
+    cloneWorkflowStages(getWorkflowTemplateById(DEFAULT_TEMPLATE_ID)?.stages ?? ["research", "validate", "design", "list"])
   );
+  const [missionGoal, setMissionGoal] = useState(getWorkflowTemplateById(DEFAULT_TEMPLATE_ID)?.goal ?? DEFAULT_GOAL);
   const [missionConstraints, setMissionConstraints] = useState(
-    "No live Etsy publishing.\nNo account changes or outbound actions.\nOnly digital Etsy products.\nReturn one complete listing with title, description, 13 tags, price, product contents, file delivery description, and mockup prompt."
+    getWorkflowTemplateById(DEFAULT_TEMPLATE_ID)?.constraints ?? DEFAULT_CONSTRAINTS
+  );
+  const [selectedChannel, setSelectedChannel] = useState<CommerceChannel>(
+    getWorkflowTemplateById(DEFAULT_TEMPLATE_ID)?.defaultChannel ?? "all"
   );
   const [missionPriority, setMissionPriority] = useState<MissionPriority>("High");
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("local");
   const [outboundApproved, setOutboundApproved] = useState(false);
+  const [runtimeBusy, setRuntimeBusy] = useState(false);
+  const [runtimeStatus, setRuntimeStatus] = useState("");
+  const [runtimeError, setRuntimeError] = useState("");
+  const [researchSummary, setResearchSummary] = useState("");
+  const [sourceSignalSummary, setSourceSignalSummary] = useState<string[]>([]);
+  const [agentRuns, setAgentRuns] = useState<AgentRunTrace[]>([]);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(AUTONOMOUS_BUILD_THRESHOLD);
   const [runnerState, setRunnerState] = useState<RunnerState>({
     activeMission: null,
     tasks: [],
@@ -45,125 +358,693 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
     publishQueue: []
   });
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const liveAgents = useMemo(
-    () => hydrateAgentsForMission(agents, runnerState.tasks, runnerState.activeMission),
-    [agents, runnerState.activeMission, runnerState.tasks]
-  );
+  const [selectedReviewMissionId, setSelectedReviewMissionId] = useState<string | null>(null);
+  const [styleFeedback, setStyleFeedback] = useState<StyleFeedbackMap>({});
+  const [productFeedback, setProductFeedback] = useState<ProductTrainingFeedback[]>([]);
+  const [researchExamples, setResearchExamples] = useState<ResearchExample[]>([]);
+  const [trainingExamples, setTrainingExamples] = useState<ResearchExample[]>([]);
+  const [researchQueue, setResearchQueue] = useState<OpportunityQueueJob[]>([]);
+  const [shortlistQueue, setShortlistQueue] = useState<OpportunityQueueJob[]>([]);
+  const [buildQueue, setBuildQueue] = useState<OpportunityQueueJob[]>([]);
+  const [approvalQueue, setApprovalQueue] = useState<OpportunityQueueJob[]>([]);
+  const [rejectedSimilar, setRejectedSimilar] = useState<OpportunityQueueJob[]>([]);
+  const [datasetCatalogue, setDatasetCatalogue] = useState<DatasetCatalogueEntry[]>([]);
+  const [selectedDatasetKeys, setSelectedDatasetKeys] = useState<string[]>([]);
+  const [datasetSearch, setDatasetSearch] = useState("");
+  const [datasetKindFilter, setDatasetKindFilter] = useState<DatasetKind | "all">("all");
+  const [datasetChannelFilter, setDatasetChannelFilter] = useState<CommerceChannel | "all">("all");
+  const [datasetCatalogueError, setDatasetCatalogueError] = useState("");
+  const [datasetUsage, setDatasetUsage] = useState<Record<string, number>>({});
+  const [workflowUsage, setWorkflowUsage] = useState<Record<string, number>>({});
+  const [hasSavedDatasetSelection, setHasSavedDatasetSelection] = useState(false);
+  const [trainingDataSummary, setTrainingDataSummary] = useState<AutonomousRunResponse["trainingData"] | null>(null);
+  const [workflowLogs, setWorkflowLogs] = useState<WorkflowRunLog[]>([]);
+  const [workflowMetrics, setWorkflowMetrics] = useState<WorkflowRunMetrics | null>(null);
+  const [workflowRunLabel, setWorkflowRunLabel] = useState("Mixed Revenue Sprint");
+  const [startupCheck, setStartupCheck] = useState<RuntimeStartupReport | null>(null);
+  const [maxTokensPerMinute, setMaxTokensPerMinute] = useState(DEFAULT_MAX_TOKENS_PER_MINUTE);
 
+  const liveAgents = useMemo(() => {
+    const missionHydrated = hydrateAgentsForMission(agents, runnerState.tasks, runnerState.activeMission);
+
+    return missionHydrated.map((agent) => {
+      const trace = matchTraceToAgent(agent, agentRuns);
+      if (!trace) {
+        return agent;
+      }
+
+      return {
+        ...agent,
+        status: runtimeBusy && trace.status === "retrying" ? "Retrying" : toAgentStatus(trace.status),
+        latestOutputPreview: trace.error ?? trace.summary,
+        latestOutput: trace.error ?? `${trace.summary}${trace.retryCount > 0 ? ` Retried ${trace.retryCount} time${trace.retryCount === 1 ? "" : "s"}.` : ""}`,
+        updatedAt: trace.status === "running" ? "just now" : `batch ${trace.batchIndex + 1}`,
+        queueDepth: trace.itemCount
+      };
+    });
+  }, [agentRuns, agents, runnerState.activeMission, runnerState.tasks, runtimeBusy]);
+
+  const selectedWorkflow = getWorkflowTemplateById(selectedWorkflowId) ?? WORKFLOW_TEMPLATES[0];
   const selectedAgent = liveAgents.find((agent) => agent.id === selectedAgentId) ?? null;
-
-  const runningCount = liveAgents.filter((agent) => agent.status === "Running").length;
-  const healthyCount = liveAgents.filter((agent) => agent.status !== "Error").length;
-  const totalQueueDepth = liveAgents.reduce((sum, agent) => sum + agent.queueDepth, 0);
+  const selectedReviewRecord = selectedReviewMissionId
+    ? runnerState.archive.find((entry) => entry.mission.id === selectedReviewMissionId) ?? null
+    : null;
   const currentMorningRecord: MissionRecord | null =
-    runnerState.report && runnerState.activeMission
+    selectedReviewRecord ??
+    (runnerState.report && runnerState.activeMission
       ? {
           mission: runnerState.activeMission,
           tasks: runnerState.tasks,
           artifacts: runnerState.artifacts,
           report: runnerState.report
         }
-      : null;
+      : null);
+
+  const currentOpportunityJob = useMemo(() => {
+    if (!currentMorningRecord) {
+      return approvalQueue[0] ?? buildQueue[0] ?? shortlistQueue[0] ?? null;
+    }
+
+    return (
+      approvalQueue.find((job) => job.missionId === currentMorningRecord.mission.id) ??
+      buildQueue.find((job) => job.missionId === currentMorningRecord.mission.id) ??
+      shortlistQueue[0] ??
+      null
+    );
+  }, [approvalQueue, buildQueue, currentMorningRecord, shortlistQueue]);
+
+  const runningCount = liveAgents.filter((agent) => agent.status === "Running" || agent.status === "Retrying").length;
+  const healthyCount = liveAgents.filter((agent) => agent.status !== "Error" && agent.status !== "Failed").length;
+  const totalQueueDepth = liveAgents.reduce((sum, agent) => sum + agent.queueDepth, 0);
+  const queuedJobCount = researchQueue.length + shortlistQueue.length + buildQueue.length + approvalQueue.length;
+  const currentMissionPublishStatus = currentMorningRecord
+    ? runnerState.publishQueue.find((item) => item.missionId === currentMorningRecord.mission.id)?.status ?? null
+    : null;
+
+  const sortedTemplates = useMemo(
+    () => [...WORKFLOW_TEMPLATES].sort((left, right) => compareByUsage(left, right, workflowUsage)),
+    [workflowUsage]
+  );
+
+  const sortedCatalogue = useMemo(
+    () => [...datasetCatalogue].sort((left, right) => compareByUsage(left, right, datasetUsage)),
+    [datasetCatalogue, datasetUsage]
+  );
+
+  const visibleDatasets = useMemo(() => {
+    const searchNeedle = datasetSearch.toLowerCase().trim();
+
+    return sortedCatalogue.filter((dataset) => {
+      if (datasetKindFilter !== "all" && dataset.kind !== datasetKindFilter) {
+        return false;
+      }
+
+      if (datasetChannelFilter !== "all" && !dataset.channelCoverage.includes(datasetChannelFilter)) {
+        return false;
+      }
+
+      if (!searchNeedle) {
+        return true;
+      }
+
+      const haystack = [
+        dataset.title,
+        dataset.description,
+        dataset.emphasis,
+        dataset.tags.join(" "),
+        dataset.workflowHints.join(" "),
+        dataset.channelCoverage.join(" ")
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(searchNeedle);
+    });
+  }, [datasetChannelFilter, datasetKindFilter, datasetSearch, sortedCatalogue]);
+
+  const favoriteDatasets = useMemo(
+    () => sortedCatalogue.filter((dataset) => (datasetUsage[dataset.key] ?? 0) > 0).slice(0, 4),
+    [datasetUsage, sortedCatalogue]
+  );
+  const favoriteWorkflows = useMemo(
+    () => sortedTemplates.filter((template) => (workflowUsage[template.id] ?? 0) > 0).slice(0, 3),
+    [sortedTemplates, workflowUsage]
+  );
+  const selectedTokenLoad = useMemo(
+    () =>
+      selectedDatasetKeys.reduce((sum, key) => {
+        const dataset = datasetCatalogue.find((entry) => entry.key === key);
+        return sum + (dataset?.estimatedTokens ?? 0);
+      }, 0),
+    [datasetCatalogue, selectedDatasetKeys]
+  );
+  const estimatedBatchCount = useMemo(
+    () => Math.max(1, Math.ceil(selectedTokenLoad / Math.max(1, maxTokensPerMinute))),
+    [maxTokensPerMinute, selectedTokenLoad]
+  );
 
   useEffect(() => {
-    const savedArchive = window.localStorage.getItem("umbrella-mission-archive");
-    if (!savedArchive) {
-      return;
+    const savedStyleFeedback = window.localStorage.getItem("style-feedback-map");
+    if (savedStyleFeedback) {
+      try {
+        const parsed = JSON.parse(savedStyleFeedback) as StyleFeedbackMap;
+        setStyleFeedback(parsed);
+        setStyleFeedbackContext(parsed);
+      } catch {
+        window.localStorage.removeItem("style-feedback-map");
+      }
     }
 
-    try {
-      const parsed = JSON.parse(savedArchive) as RunnerState["archive"];
-      setRunnerState((current) => ({ ...current, archive: parsed }));
-    } catch {
-      window.localStorage.removeItem("umbrella-mission-archive");
+    const savedProductFeedback = window.localStorage.getItem("product-training-feedback");
+    if (savedProductFeedback) {
+      try {
+        const parsed = JSON.parse(savedProductFeedback) as ProductTrainingFeedback[];
+        setProductFeedback(parsed);
+        setProductFeedbackContext(parsed);
+      } catch {
+        window.localStorage.removeItem("product-training-feedback");
+      }
+    }
+
+    const savedResearchExamples = window.localStorage.getItem("market-research-examples");
+    if (savedResearchExamples) {
+      try {
+        const parsed = JSON.parse(savedResearchExamples) as ResearchExample[];
+        setResearchExamples(parsed);
+        setResearchExamplesContext(parsed);
+      } catch {
+        window.localStorage.removeItem("market-research-examples");
+      }
+    }
+
+    const savedArchive = window.localStorage.getItem("umbrella-mission-archive");
+    if (savedArchive) {
+      try {
+        const parsed = JSON.parse(savedArchive) as RunnerState["archive"];
+        setRunnerState((current) => ({ ...current, archive: parsed }));
+      } catch {
+        window.localStorage.removeItem("umbrella-mission-archive");
+      }
+    }
+
+    const savedPublishQueue = window.localStorage.getItem("publishQueue");
+    if (savedPublishQueue) {
+      try {
+        setRunnerState((current) => ({ ...current, publishQueue: JSON.parse(savedPublishQueue) as RunnerState["publishQueue"] }));
+      } catch {
+        window.localStorage.removeItem("publishQueue");
+      }
+    }
+
+    const queueLoaders: Array<[string, (value: OpportunityQueueJob[]) => void]> = [
+      ["autonomous-research-queue", setResearchQueue],
+      ["autonomous-shortlist-queue", setShortlistQueue],
+      ["autonomous-build-queue", setBuildQueue],
+      ["autonomous-approval-queue", setApprovalQueue],
+      ["autonomous-rejected-similar", setRejectedSimilar]
+    ];
+
+    queueLoaders.forEach(([key, setter]) => {
+      const stored = window.localStorage.getItem(key);
+      if (!stored) {
+        return;
+      }
+
+      try {
+        setter(JSON.parse(stored) as OpportunityQueueJob[]);
+      } catch {
+        window.localStorage.removeItem(key);
+      }
+    });
+
+    const savedAgentRuns = window.localStorage.getItem("autonomous-agent-runs");
+    if (savedAgentRuns) {
+      try {
+        setAgentRuns(JSON.parse(savedAgentRuns) as AgentRunTrace[]);
+      } catch {
+        window.localStorage.removeItem("autonomous-agent-runs");
+      }
+    }
+
+    const savedSummary = window.localStorage.getItem("autonomous-research-summary");
+    if (savedSummary) {
+      setResearchSummary(savedSummary);
+    }
+
+    const savedSignals = window.localStorage.getItem("autonomous-source-signal-summary");
+    if (savedSignals) {
+      try {
+        setSourceSignalSummary(JSON.parse(savedSignals) as string[]);
+      } catch {
+        window.localStorage.removeItem("autonomous-source-signal-summary");
+      }
+    }
+
+    const savedDatasetUsage = window.localStorage.getItem("dataset-usage-map");
+    if (savedDatasetUsage) {
+      try {
+        setDatasetUsage(JSON.parse(savedDatasetUsage) as Record<string, number>);
+      } catch {
+        window.localStorage.removeItem("dataset-usage-map");
+      }
+    }
+
+    const savedWorkflowUsage = window.localStorage.getItem("workflow-usage-map");
+    if (savedWorkflowUsage) {
+      try {
+        setWorkflowUsage(JSON.parse(savedWorkflowUsage) as Record<string, number>);
+      } catch {
+        window.localStorage.removeItem("workflow-usage-map");
+      }
+    }
+
+    const savedWorkflowStages = window.localStorage.getItem("workflow-stage-chain");
+    if (savedWorkflowStages) {
+      try {
+        setWorkflowStages(JSON.parse(savedWorkflowStages) as AutomationStage[]);
+      } catch {
+        window.localStorage.removeItem("workflow-stage-chain");
+      }
+    }
+
+    const savedWorkflowId = window.localStorage.getItem("selected-workflow-id");
+    if (savedWorkflowId && getWorkflowTemplateById(savedWorkflowId)) {
+      setSelectedWorkflowId(savedWorkflowId);
+    }
+
+    const savedSelectedDatasets = window.localStorage.getItem("selected-dataset-keys");
+    if (savedSelectedDatasets) {
+      setHasSavedDatasetSelection(true);
+      try {
+        setSelectedDatasetKeys(JSON.parse(savedSelectedDatasets) as string[]);
+      } catch {
+        setHasSavedDatasetSelection(false);
+        window.localStorage.removeItem("selected-dataset-keys");
+      }
+    }
+
+    const savedLogs = window.localStorage.getItem("workflow-run-logs");
+    if (savedLogs) {
+      try {
+        setWorkflowLogs(JSON.parse(savedLogs) as WorkflowRunLog[]);
+      } catch {
+        window.localStorage.removeItem("workflow-run-logs");
+      }
+    }
+
+    const savedMetrics = window.localStorage.getItem("workflow-run-metrics");
+    if (savedMetrics) {
+      try {
+        setWorkflowMetrics(JSON.parse(savedMetrics) as WorkflowRunMetrics);
+      } catch {
+        window.localStorage.removeItem("workflow-run-metrics");
+      }
+    }
+
+    const savedRunLabel = window.localStorage.getItem("workflow-run-label");
+    if (savedRunLabel) {
+      setWorkflowRunLabel(savedRunLabel);
     }
   }, []);
+
+  useEffect(() => {
+    const loadCatalogue = async () => {
+      try {
+        const response = await fetch("/api/dataset-catalogue", { method: "GET" });
+        const payload = (await response.json()) as DatasetCatalogueResponse;
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Unable to load dataset catalogue.");
+        }
+
+        setDatasetCatalogue(payload.datasets);
+        setStartupCheck(payload.startupCheck ?? null);
+        setMaxTokensPerMinute(payload.maxTokensPerMinute ?? DEFAULT_MAX_TOKENS_PER_MINUTE);
+        if (!hasSavedDatasetSelection && selectedDatasetKeys.length === 0) {
+          setSelectedDatasetKeys(payload.datasets.filter((dataset) => dataset.loaded).map((dataset) => dataset.key));
+        }
+      } catch (error) {
+        setDatasetCatalogueError(error instanceof Error ? error.message : "Unable to load dataset catalogue.");
+      }
+    };
+
+    void loadCatalogue();
+  }, [hasSavedDatasetSelection, selectedDatasetKeys.length]);
 
   useEffect(() => {
     window.localStorage.setItem("umbrella-mission-archive", JSON.stringify(runnerState.archive));
   }, [runnerState.archive]);
 
   useEffect(() => {
-    const savedQueue = window.localStorage.getItem("publishQueue");
-    if (!savedQueue) {
-      return;
-    }
-
-    try {
-      setRunnerState((current) => ({ ...current, publishQueue: JSON.parse(savedQueue) as RunnerState["publishQueue"] }));
-    } catch {
-      window.localStorage.removeItem("publishQueue");
-    }
-  }, []);
-
-  useEffect(() => {
     window.localStorage.setItem("publishQueue", JSON.stringify(runnerState.publishQueue));
   }, [runnerState.publishQueue]);
 
   useEffect(() => {
-    return () => {
-      cancelExecutionRef.current?.();
-      cancelExecutionRef.current = null;
-    };
-  }, []);
+    window.localStorage.setItem("style-feedback-map", JSON.stringify(styleFeedback));
+    setStyleFeedbackContext(styleFeedback);
+  }, [styleFeedback]);
 
-  const handleRunMission = () => {
-    if (runnerState.activeMission && (runnerState.activeMission.status === "Queued" || runnerState.activeMission.status === "Running")) {
+  useEffect(() => {
+    window.localStorage.setItem("product-training-feedback", JSON.stringify(productFeedback));
+    setProductFeedbackContext(productFeedback);
+  }, [productFeedback]);
+
+  useEffect(() => {
+    window.localStorage.setItem("market-research-examples", JSON.stringify(researchExamples));
+    setResearchExamplesContext(
+      [...researchExamples, ...trainingExamples].filter((example, index, array) => {
+        const key = `${example.channel}|${example.title.toLowerCase()}|${example.niche.toLowerCase()}`;
+        return index === array.findIndex((entry) => `${entry.channel}|${entry.title.toLowerCase()}|${entry.niche.toLowerCase()}` === key);
+      })
+    );
+  }, [researchExamples, trainingExamples]);
+
+  useEffect(() => {
+    window.localStorage.setItem("autonomous-research-queue", JSON.stringify(researchQueue));
+  }, [researchQueue]);
+
+  useEffect(() => {
+    window.localStorage.setItem("autonomous-shortlist-queue", JSON.stringify(shortlistQueue));
+  }, [shortlistQueue]);
+
+  useEffect(() => {
+    window.localStorage.setItem("autonomous-build-queue", JSON.stringify(buildQueue));
+  }, [buildQueue]);
+
+  useEffect(() => {
+    window.localStorage.setItem("autonomous-approval-queue", JSON.stringify(approvalQueue));
+  }, [approvalQueue]);
+
+  useEffect(() => {
+    window.localStorage.setItem("autonomous-rejected-similar", JSON.stringify(rejectedSimilar));
+  }, [rejectedSimilar]);
+
+  useEffect(() => {
+    window.localStorage.setItem("autonomous-agent-runs", JSON.stringify(agentRuns));
+  }, [agentRuns]);
+
+  useEffect(() => {
+    window.localStorage.setItem("autonomous-research-summary", researchSummary);
+  }, [researchSummary]);
+
+  useEffect(() => {
+    window.localStorage.setItem("autonomous-source-signal-summary", JSON.stringify(sourceSignalSummary));
+  }, [sourceSignalSummary]);
+
+  useEffect(() => {
+    window.localStorage.setItem("dataset-usage-map", JSON.stringify(datasetUsage));
+  }, [datasetUsage]);
+
+  useEffect(() => {
+    window.localStorage.setItem("workflow-usage-map", JSON.stringify(workflowUsage));
+  }, [workflowUsage]);
+
+  useEffect(() => {
+    window.localStorage.setItem("workflow-stage-chain", JSON.stringify(workflowStages));
+  }, [workflowStages]);
+
+  useEffect(() => {
+    window.localStorage.setItem("selected-workflow-id", selectedWorkflowId);
+  }, [selectedWorkflowId]);
+
+  useEffect(() => {
+    window.localStorage.setItem("selected-dataset-keys", JSON.stringify(selectedDatasetKeys));
+  }, [selectedDatasetKeys]);
+
+  useEffect(() => {
+    window.localStorage.setItem("workflow-run-logs", JSON.stringify(workflowLogs));
+  }, [workflowLogs]);
+
+  useEffect(() => {
+    if (workflowMetrics) {
+      window.localStorage.setItem("workflow-run-metrics", JSON.stringify(workflowMetrics));
+    }
+  }, [workflowMetrics]);
+
+  useEffect(() => {
+    window.localStorage.setItem("workflow-run-label", workflowRunLabel);
+  }, [workflowRunLabel]);
+
+  const handleSelectTemplate = (templateId: string) => {
+    const template = getWorkflowTemplateById(templateId);
+    if (!template) {
       return;
     }
 
-    cancelExecutionRef.current?.();
-    const mission = {
-      ...createMissionDraft(missionGoal, missionConstraints, missionPriority, executionMode),
-      approved: executionMode === "outbound" ? outboundApproved : false
-    };
-    const tasks = createMissionTasks(mission);
+    setSelectedWorkflowId(templateId);
+    setWorkflowStages(cloneWorkflowStages(template.stages));
+    setMissionGoal(template.goal);
+    setMissionConstraints(template.constraints);
+    setSelectedChannel(template.defaultChannel);
+    setWorkflowRunLabel(template.name);
+  };
 
-    setRunnerState((current) => ({
-      ...current,
-      activeMission: mission,
-      tasks,
-      artifacts: [],
-      report: null
-    }));
-
-    cancelExecutionRef.current = runMissionExecution({
-      mission,
-      tasks,
-      agents,
-      onUpdate: (snapshot) => {
-        setRunnerState((current) => ({
-          ...current,
-          activeMission: snapshot.mission,
-          tasks: snapshot.tasks,
-          artifacts: snapshot.artifacts
-        }));
-      },
-      onFinish: (record) => {
-        cancelExecutionRef.current = null;
-        setRunnerState((current) => ({
-          ...current,
-          activeMission: record.mission,
-          tasks: record.tasks,
-          artifacts: record.artifacts,
-          report: record.report,
-          archive: [record, ...current.archive]
-        }));
+  const handleMoveStage = (index: number, direction: -1 | 1) => {
+    setWorkflowStages((current) => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= current.length) {
+        return current;
       }
+
+      const next = [...current];
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
     });
   };
 
-  const handleSendToPublishQueue = (record: MissionRecord) => {
-    const item = createPublishQueueItem(record);
-    const existing = JSON.parse(window.localStorage.getItem("publishQueue") || "[]") as RunnerState["publishQueue"];
-    existing.push(item);
-    window.localStorage.setItem("publishQueue", JSON.stringify(existing));
-    console.log("QUEUE ITEM ADDED", item);
+  const handleRemoveStage = (index: number) => {
+    setWorkflowStages((current) => (current.length <= 1 ? current : current.filter((_, currentIndex) => currentIndex !== index)));
+  };
 
-    setRunnerState((current) => ({
-      ...current,
-      publishQueue: existing
-    }));
+  const handleAddStage = (stage: AutomationStage) => {
+    setWorkflowStages((current) => (current.includes(stage) ? current : [...current, stage]));
+  };
+
+  const handleResetStages = () => {
+    setWorkflowStages(cloneWorkflowStages(selectedWorkflow.stages));
+  };
+
+  const handleToggleDataset = (datasetKey: string) => {
+    setSelectedDatasetKeys((current) =>
+      current.includes(datasetKey) ? current.filter((key) => key !== datasetKey) : [...current, datasetKey]
+    );
+  };
+
+  const handleSelectVisibleDatasets = () => {
+    setSelectedDatasetKeys((current) =>
+      Array.from(new Set([...current, ...visibleDatasets.filter((dataset) => dataset.loaded).map((dataset) => dataset.key)]))
+    );
+  };
+
+  const handleClearSelectedDatasets = () => {
+    setSelectedDatasetKeys([]);
+  };
+
+  const handleRunMission = async () => {
+    if (startupCheck?.errors.length) {
+      setRuntimeError(startupCheck.errors.join(" "));
+      setActiveTab("settings");
+      return;
+    }
+
+    if (selectedDatasetKeys.length === 0) {
+      setRuntimeError("No datasets are selected. Open the Data Catalogue and select at least one loaded dataset before running the workflow.");
+      setActiveTab("catalogue");
+      return;
+    }
+
+    setRuntimeBusy(true);
+    setRuntimeError("");
+    setRuntimeStatus("The eight-agent runtime is analyzing the selected datasets, references, and feedback in token-safe batches.");
+    setAgentRuns(
+      agents.map((agent, index) => ({
+        roleId:
+          ([
+            "trend_research",
+            "opportunity_router",
+            "validation_guard",
+            "product_strategy",
+            "design_direction",
+            "review_approval",
+            "build",
+            "runtime_monitor"
+          ][index] as AgentRunTrace["roleId"]) ?? "runtime_monitor",
+        name: agent.role,
+        responsibility: agent.latestOutputPreview,
+        summary: "Waiting for the server runtime to finish this pass.",
+        itemCount: 0,
+        status: "running",
+        attempts: 0,
+        retryCount: 0,
+        batchIndex: 0
+      }))
+    );
+
+    try {
+      const response = await fetch("/api/autonomous-run", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          goal: missionGoal,
+          channel: selectedChannel,
+          referenceExamples: researchExamples,
+          productFeedback,
+          styleFeedback,
+          confidenceThreshold,
+          selectedDatasetKeys,
+          workflowTemplateId: selectedWorkflowId,
+          workflowChain: workflowStages,
+          runLabel: workflowRunLabel,
+          maxTokensPerMinute
+        })
+      });
+      const payload = (await response.json()) as AutonomousRunResponse;
+
+      if (!response.ok) {
+        throw new Error([payload.error, payload.action].filter(Boolean).join(" "));
+      }
+
+      setRuntimeStatus("Batch processing finished. Draft builds are being queued for review and any throttling details are available in the logs.");
+      setResearchSummary(payload.runtime.researchSummary);
+      setSourceSignalSummary(payload.runtime.sourceSignalSummary);
+      setAgentRuns(payload.runtime.agentRuns);
+      setConfidenceThreshold(payload.confidenceThreshold);
+      setTrainingDataSummary(payload.trainingData ?? null);
+      setStartupCheck(payload.startupCheck ?? null);
+      setMaxTokensPerMinute(payload.workflow.maxTokensPerMinute ?? DEFAULT_MAX_TOKENS_PER_MINUTE);
+      setTrainingExamples(payload.trainingExamples ?? []);
+      setWorkflowLogs(payload.logs);
+      setWorkflowMetrics(payload.metrics);
+      setWorkflowRunLabel(payload.workflow.runLabel);
+      setResearchQueue(payload.queues.researchQueue);
+      setShortlistQueue(payload.queues.shortlistQueue);
+      setRejectedSimilar(payload.queues.rejectedSimilar);
+
+      if (payload.trainingData?.datasets?.length) {
+        setDatasetCatalogue(payload.trainingData.datasets);
+      }
+
+      const builtResults = payload.queues.draftBuildQueue.map((job) =>
+        buildDraftRecord(job, missionGoal, missionConstraints, missionPriority, executionMode, agents)
+      );
+      const builtQueue = builtResults.map(({ job, record }) =>
+        createQueueJob(
+          {
+            ...job,
+            status: "built",
+            nextAction: "Draft built. Compare the generated output to the original opportunity rationale before approving."
+          },
+          {
+            missionId: record.mission.id,
+            selectedStyle: record.report.finalProduct.selectedStyleProfile.name
+          }
+        )
+      );
+      const approvalJobs = builtResults.map(({ job, record }) =>
+        createQueueJob(
+          {
+            ...job,
+            status: "queued_for_approval",
+            nextAction: "Draft is ready. Wait for human approval before any outbound action."
+          },
+          {
+            missionId: record.mission.id,
+            selectedStyle: record.report.finalProduct.selectedStyleProfile.name,
+            reviewStatus: "pending"
+          }
+        )
+      );
+      const primaryRecord = builtResults[0]?.record ?? null;
+
+      setBuildQueue(builtQueue);
+      setApprovalQueue(approvalJobs);
+      setRunnerState((current) => ({
+        ...current,
+        activeMission: primaryRecord?.mission ?? null,
+        tasks: primaryRecord?.tasks ?? [],
+        artifacts: primaryRecord?.artifacts ?? [],
+        report: primaryRecord?.report ?? null,
+        archive: [...builtResults.map((result) => result.record), ...current.archive]
+      }));
+      setDatasetUsage((current) => incrementUsageMap(current, payload.workflow.selectedDatasetKeys));
+      setWorkflowUsage((current) => incrementUsageMap(current, [selectedWorkflowId]));
+
+      if (primaryRecord) {
+        setSelectedReviewMissionId(primaryRecord.mission.id);
+        setActiveTab("approval");
+      } else {
+        setSelectedReviewMissionId(null);
+        setBuildQueue([]);
+        setApprovalQueue([]);
+        setActiveTab("validation");
+      }
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : "Unknown runtime error.");
+      setRuntimeStatus("Workflow execution failed.");
+      setAgentRuns((current) =>
+        current.map((trace) => ({
+          ...trace,
+          status: trace.status === "completed" ? trace.status : "failed",
+          error: error instanceof Error ? error.message : "Unknown runtime error."
+        }))
+      );
+      setActiveTab("testing");
+    } finally {
+      setRuntimeBusy(false);
+    }
+  };
+
+  const handleSubmitProductFeedback = (record: MissionRecord, rating: ProductFeedbackRating, notes: string) => {
+    const styleId = record.report.finalProduct.selectedStyleProfile.id;
+    const nextProductFeedback = recordProductTrainingFeedback(productFeedback, {
+      missionId: record.mission.id,
+      styleId,
+      styleName: record.report.finalProduct.selectedStyleProfile.name,
+      productType: record.report.finalProduct.productType,
+      rating,
+      notes
+    });
+    setProductFeedback(nextProductFeedback);
+
+    if (rating === "good") {
+      setStyleFeedback((current) => recordStyleFeedback(current, styleId, "approved"));
+    }
+
+    if (rating === "bad") {
+      setStyleFeedback((current) => recordStyleFeedback(current, styleId, "rejected"));
+    }
+  };
+
+  const handleApproveProduct = (record: MissionRecord) => {
+    setRunnerState((current) => {
+      const existingItem = current.publishQueue.find((item) => item.missionId === record.mission.id);
+      const nextQueue = existingItem
+        ? current.publishQueue.map((item) => (item.missionId === record.mission.id ? { ...item, status: "approved" as const } : item))
+        : [{ ...createPublishQueueItem(record), status: "approved" as const }, ...current.publishQueue];
+
+      if (record.report.finalProduct.selectedStyleProfile.id) {
+        setStyleFeedback((existing) => recordStyleFeedback(existing, record.report.finalProduct.selectedStyleProfile.id, "approved"));
+      }
+
+      return {
+        ...current,
+        publishQueue: nextQueue
+      };
+    });
+
+    setApprovalQueue((current) =>
+      current.map((job) =>
+        job.missionId === record.mission.id
+          ? {
+              ...job,
+              reviewStatus: "approved",
+              nextAction: "Approved. Keep any outbound step manual and explicitly approved."
+            }
+          : job
+      )
+    );
   };
 
   const handleApproveForOutbound = () => {
@@ -196,38 +1077,633 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
   };
 
   const handlePublishQueueStatusChange = (id: number, status: "approved" | "rejected") => {
+    const missionId = runnerState.publishQueue.find((item) => item.id === id)?.missionId;
+
     setRunnerState((current) => {
+      const queueItem = current.publishQueue.find((item) => item.id === id);
       const nextQueue = current.publishQueue.map((item) => (item.id === id ? { ...item, status } : item));
-      window.localStorage.setItem("publishQueue", JSON.stringify(nextQueue));
+
+      if (queueItem?.styleProfileId) {
+        setStyleFeedback((existing) => recordStyleFeedback(existing, queueItem.styleProfileId, status));
+      }
+
       return {
         ...current,
         publishQueue: nextQueue
       };
     });
+
+    if (!missionId) {
+      return;
+    }
+
+    setApprovalQueue((current) =>
+      current.map((job) =>
+        job.missionId === missionId
+          ? {
+              ...job,
+              reviewStatus: status,
+              nextAction:
+                status === "approved"
+                  ? "Approved. Keep future outbound steps manual."
+                  : "Rejected. Send the notes back into research and strategy."
+            }
+          : job
+      )
+    );
   };
 
-  const isCurrentMissionQueuedForPublish = currentMorningRecord
-    ? runnerState.publishQueue.some((item) => item.missionId === currentMorningRecord.mission.id)
-    : false;
+  const handleStoreResearchExample = (entry: Omit<ResearchExample, "id" | "createdAt">) => {
+    const ingested = entry.url ? ingestReferenceUrl(entry.url) : null;
+    const notes = [entry.notes, ...(ingested?.notes ?? [])].filter(Boolean).join(" ");
+    const sellabilityNotes = [
+      entry.sellabilityNotes,
+      ingested?.pricingBands.length ? `Observed pricing cues: ${ingested.pricingBands.join(", ")}.` : ""
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    setResearchExamples((current) =>
+      storeResearchExample(current, {
+        ...entry,
+        channel: entry.channel === "all" ? ingested?.channel ?? entry.channel : entry.channel,
+        niche: entry.niche || ingested?.nicheTags[0] || "",
+        productFormat: entry.productFormat || ingested?.productFormatHint || "printable",
+        deliverableType: entry.deliverableType || ingested?.deliverableTypeHint || "digital download",
+        notes,
+        sellabilityNotes
+      })
+    );
+  };
+
+  const handleSetResearchStatus = (id: string, status: ResearchExampleStatus) => {
+    setResearchExamples((current) => current.map((example) => (example.id === id ? { ...example, status } : example)));
+  };
+
+  const handleExportTestResults = () => {
+    buildExportPayload(
+      {
+        workflow: {
+          id: selectedWorkflowId,
+          name: selectedWorkflow.name,
+          stages: workflowStages,
+          selectedDatasetKeys,
+          tokenLoad: selectedTokenLoad,
+          maxTokensPerMinute,
+          estimatedBatchCount
+        },
+        metrics: workflowMetrics,
+        logs: workflowLogs,
+        queues: {
+          researchQueue,
+          shortlistQueue,
+          buildQueue,
+          approvalQueue,
+          rejectedSimilar
+        },
+        runtime: {
+          summary: researchSummary,
+          sourceSignalSummary
+        },
+        startupCheck
+      },
+      `automation-run-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`
+    );
+  };
+
+  const renderOverviewTab = () => (
+    <>
+      <MissionControlPanel
+        goal={missionGoal}
+        constraints={missionConstraints}
+        channel={selectedChannel}
+        priority={missionPriority}
+        executionMode={executionMode}
+        outboundApproved={outboundApproved}
+        activeMission={runnerState.activeMission}
+        isBusy={runtimeBusy}
+        onGoalChange={setMissionGoal}
+        onConstraintsChange={setMissionConstraints}
+        onChannelChange={setSelectedChannel}
+        onPriorityChange={setMissionPriority}
+        onExecutionModeChange={setExecutionMode}
+        onOutboundApprovedChange={setOutboundApproved}
+        onSubmit={() => {
+          void handleRunMission();
+        }}
+      />
+
+      <section className="archive-shell">
+        <div className="status-header">
+          <div>
+            <span className="eyebrow">Automation Snapshot</span>
+            <h2 className="section-title">Real workflow status, selected data coverage, and progress toward the $56k/month push</h2>
+          </div>
+        </div>
+
+        {startupCheck?.errors.length ? (
+          <div className="dataset-error-shell">
+            <p className="detail-body">Fatal startup checks: {startupCheck.errors.join(" | ")}</p>
+            <p className="detail-body">Action: Add the missing server keys or restore the full eight-agent runtime before running the workflow.</p>
+          </div>
+        ) : null}
+
+        <div className="hero-stats dashboard-stats-wide">
+          <div className="stat-card">
+            <span className="stat-label">Selected Datasets</span>
+            <span className="stat-value">{selectedDatasetKeys.length}</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-label">Token Load</span>
+            <span className="stat-value">{Math.round(selectedTokenLoad / 1000)}k</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-label">Queued Jobs</span>
+            <span className="stat-value">{queuedJobCount}</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-label">Draft Builds</span>
+            <span className="stat-value">{buildQueue.length}</span>
+          </div>
+        </div>
+
+        <div className="report-section-grid">
+          <section className="detail-card">
+            <h3>Runtime Status</h3>
+            <p className="detail-body">{runtimeStatus || "No workflow has run yet."}</p>
+            {runtimeError ? <p className="detail-body">Issue: {runtimeError}</p> : null}
+            <p className="detail-body">Workflow: {selectedWorkflow.name}</p>
+            <p className="detail-body">Chain: {workflowStages.join(" -> ")}</p>
+            <p className="detail-body">Confidence threshold: {confidenceThreshold}%</p>
+            <p className="detail-body">
+              Token load: {selectedTokenLoad.toLocaleString()} / {maxTokensPerMinute.toLocaleString()} across about {estimatedBatchCount} batch{estimatedBatchCount === 1 ? "" : "es"}
+            </p>
+          </section>
+          <section className="detail-card">
+            <h3>Personalized Highlights</h3>
+            <p className="detail-body">
+              Favorite datasets: {favoriteDatasets.length > 0 ? favoriteDatasets.map((dataset) => dataset.title).join(", ") : "No usage history yet."}
+            </p>
+            <p className="detail-body">
+              Favorite workflows: {favoriteWorkflows.length > 0 ? favoriteWorkflows.map((workflow) => workflow.name).join(", ") : "No usage history yet."}
+            </p>
+            <p className="detail-body">
+              Metrics: {workflowMetrics ? `${workflowMetrics.accuracyProxy}% accuracy proxy and ${workflowMetrics.conversionReadiness}% conversion readiness.` : "Run the testing harness to populate workflow metrics."}
+            </p>
+            <p className="detail-body">
+              Revenue range: {workflowMetrics ? `$${Math.round(workflowMetrics.revenueEstimateLow / 1000)}k-$${Math.round(workflowMetrics.revenueEstimateHigh / 1000)}k` : "$0k-$0k"}
+            </p>
+            {startupCheck?.errors.length ? <p className="detail-body warning-copy">Startup errors: {startupCheck.errors.join(" | ")}</p> : null}
+            {startupCheck?.warnings.length ? <p className="detail-body warning-copy">Startup warnings: {startupCheck.warnings.join(" | ")}</p> : null}
+          </section>
+        </div>
+      </section>
+
+      <details className="archive-shell advanced-shell" open>
+        <summary className="archive-summary">
+          <div>
+            <span className="eyebrow">Advanced</span>
+            <h2 className="section-title">Live product pipeline</h2>
+          </div>
+        </summary>
+        <MissionStatusBoard
+          mission={runnerState.activeMission}
+          tasks={runnerState.tasks}
+          artifacts={runnerState.artifacts}
+          onApproveForOutbound={handleApproveForOutbound}
+        />
+      </details>
+    </>
+  );
+
+  const renderCatalogueTab = () => (
+    <>
+      {datasetCatalogueError ? (
+        <section className="archive-shell">
+          <div className="dataset-error-shell">
+            <p className="detail-body">Catalogue issue: {datasetCatalogueError}</p>
+            <p className="detail-body">Action: Confirm the local dataset files exist and contain valid JSON, then reload the page.</p>
+          </div>
+        </section>
+      ) : null}
+
+      <DatasetCatalogue
+        datasets={visibleDatasets}
+        selectedDatasetKeys={selectedDatasetKeys}
+        searchValue={datasetSearch}
+        kindFilter={datasetKindFilter}
+        channelFilter={datasetChannelFilter}
+        selectedTokenLoad={selectedTokenLoad}
+        tokenLimit={maxTokensPerMinute}
+        estimatedBatchCount={estimatedBatchCount}
+        onSearchChange={setDatasetSearch}
+        onKindFilterChange={setDatasetKindFilter}
+        onChannelFilterChange={setDatasetChannelFilter}
+        onToggleDataset={handleToggleDataset}
+        onSelectVisible={handleSelectVisibleDatasets}
+        onClearSelection={handleClearSelectedDatasets}
+      />
+    </>
+  );
+
+  const renderWorkflowTab = () => (
+    <WorkflowStudio
+      templates={sortedTemplates}
+      selectedTemplateId={selectedWorkflowId}
+      workflowStages={workflowStages}
+      workflowUsage={workflowUsage}
+      onSelectTemplate={handleSelectTemplate}
+      onMoveStage={handleMoveStage}
+      onRemoveStage={handleRemoveStage}
+      onAddStage={handleAddStage}
+      onResetStages={handleResetStages}
+    />
+  );
+
+  const renderTestingTab = () => (
+    <TestingHarness
+      isBusy={runtimeBusy}
+      runLabel={workflowRunLabel}
+      errorMessage={runtimeError}
+      selectedDatasetCount={selectedDatasetKeys.length}
+      selectedWorkflowName={selectedWorkflow.name}
+      tokenLoad={selectedTokenLoad}
+      tokenLimit={maxTokensPerMinute}
+      batchCount={estimatedBatchCount}
+      startupWarnings={startupCheck?.warnings ?? []}
+      startupErrors={startupCheck?.errors ?? []}
+      logs={workflowLogs}
+      metrics={workflowMetrics}
+      onRun={() => {
+        void handleRunMission();
+      }}
+      onExport={handleExportTestResults}
+    />
+  );
+
+  const renderResearchTab = () => (
+    <>
+      <ReferenceBoard
+        examples={researchExamples}
+        selectedChannel={selectedChannel}
+        onSaveExample={handleStoreResearchExample}
+        onSetStatus={handleSetResearchStatus}
+      />
+      <section className="archive-shell">
+        <div className="status-header">
+          <div>
+            <span className="eyebrow">Research Signals</span>
+            <h2 className="section-title">Dataset-informed research context and agent findings</h2>
+          </div>
+        </div>
+        <div className="report-section-grid">
+          <section className="detail-card">
+            <h3>Research Summary</h3>
+            <p className="detail-body">{researchSummary || "Run a workflow to populate the latest dataset-backed research summary."}</p>
+          </section>
+          <section className="detail-card">
+            <h3>Source Signals</h3>
+            <p className="detail-body">{sourceSignalSummary.length > 0 ? sourceSignalSummary.join(" | ") : "No source signals yet."}</p>
+          </section>
+        </div>
+      </section>
+      <AutonomousQueueBoard
+        eyebrow="Research Queue"
+        title="Research candidates still collecting evidence"
+        emptyCopy="Lower-confidence opportunities stay here until stronger evidence or feedback moves them forward."
+        items={researchQueue}
+      />
+    </>
+  );
+
+  const renderValidationTab = () => (
+    <>
+      <AutonomousQueueBoard
+        eyebrow="Validation Queue"
+        title="Promising opportunities waiting for stronger validation or build capacity"
+        emptyCopy="Validated opportunities will appear here when they are promising but not yet ready for build automation."
+        items={shortlistQueue}
+      />
+      <details className="archive-shell advanced-shell">
+        <summary className="archive-summary">
+          <div>
+            <span className="eyebrow">Advanced</span>
+            <h2 className="section-title">Validation Rejections</h2>
+          </div>
+        </summary>
+        <AutonomousQueueBoard
+          eyebrow="Diversity Guard"
+          title="Opportunities rejected or down-ranked as too similar"
+          emptyCopy="No validation rejections yet."
+          items={rejectedSimilar}
+        />
+      </details>
+    </>
+  );
+
+  const renderDesignListingTab = () => (
+    <>
+      <section className="archive-shell">
+        <div className="status-header">
+          <div>
+            <span className="eyebrow">Design & Listing</span>
+            <h2 className="section-title">Draft builds produced by the research, validate, design, and list workflow</h2>
+          </div>
+        </div>
+        <div className="report-section-grid">
+          <section className="detail-card">
+            <h3>Listing Readiness</h3>
+            <p className="detail-body">
+              The design and list stages emphasize high-demand Fiverr gigs, print-on-demand concepts, and listing-ready product drafts. Built
+              drafts stay blocked for approval until you confirm them.
+            </p>
+          </section>
+          <section className="detail-card">
+            <h3>Run Quality</h3>
+            <p className="detail-body">
+              {workflowMetrics
+                ? `${workflowMetrics.builtDraftCount} drafts built with ${workflowMetrics.averageConfidence}% average confidence and ${workflowMetrics.conversionReadiness}% conversion readiness.`
+                : "Run the workflow to measure how design and listing quality is trending."}
+            </p>
+          </section>
+        </div>
+      </section>
+      <AutonomousQueueBoard
+        eyebrow="Draft Build Queue"
+        title="High-confidence opportunities already built into drafts"
+        emptyCopy="Built drafts will appear here after the workflow promotes them past the confidence threshold."
+        items={buildQueue}
+        onSelectReviewMission={(missionId) => {
+          setSelectedReviewMissionId(missionId);
+          setActiveTab("approval");
+        }}
+      />
+    </>
+  );
+
+  const renderApprovalTab = () => (
+    <>
+      <AutonomousQueueBoard
+        eyebrow="Approval Queue"
+        title="Drafts waiting for final approval"
+        emptyCopy="Once a draft is built, it will remain here until you approve it."
+        items={approvalQueue}
+        onSelectReviewMission={(missionId) => {
+          setSelectedReviewMissionId(missionId);
+          setActiveTab("approval");
+        }}
+      />
+
+      {currentOpportunityJob ? (
+        <section className="archive-shell">
+          <div className="status-header">
+            <div>
+              <span className="eyebrow">Selected Opportunity</span>
+              <h2 className="section-title">Why this draft was chosen</h2>
+            </div>
+          </div>
+
+          <div className="report-section-grid">
+            <section className="detail-card">
+              <h3>Opportunity Metadata</h3>
+              <div className="report-list">
+                <p className="detail-body">Channel: {currentOpportunityJob.channel}</p>
+                <p className="detail-body">Output type: {currentOpportunityJob.outputKind ?? "product"}</p>
+                <p className="detail-body">Niche: {currentOpportunityJob.niche}</p>
+                <p className="detail-body">Product or service type: {currentOpportunityJob.productServiceType}</p>
+                <p className="detail-body">Deliverable type: {currentOpportunityJob.deliverableType}</p>
+                <p className="detail-body">Confidence: {currentOpportunityJob.confidenceScore}%</p>
+                <p className="detail-body">Selected style: {currentOpportunityJob.selectedStyle ?? currentOpportunityJob.styleDirection}</p>
+              </div>
+            </section>
+
+            <section className="detail-card">
+              <h3>Signal Basis</h3>
+              <p className="detail-body">Why selected: {currentOpportunityJob.whySelected}</p>
+              <p className="detail-body">Why it may sell: {currentOpportunityJob.whyItMaySell}</p>
+              <p className="detail-body">Next action: {currentOpportunityJob.nextAction}</p>
+              <p className="detail-body">Source signals: {currentOpportunityJob.sourceSignals.join(" | ") || "No stored source signals yet."}</p>
+            </section>
+          </div>
+        </section>
+      ) : null}
+
+      <MorningReportView
+        record={currentMorningRecord}
+        onApproveProduct={handleApproveProduct}
+        onRedoProduct={() => {
+          void handleRunMission();
+        }}
+        onSubmitTrainingFeedback={handleSubmitProductFeedback}
+        publishQueueStatus={currentMissionPublishStatus}
+      />
+
+      <details className="archive-shell advanced-shell">
+        <summary className="archive-summary">
+          <div>
+            <span className="eyebrow">Advanced</span>
+            <h2 className="section-title">Approval Queue Records</h2>
+          </div>
+        </summary>
+        <PublishQueueView
+          queue={runnerState.publishQueue}
+          onApprove={(id) => handlePublishQueueStatusChange(id, "approved")}
+          onReject={(id) => handlePublishQueueStatusChange(id, "rejected")}
+        />
+      </details>
+    </>
+  );
+
+  const renderArchiveTab = () => <MissionArchive archive={runnerState.archive} />;
+
+  const renderAgentsTab = () => (
+    <>
+      <section className="archive-shell">
+        <div className="status-header">
+          <div>
+            <span className="eyebrow">Agents</span>
+            <h2 className="section-title">Autonomous agent roster and latest runtime summaries</h2>
+          </div>
+        </div>
+        <div className="dashboard-grid" aria-label="Agent dashboard">
+          {liveAgents.map((agent) => (
+            <AgentCard key={agent.id} agent={agent} onClick={() => setSelectedAgentId(agent.id)} />
+          ))}
+        </div>
+      </section>
+
+      <section className="archive-shell">
+        <div className="status-header">
+          <div>
+            <span className="eyebrow">Runtime Trace</span>
+            <h2 className="section-title">What each agent role did in the last run</h2>
+          </div>
+        </div>
+
+        {agentRuns.length === 0 ? (
+          <div className="empty-shell">
+            <h3 className="runner-title">No runtime trace yet</h3>
+            <p className="detail-body">Run the automation workflow to capture a per-agent runtime summary.</p>
+          </div>
+        ) : (
+          <div className="queue-board-grid">
+            {agentRuns.map((run) => (
+              <article key={run.roleId} className="detail-card queue-opportunity-card">
+                <span className={`runner-chip ${run.status === "failed" ? "runner-chip-failed" : run.status === "retrying" ? "runner-chip-pending" : run.status === "completed" ? "runner-chip-approved" : "runner-chip-running"}`}>
+                  {run.status}
+                </span>
+                <h3 className="task-title">{run.responsibility}</h3>
+                <p className="detail-body">{run.summary}</p>
+                <p className="detail-body">Items handled: {run.itemCount}</p>
+                <p className="detail-body">Attempts: {run.attempts}</p>
+                <p className="detail-body">Retries: {run.retryCount}</p>
+                {run.error ? <p className="detail-body warning-copy">Error: {run.error}</p> : null}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
+  );
+
+  const renderSettingsTab = () => (
+    <section className="archive-shell">
+      <div className="status-header">
+        <div>
+          <span className="eyebrow">Settings</span>
+          <h2 className="section-title">Runtime policy, storage keys, personalization, and dataset loader state</h2>
+        </div>
+      </div>
+
+      <div className="report-section-grid">
+        <section className="detail-card">
+          <h3>Runtime Policy</h3>
+          <p className="detail-body">Channel scope: {selectedChannel}</p>
+          <p className="detail-body">Execution mode: {executionMode}</p>
+          <p className="detail-body">Outbound approval: {outboundApproved ? "Granted" : "Not granted"}</p>
+          <p className="detail-body">Agent runtime: server-side OpenAI API</p>
+          <p className="detail-body">Automatic publishing: disabled</p>
+          <p className="detail-body">Build threshold: {confidenceThreshold}% confidence</p>
+          <p className="detail-body">Selected datasets: {selectedDatasetKeys.length}</p>
+          <p className="detail-body">Token load: {selectedTokenLoad.toLocaleString()} / {maxTokensPerMinute.toLocaleString()}</p>
+          <p className="detail-body">Estimated batches: {estimatedBatchCount}</p>
+          {trainingDataSummary ? (
+            <p className="detail-body">
+              Local training data: {trainingDataSummary.loadedFileCount}/{trainingDataSummary.fileCount} files loaded, {trainingDataSummary.exampleCount} selected examples available
+            </p>
+          ) : null}
+          {startupCheck?.errors.length ? (
+            <p className="detail-body warning-copy">Startup errors: {startupCheck.errors.join(" | ")}</p>
+          ) : null}
+          {startupCheck?.warnings.length ? (
+            <p className="detail-body warning-copy">Startup warnings: {startupCheck.warnings.join(" | ")}</p>
+          ) : null}
+        </section>
+
+        <details className="detail-card">
+          <summary className="task-title">Advanced Storage Details</summary>
+          <div className="report-list">
+            <p className="detail-body">Research examples: market-research-examples</p>
+            <p className="detail-body">Selected datasets: selected-dataset-keys</p>
+            <p className="detail-body">Dataset usage: dataset-usage-map</p>
+            <p className="detail-body">Workflow usage: workflow-usage-map</p>
+            <p className="detail-body">Workflow stage chain: workflow-stage-chain</p>
+            <p className="detail-body">Research queue: autonomous-research-queue</p>
+            <p className="detail-body">Shortlist queue: autonomous-shortlist-queue</p>
+            <p className="detail-body">Draft build queue: autonomous-build-queue</p>
+            <p className="detail-body">Approval queue: autonomous-approval-queue</p>
+            <p className="detail-body">Runtime trace: autonomous-agent-runs</p>
+            <p className="detail-body">Workflow logs: workflow-run-logs</p>
+          </div>
+        </details>
+
+        <details className="detail-card">
+          <summary className="task-title">Local Training Files</summary>
+          <div className="report-list">
+            {trainingDataSummary ? (
+              trainingDataSummary.files.map((file) => (
+                <p key={file.key} className="detail-body">
+                  {file.key}: {file.loaded ? `loaded (${file.exampleCount} examples, about ${file.estimatedTokens.toLocaleString()} tokens)` : `not loaded${file.error ? ` - ${file.error}` : ""}`} [{file.path}]
+                </p>
+              ))
+            ) : (
+              <p className="detail-body">Run the automation workflow to inspect file load status.</p>
+            )}
+          </div>
+        </details>
+
+        <details className="detail-card">
+          <summary className="task-title">Last Runtime Agent Roles</summary>
+          <div className="report-list">
+            {buildAgentRoleCopy(agentRuns).length > 0 ? (
+              buildAgentRoleCopy(agentRuns).map((line) => (
+                <p key={line} className="detail-body">
+                  {line}
+                </p>
+              ))
+            ) : (
+              <p className="detail-body">No runtime trace captured yet.</p>
+            )}
+          </div>
+        </details>
+
+        <details className="detail-card">
+          <summary className="task-title">Startup Validation</summary>
+          <div className="report-list">
+            {startupCheck ? (
+              startupCheck.checks.map((check) => (
+                <p key={check.envVar} className={`detail-body ${!check.present ? "warning-copy" : ""}`}>
+                  {check.label}: {check.present ? "configured" : `missing (${check.severity})`} [{check.envVar}]
+                </p>
+              ))
+            ) : (
+              <p className="detail-body">Runtime health not loaded yet.</p>
+            )}
+          </div>
+        </details>
+      </div>
+    </section>
+  );
+
+  const tabContentMap: Record<DashboardTab, ReactNode> = {
+    overview: renderOverviewTab(),
+    catalogue: renderCatalogueTab(),
+    workflow: renderWorkflowTab(),
+    testing: renderTestingTab(),
+    research: renderResearchTab(),
+    validation: renderValidationTab(),
+    design_listing: renderDesignListingTab(),
+    approval: renderApprovalTab(),
+    archive: renderArchiveTab(),
+    agents: renderAgentsTab(),
+    settings: renderSettingsTab()
+  };
 
   return (
     <main className="page-shell">
       <section className="hero-panel">
-        <span className="eyebrow">Etsy Pipeline Console</span>
-        <h1 className="hero-title">Generate one approval-ready Etsy listing through a staged agent workflow.</h1>
+        <span className="eyebrow">Autonomous Revenue Control Room</span>
+        <h1 className="hero-title">Connect real datasets to real agents and run the automation chain from research to listing.</h1>
         <p className="hero-copy">
-          The system now runs as a digital Etsy product pipeline: research one digital product, shape the product
-          contents, write one complete listing, and hold it for approval before any publishing step.
+          The dashboard now treats datasets as first-class workflow inputs. Choose the catalogues you want, launch a template or custom chain,
+          test it with logs and metrics, and route the strongest Fiverr gigs, print-on-demand designs, and product listings into approval-ready
+          drafts.
         </p>
 
-        <div className="hero-stats">
+        <div className="hero-stats dashboard-stats-wide">
           <div className="stat-card">
             <span className="stat-label">Active Agents</span>
             <span className="stat-value">{runningCount}</span>
           </div>
           <div className="stat-card">
             <span className="stat-label">Healthy Agents</span>
-            <span className="stat-value">{healthyCount}/8</span>
+            <span className="stat-value">
+              {healthyCount}/{liveAgents.length}
+            </span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-label">Queued Jobs</span>
+            <span className="stat-value">{queuedJobCount}</span>
           </div>
           <div className="stat-card">
             <span className="stat-label">Queued Tasks</span>
@@ -236,47 +1712,20 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
         </div>
       </section>
 
-      <MissionControlPanel
-        goal={missionGoal}
-        constraints={missionConstraints}
-        priority={missionPriority}
-        executionMode={executionMode}
-        outboundApproved={outboundApproved}
-        activeMission={runnerState.activeMission}
-        onGoalChange={setMissionGoal}
-        onConstraintsChange={setMissionConstraints}
-        onPriorityChange={setMissionPriority}
-        onExecutionModeChange={setExecutionMode}
-        onOutboundApprovedChange={setOutboundApproved}
-        onSubmit={handleRunMission}
-      />
-
-      <MissionStatusBoard
-        mission={runnerState.activeMission}
-        tasks={runnerState.tasks}
-        artifacts={runnerState.artifacts}
-        onApproveForOutbound={handleApproveForOutbound}
-      />
-
-      <MorningReportView
-        record={currentMorningRecord}
-        onSendToPublishQueue={handleSendToPublishQueue}
-        isQueuedForPublish={isCurrentMissionQueuedForPublish}
-      />
-
-      <MissionArchive archive={runnerState.archive} />
-
-      <PublishQueueView
-        queue={runnerState.publishQueue}
-        onApprove={(id) => handlePublishQueueStatusChange(id, "approved")}
-        onReject={(id) => handlePublishQueueStatusChange(id, "rejected")}
-      />
-
-      <section className="dashboard-grid" aria-label="Agent dashboard">
-        {liveAgents.map((agent) => (
-          <AgentCard key={agent.id} agent={agent} onClick={() => setSelectedAgentId(agent.id)} />
+      <nav className="tab-nav" aria-label="Dashboard sections">
+        {buildNavigationTabs().map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`tab-button ${activeTab === tab.id ? "tab-button-active" : ""}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
         ))}
-      </section>
+      </nav>
+
+      {tabContentMap[activeTab]}
 
       {selectedAgent ? <AgentDetailModal agent={selectedAgent} onClose={() => setSelectedAgentId(null)} /> : null}
     </main>

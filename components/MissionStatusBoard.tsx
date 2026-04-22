@@ -28,7 +28,7 @@ export function MissionStatusBoard({ mission, tasks, artifacts, onApproveForOutb
       <div className="status-header">
         <div>
           <span className="eyebrow">Live Pipeline State</span>
-          <h2 className="section-title">Etsy workflow execution board</h2>
+          <h2 className="section-title">Product workflow execution board</h2>
         </div>
         <div className="mission-progress-card">
           <span className="stat-label">Pipeline Progress</span>
@@ -67,6 +67,8 @@ export function MissionStatusBoard({ mission, tasks, artifacts, onApproveForOutb
               <div className="detail-card">
                 <h3>Execution Mode</h3>
                 <p className="detail-body">
+                  Channel {mission.channel}
+                  <br />
                   Mode {mission.executionMode}
                   <br />
                   Approval {mission.approvalStatus === "granted" ? "Granted" : "Not granted"}
@@ -74,7 +76,7 @@ export function MissionStatusBoard({ mission, tasks, artifacts, onApproveForOutb
                 {mission.status === "Completed" && !mission.approved ? (
                   <div className="export-actions">
                     <button type="button" className="export-button" onClick={onApproveForOutbound}>
-                      Approve Product
+                      Approve Draft
                     </button>
                   </div>
                 ) : null}
@@ -120,8 +122,8 @@ export function MissionStatusBoard({ mission, tasks, artifacts, onApproveForOutb
         <div className="empty-shell">
           <h3 className="runner-title">No pipeline running yet</h3>
           <p className="detail-body">
-            Use the workflow above to issue an Etsy product objective. The system will pass one listing through
-            research, concept creation, listing generation, and approval packaging.
+            Use the workflow above to issue an autonomous objective. The system will research, rank, build the strongest
+            draft candidates, and hold final outputs for approval.
           </p>
         </div>
       )}

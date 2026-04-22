@@ -17,7 +17,7 @@ export function MissionArchive({ archive }: MissionArchiveProps) {
       <div className="status-header">
         <div>
           <span className="eyebrow">Archive</span>
-          <h2 className="section-title">Previous Etsy pipeline runs</h2>
+          <h2 className="section-title">Previous product and service pipeline runs</h2>
         </div>
       </div>
 
@@ -58,16 +58,32 @@ export function MissionArchive({ archive }: MissionArchiveProps) {
 
                 <div className="archive-expanded-grid">
                   <section className="detail-card">
-                      <h3>Etsy Listing Output</h3>
-                      <div className="report-list">
-                        <p className="detail-body">{entry.report.finalProduct.title}</p>
-                        <p className="detail-body">Target audience: {entry.report.finalProduct.targetAudience}</p>
-                        <p className="detail-body">Why it will sell: {entry.report.finalProduct.whyItWillSell}</p>
-                        <p className="detail-body">Product type: {entry.report.finalProduct.productType}</p>
-                        <p className="detail-body">File format: {entry.report.finalProduct.fileFormat}</p>
-                        <p className="detail-body">Product contents: {entry.report.finalProduct.productContents.join(", ")}</p>
-                      </div>
-                    </section>
+                    <h3>{entry.report.finalProduct.outputKind === "service" ? "Service Output" : "Listing Output"}</h3>
+                    <div className="report-list">
+                      <p className="detail-body">{entry.report.finalProduct.title}</p>
+                      <p className="detail-body">Channel: {entry.report.finalProduct.channel}</p>
+                      <p className="detail-body">Target buyer: {entry.report.finalProduct.targetBuyer}</p>
+                      <p className="detail-body">Why it will sell: {entry.report.finalProduct.whyItWillSell}</p>
+                      <p className="detail-body">Format: {entry.report.finalProduct.format}</p>
+                      <p className="detail-body">Deliverable type: {entry.report.finalProduct.deliverableType}</p>
+                      <p className="detail-body">File format: {entry.report.finalProduct.fileFormat}</p>
+                      <p className="detail-body">
+                        {entry.report.finalProduct.outputKind === "service" ? "Deliverables" : "Product contents"}: {entry.report.finalProduct.productContents.join(", ")}
+                      </p>
+                      {entry.report.finalProduct.outputKind === "service" ? (
+                        <>
+                          <p className="detail-body">Gig title: {entry.report.finalProduct.gigTitle}</p>
+                          <p className="detail-body">Turnaround: {entry.report.finalProduct.turnaroundTime}</p>
+                          <p className="detail-body">Packages: {entry.report.finalProduct.packages.map((pkg) => `${pkg.name} ${pkg.priceRange}`).join(" | ")}</p>
+                        </>
+                      ) : null}
+                      {entry.report.finalProduct.workbookSpec ? (
+                        <p className="detail-body">
+                          Workbook tabs: {entry.report.finalProduct.workbookSpec.tabs.map((tab) => tab.tabName).join(", ")}
+                        </p>
+                      ) : null}
+                    </div>
+                  </section>
 
                   <section className="detail-card">
                     <h3>Artifacts</h3>
@@ -87,7 +103,7 @@ export function MissionArchive({ archive }: MissionArchiveProps) {
       ) : (
         <div className="empty-shell">
           <h3 className="runner-title">Archive empty</h3>
-          <p className="detail-body">Completed Etsy pipeline runs will be stored here so you can compare listing ideas over time.</p>
+          <p className="detail-body">Completed product and service runs will be stored here so you can compare ideas, styles, gig structures, and listing directions over time.</p>
         </div>
       )}
     </section>

@@ -6,9 +6,11 @@ import { AgentVisual } from "@/components/AgentVisual";
 
 const statusClassMap: Record<Agent["status"], string> = {
   Running: "status-running",
+  Retrying: "status-retrying",
   Idle: "status-idle",
   Completed: "status-completed",
   Blocked: "status-blocked",
+  Failed: "status-failed",
   Error: "status-error"
 };
 

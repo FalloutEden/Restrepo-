@@ -1,17 +1,21 @@
 "use client";
 
 import type { ChangeEvent, FormEvent } from "react";
+import type { CommerceChannel } from "@/lib/market-intelligence";
 import type { ExecutionMode, Mission, MissionPriority } from "@/lib/missions";
 
 type MissionControlPanelProps = {
   goal: string;
   constraints: string;
+  channel: CommerceChannel;
   priority: MissionPriority;
   executionMode: ExecutionMode;
   outboundApproved: boolean;
   activeMission: Mission | null;
+  isBusy?: boolean;
   onGoalChange: (value: string) => void;
   onConstraintsChange: (value: string) => void;
+  onChannelChange: (value: CommerceChannel) => void;
   onPriorityChange: (value: MissionPriority) => void;
   onExecutionModeChange: (value: ExecutionMode) => void;
   onOutboundApprovedChange: (value: boolean) => void;
@@ -21,27 +25,31 @@ type MissionControlPanelProps = {
 export function MissionControlPanel({
   goal,
   constraints,
+  channel,
   priority,
   executionMode,
   outboundApproved,
   activeMission,
+  isBusy = false,
   onGoalChange,
   onConstraintsChange,
+  onChannelChange,
   onPriorityChange,
   onExecutionModeChange,
   onOutboundApprovedChange,
   onSubmit
 }: MissionControlPanelProps) {
-  const isRunning = activeMission?.status === "Running" || activeMission?.status === "Queued";
+  const isRunning = isBusy || activeMission?.status === "Running" || activeMission?.status === "Queued";
 
   return (
     <section className="mission-panel">
       <div className="mission-panel-copy">
-        <span className="eyebrow">Etsy Automation Workflow</span>
-        <h2 className="section-title">Issue one digital Etsy product objective and let the pipeline assemble a ready-to-review listing.</h2>
+        <span className="eyebrow">Autonomous Commerce System</span>
+        <h2 className="section-title">Issue one broad command and let the OpenAI agent group run research, validate, design, and list workflows on your selected datasets.</h2>
         <p className="section-copy">
-          The workflow runs four steps in order: research, product concept, listing generation, and approval packaging.
-          Publishing stays blocked until you explicitly approve the product.
+          The workflow now uses a server-side OpenAI runtime for orchestration, planning, and structured outputs. It researches references,
+          feedback, and selected dataset catalogues, splits large inputs into token-safe batches, runs the eight-agent group with retry-aware
+          orchestration, builds only the strongest draft candidates, and always waits for approval before any future outbound step.
         </p>
       </div>
 
@@ -53,29 +61,43 @@ export function MissionControlPanel({
         }}
       >
         <label className="field-block">
-          <span className="field-label">Product Goal</span>
+          <span className="field-label">Autonomous Goal</span>
           <textarea
             className="mission-input mission-textarea"
             value={goal}
             onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onGoalChange(event.target.value)}
-            placeholder="Generate one Etsy digital product listing for planners, trackers, templates, or printable kits..."
+            placeholder="Research and create jobs across all supported channels for sellable products or services."
             rows={5}
           />
         </label>
 
         <div className="mission-form-row">
           <label className="field-block">
-            <span className="field-label">Constraints</span>
+            <span className="field-label">Research Guardrails</span>
             <textarea
               className="mission-input mission-textarea mission-textarea-compact"
               value={constraints}
               onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onConstraintsChange(event.target.value)}
-              placeholder="Digital products only. Return one listing only. Include title, full description, 13 tags, price, product contents, file delivery description, and mockup prompt."
+              placeholder="Never publish automatically. Keep printable generation, spreadsheet generation, listing generation, feedback learning, and approval review intact."
               rows={4}
             />
           </label>
 
           <label className="field-block">
+            <span className="field-label">Channel Scope</span>
+            <select
+              className="mission-input mission-select"
+              value={channel}
+              onChange={(event: ChangeEvent<HTMLSelectElement>) => onChannelChange(event.target.value as CommerceChannel)}
+            >
+              <option value="all">All Channels</option>
+              <option value="etsy">Etsy</option>
+              <option value="fiverr">Fiverr</option>
+              <option value="print_on_demand">Print on Demand</option>
+              <option value="content">Content</option>
+              <option value="other">Other</option>
+            </select>
+
             <span className="field-label">Priority</span>
             <select
               className="mission-input mission-select"
@@ -105,14 +127,15 @@ export function MissionControlPanel({
                   checked={outboundApproved}
                   onChange={(event: ChangeEvent<HTMLInputElement>) => onOutboundApprovedChange(event.target.checked)}
                 />
-                <span>Outbound approval granted for this mission</span>
+                <span>Outbound approval granted for future manual steps</span>
               </label>
             ) : null}
 
             <div className="approval-guard">
-              <span className="guard-title">Approval Boundary</span>
+              <span className="guard-title">Confidence Policy</span>
               <p className="guard-copy">
-                Internal and local modes remain approval-safe. Any future outbound publishing step still requires outbound mode and explicit approval.
+                Opportunities under 90 confidence stay in research or validation. Opportunities at 90 or higher can be built into drafts and
+                moved toward design, listing, and approval. Automatic publishing always stays blocked.
               </p>
             </div>
           </label>
@@ -120,14 +143,15 @@ export function MissionControlPanel({
 
         <div className="mission-form-footer">
           <div className="mission-callout">
-            <span className="field-label">Launch Surface</span>
+            <span className="field-label">Run Behavior</span>
             <p className="mission-callout-copy">
-              Start here to generate one digital Etsy listing package. The workflow output will appear below and then move into the archive after completion.
+              One run can create multiple opportunity jobs. The system will use the chosen workflow stages and selected datasets to research,
+              validate, design, and prepare listing-ready drafts before placing them into review-ready queues.
             </p>
           </div>
 
           <button type="submit" className="mission-run-button" disabled={isRunning || !goal.trim()}>
-            {isRunning ? "Mission Running" : "Run Mission"}
+            {isRunning ? "Agent Group Running" : "Run OpenAI Agent Group"}
           </button>
         </div>
       </form>

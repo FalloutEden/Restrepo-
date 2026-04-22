@@ -3,17 +3,21 @@ import { AgentVisual } from "@/components/AgentVisual";
 
 const statusClassMap: Record<Agent["status"], string> = {
   Running: "status-running",
+  Retrying: "status-retrying",
   Idle: "status-idle",
   Completed: "status-completed",
   Blocked: "status-blocked",
+  Failed: "status-failed",
   Error: "status-error"
 };
 
 const dotClassMap: Record<Agent["status"], string> = {
   Running: "dot-running",
+  Retrying: "dot-retrying",
   Idle: "dot-idle",
   Completed: "dot-completed",
   Blocked: "dot-blocked",
+  Failed: "dot-failed",
   Error: "dot-error"
 };
 
