@@ -1,0 +1,122 @@
+[
+  {
+    "dataset_name": "Amazon Product Data",
+    "domain": "e-commerce & recommendation",
+    "description": "Contains product reviews and metadata from Amazon. Includes ratings, review text, helpfulness votes, and product metadata such as descriptions, category information, price, brand, and image features along with also-bought/also-viewed graphs\u3010766513836595820\u2020L8-L14\u3011\u3010766513836595820\u2020L69-L97\u3011.",
+    "potential_use": "Train agents to predict high-selling products, analyze consumer sentiment, and recommend profitable categories."
+  },
+  {
+    "dataset_name": "Job Description Dataset (Reed)",
+    "domain": "job analysis",
+    "description": "Dataset of 11,501 information & technology job vacancies with 13 metadata fields including job title, salary range, organization, location and full job description\u3010987495491804394\u2020L46-L53\u3011.",
+    "potential_use": "Train agents to parse and classify job postings, extract skill requirements, and match candidates to roles."
+  },
+  {
+    "dataset_name": "Women\u2019s Shoe Prices",
+    "domain": "fashion pricing",
+    "description": "Contains a list of 10,000 women\u2019s shoes with product information such as name, brand and price\u3010811941757760386\u2020L116-L120\u3011.",
+    "potential_use": "Analyze pricing strategies and identify profitable niches within women\u2019s footwear."
+  },
+  {
+    "dataset_name": "Men\u2019s Shoe Prices",
+    "domain": "fashion pricing",
+    "description": "Features about 10,000 men\u2019s shoes along with their sale prices\u3010811941757760386\u2020L119-L120\u3011.",
+    "potential_use": "Analyze pricing and demand patterns in men\u2019s footwear to spot high-margin products."
+  },
+  {
+    "dataset_name": "Fashion Products on Amazon",
+    "domain": "fashion products",
+    "description": "Pre\u2011crawled dataset of 22,000 unique fashion products from Amazon\u3010811941757760386\u2020L122-L124\u3011.",
+    "potential_use": "Identify trending apparel categories and inform design choices for print-on-demand products."
+  },
+  {
+    "dataset_name": "Innerwear Products Dataset",
+    "domain": "clothing retail",
+    "description": "Contains over 600,000 innerwear products with details gathered from Amazon, Victoria\u2019s Secret, Calvin Klein, Macy\u2019s, Nordstrom and more\u3010811941757760386\u2020L134-L137\u3011.",
+    "potential_use": "Explore highly specific clothing segments and analyze brand performance within lingerie and loungewear."
+  },
+  {
+    "dataset_name": "Electronic Products and Pricing Data",
+    "domain": "consumer electronics",
+    "description": "List of over 7,000 electronic products with pricing information across 10 unique fields\u3010811941757760386\u2020L139-L140\u3011.",
+    "potential_use": "Examine electronics pricing structures and identify lucrative gadgets or devices for resale."
+  },
+  {
+    "dataset_name": "E\u2011Commerce Tagging for Clothing",
+    "domain": "image classification",
+    "description": "Retail dataset with 907 product images from e-commerce sites, 504 of which are annotated for clothing attributes\u3010811941757760386\u2020L142-L143\u3011.",
+    "potential_use": "Train computer\u2011vision models to classify and tag apparel images for automated listing and search."
+  },
+  {
+    "dataset_name": "BestBuy Search Queries NER Dataset",
+    "domain": "search relevance",
+    "description": "Dataset of manually labelled search queries from BestBuy, with entity labels marking brand, model name, and category\u3010811941757760386\u2020L150-L152\u3011.",
+    "potential_use": "Teach agents to parse consumer search queries and map them to relevant product categories and features."
+  },
+  {
+    "dataset_name": "Ecommerce Search Relevance Dataset",
+    "domain": "search ranking",
+    "description": "Contains image URLs, detailed product features, and queries that generated specific search results\u3010811941757760386\u2020L154-L156\u3011.",
+    "potential_use": "Develop models that rank search results based on relevance and predicted conversion likelihood."
+  },
+  {
+    "dataset_name": "Retailrocket Recommender System Database",
+    "domain": "user behaviour",
+    "description": "Collected from real e-commerce sites; includes visitor behaviour such as click\u2011rates, add\u2011to\u2011carts and checkout data leading to transactions\u3010811941757760386\u2020L164-L167\u3011.",
+    "potential_use": "Train recommendation agents to optimize conversions by learning from user behaviour patterns."
+  },
+  {
+    "dataset_name": "Online Retail Dataset (UCI)",
+    "domain": "transaction history",
+    "description": "Transactional dataset containing all transactions over an eight\u2011month period for a UK\u2011based online retailer\u3010811941757760386\u2020L169-L171\u3011.",
+    "potential_use": "Analyze purchase patterns, seasonal demand and inventory turnover to inform sales strategies."
+  },
+  {
+    "dataset_name": "Online Auctions Dataset (eBay)",
+    "domain": "auction market",
+    "description": "Dataset from eBay with auction information on luxury items (e.g., Cartier wristwatches, Swarovski beads) as well as game consoles and other electronics\u3010811941757760386\u2020L173-L175\u3011.",
+    "potential_use": "Study auction dynamics and pricing for high\u2011end goods, potentially revealing profitable resale opportunities."
+  },
+  {
+    "dataset_name": "Brazilian E\u2011Commerce Public Dataset (Olist)",
+    "domain": "multi\u2011market e\u2011commerce",
+    "description": "Public dataset of over 100,000 orders from multiple marketplaces between 2016 and 2018; includes order status, price, payment and freight performance, customer location, and reviews\u3010811941757760386\u2020L176-L181\u3011.",
+    "potential_use": "Create models that forecast demand and optimize logistics across different marketplaces and categories."
+  },
+  {
+    "dataset_name": "Women\u2019s E\u2011Commerce Clothing Reviews",
+    "domain": "customer sentiment",
+    "description": "Anonymized dataset containing 23,000 real customer reviews and ratings of clothing items\u3010811941757760386\u2020L191-L193\u3011.",
+    "potential_use": "Perform sentiment analysis to identify product strengths and weaknesses from the customer\u2019s perspective."
+  },
+  {
+    "dataset_name": "Amazon Commerce Reviews Set",
+    "domain": "customer sentiment",
+    "description": "Custom set of reviews from 50 of Amazon\u2019s most active users across numerous products\u3010811941757760386\u2020L195-L198\u3011.",
+    "potential_use": "Explore deep engagement patterns and train models to detect high\u2011impact customer feedback for product improvement."
+  },
+  {
+    "dataset_name": "Multi\u2011Domain Sentiment Analysis Dataset",
+    "domain": "sentiment analysis",
+    "description": "Dataset compiling product reviews across multiple domains with star ratings from 1 to 5\u3010811941757760386\u2020L204-L206\u3011.",
+    "potential_use": "Build sentiment classification models that generalize across product categories."
+  },
+  {
+    "dataset_name": "Freelancer Work History and Client Reviews",
+    "domain": "freelancing & gig economy",
+    "description": "Dataset compiled from Freelancer.com, Upwork, PeoplePerHour and Guru containing freelancers\u2019 work histories and client reviews\u3010385181736703100\u2020L20-L25\u3011.",
+    "potential_use": "Evaluate freelancer performance and forecast the potential earnings of specific gig niches."
+  },
+  {
+    "dataset_name": "Pinterest Pins Dataset",
+    "domain": "social media trends",
+    "description": "Dataset of 70,200 Pinterest pins from 117 users; each pin contains a short text and image with extracted image features\u3010978964129529776\u2020L20-L36\u3011.",
+    "potential_use": "Identify visual and textual trends for designing appealing print\u2011on\u2011demand products and social\u2011marketing campaigns."
+  },
+  {
+    "dataset_name": "Product Attribute Dataset",
+    "domain": "product catalog",
+    "description": "List of products with attributes including brand name, product ID, product name, brand description, size, currency, MRP, sell price, discount and category\u301057032531698210\u2020L20-L22\u3011.",
+    "potential_use": "Provide structured product data for classification models and price optimization."
+  }
+]

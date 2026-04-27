@@ -1,0 +1,194 @@
+[
+  {
+    "name": "The Pile",
+    "description": "800GB of diverse text from ArXiv, GitHub, Wikipedia and other sources; used to train large-scale language models.",
+    "purpose": "General language model pre-training and broad knowledge coverage.",
+    "citation": "\u3010812862284177674\u2020L232-L239\u3011"
+  },
+  {
+    "name": "Common Crawl",
+    "description": "Monthly crawls of billions of web pages.",
+    "purpose": "Up-to-date information and long-form textual content for pre-training and knowledge retrieval.",
+    "citation": "\u3010812862284177674\u2020L251-L256\u3011"
+  },
+  {
+    "name": "WikiText",
+    "description": "High-quality Wikipedia articles retaining complex editorial structures and long-range dependencies.",
+    "purpose": "Structured and well-edited text corpus for language modeling.",
+    "citation": "\u3010812862284177674\u2020L268-L273\u3011"
+  },
+  {
+    "name": "OpenWebText",
+    "description": "Corpus created from URLs posted on Reddit; offers diverse online texts similar to the WebText dataset.",
+    "purpose": "Pre-training and large-scale text generation tasks.",
+    "citation": "\u3010812862284177674\u2020L284-L290\u3011"
+  },
+  {
+    "name": "LAION-5B",
+    "description": "5.85 billion image\u2013text pairs harvested from the web.",
+    "purpose": "Multimodal training for tasks like text-to-image generation and image understanding.",
+    "citation": "\u3010812862284177674\u2020L301-L306\u3011"
+  },
+  {
+    "name": "MS COCO",
+    "description": "Rich image dataset with annotations for object detection, segmentation and captioning.",
+    "purpose": "Image understanding and caption generation.",
+    "citation": "\u3010812862284177674\u2020L318-L324\u3011"
+  },
+  {
+    "name": "Open Images",
+    "description": "Community-driven dataset containing 1.9 million images with labels, bounding boxes and segmentation masks.",
+    "purpose": "Object detection and visual recognition tasks.",
+    "citation": "\u3010812862284177674\u2020L336-L343\u3011"
+  },
+  {
+    "name": "RedPajama-1T",
+    "description": "A trillion-token pre-training dataset compiled from filtered web, books and code sources.",
+    "purpose": "Pre-training large language models with high-quality diverse text.",
+    "citation": "\u3010812862284177674\u2020L352-L360\u3011"
+  },
+  {
+    "name": "RedPajama-V2",
+    "description": "An updated RedPajama dataset containing tokens in 30 languages and multiple modalities.",
+    "purpose": "Multilingual model pre-training and cross-lingual research.",
+    "citation": "\u3010812862284177674\u2020L368-L374\u3011"
+  },
+  {
+    "name": "OpenAI WebGPT",
+    "description": "Human-annotated dataset of web-browsing interactions including queries, clicks and extracted snippets.",
+    "purpose": "Training agents to search and interact with the web safely and accurately.",
+    "citation": "\u3010812862284177674\u2020L384-L391\u3011"
+  },
+  {
+    "name": "Obsidian Agent Dataset",
+    "description": "Synthetic collection of tasks designed to evaluate autonomous decision-making and planning skills.",
+    "purpose": "Testing and training autonomous agents to decompose complex goals.",
+    "citation": "\u3010812862284177674\u2020L404-L408\u3011"
+  },
+  {
+    "name": "WebShop",
+    "description": "E-commerce dataset with product descriptions, user browsing and purchase interaction logs.",
+    "purpose": "Developing intelligent agents that perform product research and purchasing decisions.",
+    "citation": "\u3010812862284177674\u2020L420-L424\u3011"
+  },
+  {
+    "name": "Meta EAI Dataset",
+    "description": "Simulation scenarios for embodied AI focused on virtual and real-world interactions.",
+    "purpose": "Robotics and household task planning for physical or simulated agents.",
+    "citation": "\u3010812862284177674\u2020L436-L441\u3011"
+  },
+  {
+    "name": "MuJoCo",
+    "description": "Physics-engine dataset enabling realistic robotic simulations for control tasks.",
+    "purpose": "Training reinforcement-learning agents for motor control and robotics.",
+    "citation": "\u3010812862284177674\u2020L451-L456\u3011"
+  },
+  {
+    "name": "Robotics Datasets",
+    "description": "Collections of real-world sensor and robot interaction data.",
+    "purpose": "Training embodied AI systems for tasks like navigation, manipulation and perception.",
+    "citation": "\u3010812862284177674\u2020L468-L473\u3011"
+  },
+  {
+    "name": "Atari Games",
+    "description": "Benchmark dataset for reinforcement learning with sequential decision-making challenges.",
+    "purpose": "Developing and benchmarking RL agents on classic video games.",
+    "citation": "\u3010812862284177674\u2020L486-L490\u3011"
+  },
+  {
+    "name": "Web-crawled Interactions",
+    "description": "Large-scale user behaviour data extracted from online platforms.",
+    "purpose": "Training interactive agents based on user behaviour patterns.",
+    "citation": "\u3010812862284177674\u2020L500-L506\u3011"
+  },
+  {
+    "name": "AI2 ARC Dataset",
+    "description": "Multi-choice question dataset for commonsense reasoning and problem-solving tasks.",
+    "purpose": "Testing and training models on commonsense and reasoning capabilities.",
+    "citation": "\u3010812862284177674\u2020L518-L523\u3011"
+  },
+  {
+    "name": "MS MARCO",
+    "description": "Large-scale dataset for passage ranking, question answering and retrieval-augmented generation.",
+    "purpose": "Developing models for information retrieval and reading comprehension tasks.",
+    "citation": "\u3010812862284177674\u2020L535-L546\u3011"
+  },
+  {
+    "name": "OpenAI Gym",
+    "description": "Collection of simulated environments for reinforcement-learning research.",
+    "purpose": "Benchmarking and training RL agents across varied tasks.",
+    "citation": "\u3010812862284177674\u2020L550-L562\u3011"
+  },
+  {
+    "name": "Natural Instructions",
+    "description": "193k instruction\u2013output examples sourced from 61 English NLP tasks.",
+    "purpose": "Instruction-tuning to improve the ability of models to follow tasks.",
+    "citation": "\u3010783333587511363\u2020L96-L101\u3011"
+  },
+  {
+    "name": "Super-Natural Instructions",
+    "description": "Crowd-sourced collection of 5 million examples across 76 tasks in 55 languages.",
+    "purpose": "Large-scale instruction data for multilingual instruction tuning.",
+    "citation": "\u3010783333587511363\u2020L107-L112\u3011"
+  },
+  {
+    "name": "Unnatural Instructions",
+    "description": "240k automatically generated instruction examples created by prompting InstructGPT and paraphrasing.",
+    "purpose": "Diversifying instruction-tuning datasets with automatically generated tasks.",
+    "citation": "\u3010783333587511363\u2020L114-L123\u3011"
+  },
+  {
+    "name": "Self-Instruct",
+    "description": "82k examples generated automatically using InstructGPT conditioned on seed tasks.",
+    "purpose": "Instruction tuning with synthetic tasks to enhance model performance.",
+    "citation": "\u3010783333587511363\u2020L128-L137\u3011"
+  },
+  {
+    "name": "P3",
+    "description": "Prompt collection for 177 English NLP tasks with approximately 11 different prompts per dataset.",
+    "purpose": "Studying the impact of different prompt formulations on model performance.",
+    "citation": "\u3010783333587511363\u2020L141-L146\u3011"
+  },
+  {
+    "name": "xP3 and xP3mt",
+    "description": "Extension of P3 containing 19 multilingual datasets and 11 code datasets; the machine-translated variant xP3mt includes prompts translated into 20 languages.",
+    "purpose": "Multilingual instruction tuning and prompt engineering research.",
+    "citation": "\u3010783333587511363\u2020L152-L158\u3011"
+  },
+  {
+    "name": "Flan 2021/Flan 2022",
+    "description": "Collections of prompt templates for dozens of tasks; Flan 2022 combines Flan 2021, P3, Super-Natural Instructions and additional reasoning and dialogue datasets.",
+    "purpose": "Instruction tuning with prompts enabling few-shot and zero-shot learning and chain-of-thought reasoning.",
+    "citation": "\u3010783333587511363\u2020L162-L173\u3011"
+  },
+  {
+    "name": "Opt-IML Bench",
+    "description": "Dataset combining Super-Natural Instructions, P3 and Flan, with cross-task transfer, knowledge grounding and dialogue datasets.",
+    "purpose": "Evaluating models on a broad range of instruction-following tasks and chain-of-thought reasoning.",
+    "citation": "\u3010783333587511363\u2020L178-L180\u3011"
+  },
+  {
+    "name": "Alpaca",
+    "description": "52k instruction examples generated via self-instruct using OpenAI\u2019s text-davinci-003.",
+    "purpose": "Building and fine-tuning instruction-following models at low cost.",
+    "citation": "\u3010783333587511363\u2020L185-L190\u3011"
+  },
+  {
+    "name": "Evol-Instruct",
+    "description": "250k English instruction\u2013response pairs created by rewriting and elaborating on Alpaca data to increase complexity.",
+    "purpose": "Enhancing instruction datasets by making tasks more complex and specialized.",
+    "citation": "\u3010783333587511363\u2020L191-L196\u3011"
+  },
+  {
+    "name": "Vicuna ShareGPT",
+    "description": "70k multi-turn conversations scraped from ShareGPT with preprocessing to convert HTML to markdown and remove low-quality samples.",
+    "purpose": "Training conversational agents that handle multi-turn dialogues and maintain context.",
+    "citation": "\u3010783333587511363\u2020L198-L205\u3011"
+  },
+  {
+    "name": "Baize",
+    "description": "54k and 57k multi-turn dialog examples generated using ChatGPT with questions from Quora and StackOverflow datasets.",
+    "purpose": "Training models on multi-turn human\u2013AI conversation simulation.",
+    "citation": "\u3010783333587511363\u2020L207-L210\u3011"
+  }
+]
