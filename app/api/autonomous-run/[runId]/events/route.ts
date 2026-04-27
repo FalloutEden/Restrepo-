@@ -24,11 +24,25 @@ export async function GET(request: Request, context: { params: Promise<{ runId: 
 
   const stream = new ReadableStream({
     async start(controller) {
+      // Track the in-flight poll timeout so a single abort handler can cancel it.
+      // (Previously each poll iteration added its own { once: true } abort listener,
+      // which leaked until the AbortSignal actually fired — Node warns at 11.)
+      let pollTimeout: ReturnType<typeof setTimeout> | null = null;
+      let pollResolve: (() => void) | null = null;
+
       const aborted = () => {
+        if (pollTimeout) {
+          clearTimeout(pollTimeout);
+          pollTimeout = null;
+        }
+        if (pollResolve) {
+          pollResolve();
+          pollResolve = null;
+        }
         try { controller.close(); } catch { /* already closed */ }
       };
 
-      request.signal.addEventListener("abort", aborted);
+      request.signal.addEventListener("abort", aborted, { once: true });
 
       try {
         // Poll for new events every 800ms, close when run completes or fails
@@ -47,16 +61,21 @@ export async function GET(request: Request, context: { params: Promise<{ runId: 
             break;
           }
 
-          // Wait before next poll
+          // Wait before next poll. The shared abort handler above can cancel us.
           await new Promise<void>((resolve) => {
-            const t = setTimeout(resolve, 800);
-            request.signal.addEventListener("abort", () => { clearTimeout(t); resolve(); }, { once: true });
+            pollResolve = resolve;
+            pollTimeout = setTimeout(() => {
+              pollTimeout = null;
+              pollResolve = null;
+              resolve();
+            }, 800);
           });
         }
       } catch {
         // Client disconnected — normal
       } finally {
         request.signal.removeEventListener("abort", aborted);
+        if (pollTimeout) clearTimeout(pollTimeout);
         try { controller.close(); } catch { /* already closed */ }
       }
     }
