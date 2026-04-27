@@ -61,6 +61,7 @@ type AgentRuntimeOptions = {
     attempt?: number;
     retryDelayMs?: number;
     error?: string;
+    itemCount?: number;
   }) => void;
 };
 
@@ -558,13 +559,19 @@ async function executeStructuredAgent<T>(
         ? ((data as Record<string, unknown>).summary as string)
         : `${role.name} completed.`;
 
+    const itemCount =
+      typeof data === "object" && data
+        ? Object.values(data as Record<string, unknown>).find(Array.isArray)?.length ?? 1
+        : 1;
+
     options.onStatus?.({
       roleId: role.id,
       roleName: role.name,
       status: "completed",
       message: summary,
       batchIndex,
-      attempt: attempts
+      attempt: attempts,
+      itemCount
     });
 
     return {
@@ -574,10 +581,7 @@ async function executeStructuredAgent<T>(
         name: role.name,
         responsibility: role.responsibility,
         summary,
-        itemCount:
-          typeof data === "object" && data
-            ? Object.values(data as Record<string, unknown>).find(Array.isArray)?.length ?? 1
-            : 1,
+        itemCount,
         status: retryCount > 0 ? "retrying" : "completed",
         attempts,
         retryCount,

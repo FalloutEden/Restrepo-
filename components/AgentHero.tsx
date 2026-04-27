@@ -38,6 +38,7 @@ type PipelineEvent = {
   roleId?: string;
   roleName?: string;
   error?: string;
+  itemCount?: number;
   done?: boolean;
 };
 
@@ -60,8 +61,15 @@ const PIPELINE_STAGES = [
 ];
 
 export function AgentHero() {
+  // Start every agent in Standby (Idle). The mockAgents defaults are demo-only fictional states
+  // and shouldn't be displayed when no run is active.
   const [agents, setAgents] = useState<Agent[]>(() =>
-    mockAgents.map((a) => ({ ...a }))
+    mockAgents.map((a) => ({
+      ...a,
+      status: "Idle" as AgentStatus,
+      latestOutputPreview: "Standby — awaiting pipeline run.",
+      queueDepth: 0
+    }))
   );
   const [goal, setGoal] = useState("");
   const [runState, setRunState] = useState<RunState>("idle");
@@ -69,6 +77,7 @@ export function AgentHero() {
   const [statusLine, setStatusLine] = useState("");
   const [activeStages, setActiveStages] = useState<Record<string, string>>({});
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
   // Clean up EventSource on unmount
@@ -88,6 +97,7 @@ export function AgentHero() {
 
   const handleSSEPayload = useCallback(
     (payload: SSEPayload) => {
+      let lastError: string | null = null;
       for (const evt of payload.events) {
         if (evt.type === "agent" && evt.roleId) {
           const displayStatus = EXEC_TO_STATUS[evt.status] ?? "Running";
@@ -96,6 +106,7 @@ export function AgentHero() {
             updatedAt: "just now"
           };
           if (evt.message) patch.latestOutputPreview = evt.message;
+          if (typeof evt.itemCount === "number") patch.queueDepth = evt.itemCount;
           updateAgentByRole(evt.roleId, patch);
 
           const roleKey = evt.roleId as string;
@@ -105,17 +116,22 @@ export function AgentHero() {
         if (evt.type === "run" || evt.type === "log") {
           if (evt.message) setStatusLine(evt.message);
         }
+
+        // Capture explicit error messages from any failed event so we can show the real reason.
+        if (evt.error) lastError = evt.error;
       }
+
+      if (lastError) setRunError(lastError);
 
       if (payload.done || payload.status === "completed" || payload.status === "failed") {
         setRunState(payload.status === "failed" ? "failed" : "completed");
         esRef.current?.close();
         esRef.current = null;
-        setStatusLine(
-          payload.status === "failed"
-            ? "Pipeline encountered an error. Review agent logs."
-            : "Pipeline complete. Products materialized and queued for review."
-        );
+        if (payload.status === "failed") {
+          setStatusLine(lastError ?? "Pipeline failed. See details below.");
+        } else {
+          setStatusLine("Pipeline complete. Products materialized and queued for review.");
+        }
       }
     },
     [updateAgentByRole]
@@ -126,9 +142,17 @@ export function AgentHero() {
     setRunState("starting");
     setStatusLine("Initializing Umbrella command pipeline...");
     setActiveStages({});
+    setRunError(null);
 
-    // Reset all agents to Idle before run
-    setAgents(mockAgents.map((a) => ({ ...a, status: "Idle" as AgentStatus })));
+    // Reset all agents to Idle (clean state, no demo defaults bleeding through)
+    setAgents(
+      mockAgents.map((a) => ({
+        ...a,
+        status: "Idle" as AgentStatus,
+        latestOutputPreview: "Awaiting deployment...",
+        queueDepth: 0
+      }))
+    );
 
     try {
       const res = await fetch("/api/autonomous-run/start", {
@@ -256,6 +280,14 @@ export function AgentHero() {
                 </span>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Failure banner — surfaces the real reason a run died */}
+        {runState === "failed" && runError && (
+          <div className="agent-hero-failure-banner" role="alert">
+            <span className="agent-hero-failure-label">Pipeline failed</span>
+            <span className="agent-hero-failure-msg">{runError}</span>
           </div>
         )}
 

@@ -53,6 +53,7 @@ export type AutonomousRunEvent = {
   roleName?: string;
   batchIndex?: number;
   error?: string;
+  itemCount?: number;
 };
 
 export type AutonomousRunRecord = {
@@ -226,6 +227,7 @@ export async function updateAutonomousRunAgent(runId: string, event: {
   attempt?: number;
   retryDelayMs?: number;
   error?: string;
+  itemCount?: number;
 }) {
   return updateRun(runId, (current) => {
     const existingTrace = current.agentRuns.find((trace) => trace.roleId === event.roleId);
@@ -234,7 +236,7 @@ export async function updateAutonomousRunAgent(runId: string, event: {
       name: existingTrace?.name ?? event.roleName,
       responsibility: existingTrace?.responsibility ?? event.roleName,
       summary: event.error ? `${event.message} ${event.error}`.trim() : event.message,
-      itemCount: existingTrace?.itemCount ?? 0,
+      itemCount: event.itemCount ?? existingTrace?.itemCount ?? 0,
       status: event.status,
       attempts: Math.max(existingTrace?.attempts ?? 0, event.attempt ?? 0),
       retryCount: (existingTrace?.retryCount ?? 0) + (event.retryDelayMs ? 1 : 0),
@@ -256,7 +258,8 @@ export async function updateAutonomousRunAgent(runId: string, event: {
         roleId: event.roleId,
         roleName: event.roleName,
         batchIndex: event.batchIndex,
-        error: event.error
+        error: event.error,
+        itemCount: event.itemCount
       }
     );
   });
