@@ -4,11 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Agent } from "@/lib/mock-agents";
 
 type AgentVisualProps = {
-  agent: Pick<Agent, "name" | "avatar" | "background" | "avatarFrames" | "blinkFrames" | "frameRate" | "loop" | "status">;
+  agent: Pick<Agent, "name" | "avatar" | "background" | "avatarFrames" | "blinkFrames" | "blinkAnimations" | "frameRate" | "loop" | "status" | "blinkIntervalMs" | "flashOnFrames">;
   variant: "card" | "modal";
 };
 
-const blinkBlockedNames = new Set(["HUNK", "Umbrella Core"]);
+const blinkBlockedNames = new Set<string>();
 
 // How far left/right the sprite travels (as a fraction of container width)
 const PATROL_RANGE = 0.24;
@@ -42,21 +42,27 @@ export function AgentVisual({ agent, variant }: AgentVisualProps) {
     return [agent.avatar];
   }, [agent.avatar, agent.avatarFrames]);
 
-  const blinkFrames = useMemo(() => agent.blinkFrames ?? [], [agent.blinkFrames]);
+  const blinkAnimations = useMemo<string[][]>(() => {
+    if (agent.blinkAnimations && agent.blinkAnimations.length > 0) return agent.blinkAnimations;
+    if (agent.blinkFrames && agent.blinkFrames.length > 0) return [agent.blinkFrames];
+    return [];
+  }, [agent.blinkAnimations, agent.blinkFrames]);
+
   const frameRate = agent.frameRate ?? 6;
   const loop = agent.loop ?? true;
-  const canBlink = blinkFrames.length > 0 && !blinkBlockedNames.has(agent.name);
+  const canBlink = blinkAnimations.length > 0 && !blinkBlockedNames.has(agent.name);
 
   const [frameIndex, setFrameIndex] = useState(0);
   const [blinkIndex, setBlinkIndex] = useState(0);
   const [isBlinking, setIsBlinking] = useState(false);
-  const blinkTimeoutRef = useRef<number | null>(null);
+  const [activeBlinkSeq, setActiveBlinkSeq] = useState<string[]>([]);
 
   useEffect(() => {
     setFrameIndex(0);
     setBlinkIndex(0);
     setIsBlinking(false);
-  }, [baseFrames, blinkFrames]);
+    setActiveBlinkSeq([]);
+  }, [baseFrames, blinkAnimations]);
 
   useEffect(() => {
     if (isBlinking || baseFrames.length <= 1) return;
@@ -67,29 +73,27 @@ export function AgentVisual({ agent, variant }: AgentVisualProps) {
     return () => window.clearInterval(id);
   }, [baseFrames, frameRate, isBlinking, loop]);
 
+  // Schedule the next blink whenever we're idle. Re-arms after each tic completes.
   useEffect(() => {
-    if (!canBlink) return;
-    let cancelled = false;
-    const queue = () => {
-      blinkTimeoutRef.current = window.setTimeout(() => {
-        if (cancelled) return;
-        setBlinkIndex(0);
-        setIsBlinking(true);
-      }, 2600 + Math.floor(Math.random() * 3400));
-    };
-    queue();
-    return () => {
-      cancelled = true;
-      if (blinkTimeoutRef.current !== null) window.clearTimeout(blinkTimeoutRef.current);
-    };
-  }, [canBlink]);
+    if (!canBlink || isBlinking) return;
+    const min = agent.blinkIntervalMs?.min ?? 2600;
+    const max = agent.blinkIntervalMs?.max ?? 6000;
+    const delay = min + Math.floor(Math.random() * Math.max(0, max - min));
+    const id = window.setTimeout(() => {
+      const seq = blinkAnimations[Math.floor(Math.random() * blinkAnimations.length)];
+      setActiveBlinkSeq(seq);
+      setBlinkIndex(0);
+      setIsBlinking(true);
+    }, delay);
+    return () => window.clearTimeout(id);
+  }, [canBlink, isBlinking, blinkAnimations, agent.blinkIntervalMs?.min, agent.blinkIntervalMs?.max]);
 
   useEffect(() => {
-    if (!isBlinking || !canBlink) return;
+    if (!isBlinking || !canBlink || activeBlinkSeq.length === 0) return;
     const ms = Math.max(1000 / Math.max(frameRate, 1), 70);
     const id = window.setInterval(() => {
       setBlinkIndex((i) => {
-        if (i >= blinkFrames.length - 1) {
+        if (i >= activeBlinkSeq.length - 1) {
           window.clearInterval(id);
           setIsBlinking(false);
           return 0;
@@ -98,7 +102,7 @@ export function AgentVisual({ agent, variant }: AgentVisualProps) {
       });
     }, ms);
     return () => window.clearInterval(id);
-  }, [blinkFrames, canBlink, frameRate, isBlinking]);
+  }, [activeBlinkSeq, canBlink, frameRate, isBlinking]);
 
   // ── Patrol movement system ─────────────────────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null);
@@ -194,8 +198,11 @@ export function AgentVisual({ agent, variant }: AgentVisualProps) {
   // ── Render ─────────────────────────────────────────────────────────────────
   const hasFrameAnimation = baseFrames.length > 1;
   const activeSprite = isBlinking && canBlink
-    ? blinkFrames[blinkIndex]
+    ? activeBlinkSeq[blinkIndex] ?? agent.avatar
     : baseFrames[frameIndex] ?? agent.avatar;
+  const flashColor = agent.flashOnFrames && agent.flashOnFrames.frames.includes(activeSprite)
+    ? agent.flashOnFrames.color
+    : null;
 
   const rootClassName = [
     "agent-visual",
@@ -217,6 +224,9 @@ export function AgentVisual({ agent, variant }: AgentVisualProps) {
       <div className="agent-room-scanlines" />
       <div ref={glowRef} className="agent-room-floor-glow" />
       <img ref={spriteRef} className={spriteClassName} src={activeSprite} alt="" />
+      {flashColor ? (
+        <div className="agent-visual-flash" style={{ backgroundColor: flashColor }} />
+      ) : null}
     </div>
   );
 }

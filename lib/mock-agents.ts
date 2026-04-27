@@ -8,8 +8,11 @@ export type Agent = {
   background: string;
   avatarFrames?: string[];
   blinkFrames?: string[];
+  blinkAnimations?: string[][];
   frameRate?: number;
   loop?: boolean;
+  blinkIntervalMs?: { min: number; max: number };
+  flashOnFrames?: { color: string; frames: string[] };
   status: AgentStatus;
   latestOutputPreview: string;
   latestOutput: string;
@@ -21,6 +24,9 @@ export type Agent = {
 type AgentPayload = Partial<Agent> & {
   avatarFrames?: unknown;
   blinkFrames?: unknown;
+  blinkAnimations?: unknown;
+  blinkIntervalMs?: unknown;
+  flashOnFrames?: unknown;
   frameRate?: unknown;
   loop?: unknown;
   queueDepth?: unknown;
@@ -34,11 +40,32 @@ const agentDefaults: Agent[] = [
     id: "planner-01",
     name: "Wesker",
     role: "Trend Research Agent",
-    avatar: "/agents/Albert Wesker.png",
+    avatar: "/agents/Wesker/glasses-1.png",
     background: "/backgrounds/wesker-room.png",
-    avatarFrames: ["/agents/Albert Wesker.png"],
-    blinkFrames: ["/agents/Albert Wesker.png"],
+    avatarFrames: ["/agents/Wesker/glasses-1.png"],
+    blinkAnimations: [
+      [
+        "/agents/Wesker/glasses-2.png",
+        "/agents/Wesker/glasses-3.png",
+        "/agents/Wesker/glasses-4.png"
+      ],
+      [
+        "/agents/Wesker/dodge-1.png",
+        "/agents/Wesker/dodge-2.png",
+        "/agents/Wesker/dodge-3.png",
+        "/agents/Wesker/dodge-4.png",
+        "/agents/Wesker/dodge-5.png",
+        "/agents/Wesker/dodge-6.png",
+        "/agents/Wesker/dodge-7.png",
+        "/agents/Wesker/dodge-8.png",
+        "/agents/Wesker/dodge-9.png",
+        "/agents/Wesker/dodge-10.png",
+        "/agents/Wesker/dodge-11.png",
+        "/agents/Wesker/dodge-12.png"
+      ]
+    ],
     frameRate: 6,
+    blinkIntervalMs: { min: 1800, max: 4500 },
     loop: true,
     status: "Running",
     latestOutputPreview: "Synthesizing saved market signals, reference examples, and feedback into a current trend brief.",
@@ -51,10 +78,28 @@ const agentDefaults: Agent[] = [
     id: "research-02",
     name: "Red Queen",
     role: "Opportunity Router Agent",
-    avatar: "/agents/Red Queen.png",
+    avatar: "/agents/Red Queen/hologram-5.png",
     background: "/backgrounds/red-queen-room.png",
-    avatarFrames: ["/agents/Red Queen.png"],
-    blinkFrames: ["/agents/Red Queen.png"],
+    avatarFrames: [
+      "/agents/Red Queen/hologram-1.png",
+      "/agents/Red Queen/hologram-2.png",
+      "/agents/Red Queen/hologram-3.png",
+      "/agents/Red Queen/hologram-4.png",
+      "/agents/Red Queen/hologram-5.png",
+      "/agents/Red Queen/hologram-6.png",
+      "/agents/Red Queen/hologram-7.png",
+      "/agents/Red Queen/hologram-8.png",
+      "/agents/Red Queen/hologram-9.png",
+      "/agents/Red Queen/hologram-10.png"
+    ],
+    flashOnFrames: {
+      color: "rgba(255, 60, 60, 0.18)",
+      frames: [
+        "/agents/Red Queen/hologram-1.png",
+        "/agents/Red Queen/hologram-9.png",
+        "/agents/Red Queen/hologram-10.png"
+      ]
+    },
     frameRate: 6,
     loop: true,
     status: "Completed",
@@ -68,9 +113,44 @@ const agentDefaults: Agent[] = [
     id: "ops-03",
     name: "HUNK",
     role: "Product Strategy Agent",
-    avatar: "/agents/HUNK.png",
+    avatar: "/agents/Hunk/standing-rest.png",
     background: "/backgrounds/hunk-room.png",
-    avatarFrames: ["/agents/HUNK.png"],
+    avatarFrames: ["/agents/Hunk/standing-rest.png"],
+    blinkAnimations: [
+      [
+        "/agents/Hunk/shooting-1.png",
+        "/agents/Hunk/shooting-2.png",
+        "/agents/Hunk/shooting-3.png",
+        "/agents/Hunk/shooting-4.png",
+        "/agents/Hunk/shooting-5.png",
+        "/agents/Hunk/shooting-6.png",
+        "/agents/Hunk/shooting-7.png",
+        "/agents/Hunk/shooting-8.png",
+        "/agents/Hunk/shooting-9.png",
+        "/agents/Hunk/shooting-10.png",
+        "/agents/Hunk/shooting-6.png",
+        "/agents/Hunk/shooting-7.png",
+        "/agents/Hunk/shooting-8.png",
+        "/agents/Hunk/shooting-9.png",
+        "/agents/Hunk/shooting-10.png",
+        "/agents/Hunk/shooting-6.png",
+        "/agents/Hunk/shooting-7.png",
+        "/agents/Hunk/shooting-8.png",
+        "/agents/Hunk/shooting-9.png",
+        "/agents/Hunk/shooting-10.png"
+      ]
+    ],
+    blinkIntervalMs: { min: 4000, max: 8500 },
+    flashOnFrames: {
+      color: "rgba(255, 255, 255, 0.35)",
+      frames: [
+        "/agents/Hunk/shooting-6.png",
+        "/agents/Hunk/shooting-7.png",
+        "/agents/Hunk/shooting-8.png",
+        "/agents/Hunk/shooting-9.png",
+        "/agents/Hunk/shooting-10.png"
+      ]
+    },
     frameRate: 6,
     loop: true,
     status: "Idle",
@@ -84,10 +164,24 @@ const agentDefaults: Agent[] = [
     id: "writer-04",
     name: "Nemesis",
     role: "Design Direction Agent",
-    avatar: "/agents/Nemesis.png",
+    avatar: "/agents/Nemesis/standing-rest.png",
     background: "/backgrounds/nemesis-room.png",
-    avatarFrames: ["/agents/Nemesis.png"],
-    blinkFrames: ["/agents/Nemesis.png"],
+    avatarFrames: ["/agents/Nemesis/standing-rest.png"],
+    blinkAnimations: [
+      [
+        "/agents/Nemesis/tentacle-1.png",
+        "/agents/Nemesis/tentacle-2.png",
+        "/agents/Nemesis/tentacle-3.png",
+        "/agents/Nemesis/tentacle-4.png",
+        "/agents/Nemesis/tentacle-5.png",
+        "/agents/Nemesis/tentacle-6.png",
+        "/agents/Nemesis/tentacle-7.png",
+        "/agents/Nemesis/tentacle-8.png",
+        "/agents/Nemesis/tentacle-9.png",
+        "/agents/Nemesis/tentacle-10.png"
+      ]
+    ],
+    blinkIntervalMs: { min: 3500, max: 7500 },
     frameRate: 6,
     loop: true,
     status: "Running",
@@ -101,10 +195,23 @@ const agentDefaults: Agent[] = [
     id: "review-05",
     name: "Birkin",
     role: "Review/Approval Agent",
-    avatar: "/agents/William Birkin.png",
+    avatar: "/agents/William Burkin/blink-1.png",
     background: "/backgrounds/birkin-room.png",
-    avatarFrames: ["/agents/William Birkin.png"],
-    blinkFrames: ["/agents/William Birkin.png"],
+    avatarFrames: ["/agents/William Burkin/blink-1.png"],
+    blinkAnimations: [
+      [
+        "/agents/William Burkin/blink-2.png",
+        "/agents/William Burkin/blink-3.png",
+        "/agents/William Burkin/blink-4.png"
+      ],
+      [
+        "/agents/William Burkin/roar-2.png",
+        "/agents/William Burkin/roar-3.png",
+        "/agents/William Burkin/roar-4.png",
+        "/agents/William Burkin/roar-5.png"
+      ]
+    ],
+    blinkIntervalMs: { min: 2200, max: 5000 },
     frameRate: 6,
     loop: true,
     status: "Idle",
@@ -118,10 +225,23 @@ const agentDefaults: Agent[] = [
     id: "triage-06",
     name: "Tyrant",
     role: "Validation Guard Agent",
-    avatar: "/agents/Tyrant.png",
+    avatar: "/agents/Tyrant/tip-hat-1.png",
     background: "/backgrounds/tyrant-room.png",
-    avatarFrames: ["/agents/Tyrant.png"],
-    blinkFrames: ["/agents/Tyrant.png"],
+    avatarFrames: ["/agents/Tyrant/tip-hat-1.png"],
+    blinkAnimations: [
+      [
+        "/agents/Tyrant/tip-hat-2.png",
+        "/agents/Tyrant/tip-hat-3.png",
+        "/agents/Tyrant/tip-hat-4.png",
+        "/agents/Tyrant/tip-hat-5.png",
+        "/agents/Tyrant/tip-hat-6.png",
+        "/agents/Tyrant/tip-hat-7.png",
+        "/agents/Tyrant/tip-hat-8.png",
+        "/agents/Tyrant/tip-hat-9.png",
+        "/agents/Tyrant/tip-hat-10.png"
+      ]
+    ],
+    blinkIntervalMs: { min: 3000, max: 7000 },
     frameRate: 6,
     loop: true,
     status: "Completed",
@@ -135,10 +255,44 @@ const agentDefaults: Agent[] = [
     id: "builder-07",
     name: "Ada",
     role: "Build Agent",
-    avatar: "/agents/Ada Wong.png",
+    avatar: "/agents/Ada/standing-rest.png",
     background: "/backgrounds/ada-room.png",
-    avatarFrames: ["/agents/Ada Wong.png"],
-    blinkFrames: ["/agents/Ada Wong.png"],
+    avatarFrames: ["/agents/Ada/standing-rest.png"],
+    blinkAnimations: [
+      [
+        "/agents/Ada/side-1.png",
+        "/agents/Ada/side-2.png",
+        "/agents/Ada/side-3.png"
+      ],
+      [
+        "/agents/Ada/aiming-1.png",
+        "/agents/Ada/aiming-2.png",
+        "/agents/Ada/aiming-3.png",
+        "/agents/Ada/aiming-4.png",
+        "/agents/Ada/shooting-1.png",
+        "/agents/Ada/shooting-2.png",
+        "/agents/Ada/shooting-3.png",
+        "/agents/Ada/shooting-4.png",
+        "/agents/Ada/shooting-1.png",
+        "/agents/Ada/shooting-2.png",
+        "/agents/Ada/shooting-3.png",
+        "/agents/Ada/shooting-4.png",
+        "/agents/Ada/shooting-1.png",
+        "/agents/Ada/shooting-2.png",
+        "/agents/Ada/shooting-3.png",
+        "/agents/Ada/shooting-4.png"
+      ]
+    ],
+    blinkIntervalMs: { min: 3500, max: 7500 },
+    flashOnFrames: {
+      color: "rgba(255, 255, 255, 0.35)",
+      frames: [
+        "/agents/Ada/shooting-1.png",
+        "/agents/Ada/shooting-2.png",
+        "/agents/Ada/shooting-3.png",
+        "/agents/Ada/shooting-4.png"
+      ]
+    },
     frameRate: 6,
     loop: true,
     status: "Running",
@@ -152,9 +306,65 @@ const agentDefaults: Agent[] = [
     id: "memory-08",
     name: "Umbrella Core",
     role: "Runtime Monitor Agent",
-    avatar: "/agents/Umbrella-Core.png",
+    avatar: "/agents/Umbrealla Core/message-1.png",
     background: "/backgrounds/umbrella-core-room.png",
-    avatarFrames: ["/agents/Umbrella-Core.png"],
+    avatarFrames: ["/agents/Umbrealla Core/message-1.png"],
+    blinkAnimations: [
+      [
+        "/agents/Umbrealla Core/message-2.png",
+        "/agents/Umbrealla Core/message-3.png",
+        "/agents/Umbrealla Core/message-4.png",
+        "/agents/Umbrealla Core/message-5.png",
+        "/agents/Umbrealla Core/message-6.png",
+        "/agents/Umbrealla Core/message-7.png",
+        "/agents/Umbrealla Core/message-8.png",
+        "/agents/Umbrealla Core/message-9.png",
+        "/agents/Umbrealla Core/message-10.png"
+      ],
+      [
+        "/agents/Umbrealla Core/kneeling-1.png",
+        "/agents/Umbrealla Core/kneeling-2.png",
+        "/agents/Umbrealla Core/kneeling-3.png",
+        "/agents/Umbrealla Core/kneeling-4.png",
+        "/agents/Umbrealla Core/kneeling-5.png",
+        "/agents/Umbrealla Core/shooting-1.png",
+        "/agents/Umbrealla Core/shooting-2.png",
+        "/agents/Umbrealla Core/shooting-3.png",
+        "/agents/Umbrealla Core/shooting-4.png",
+        "/agents/Umbrealla Core/shooting-5.png",
+        "/agents/Umbrealla Core/shooting-6.png",
+        "/agents/Umbrealla Core/shooting-7.png",
+        "/agents/Umbrealla Core/shooting-8.png",
+        "/agents/Umbrealla Core/shooting-9.png",
+        "/agents/Umbrealla Core/shooting-10.png",
+        "/agents/Umbrealla Core/shooting-6.png",
+        "/agents/Umbrealla Core/shooting-7.png",
+        "/agents/Umbrealla Core/shooting-8.png",
+        "/agents/Umbrealla Core/shooting-9.png",
+        "/agents/Umbrealla Core/shooting-10.png",
+        "/agents/Umbrealla Core/shooting-6.png",
+        "/agents/Umbrealla Core/shooting-7.png",
+        "/agents/Umbrealla Core/shooting-8.png",
+        "/agents/Umbrealla Core/shooting-9.png",
+        "/agents/Umbrealla Core/shooting-10.png",
+        "/agents/Umbrealla Core/kneeling-6.png",
+        "/agents/Umbrealla Core/kneeling-7.png",
+        "/agents/Umbrealla Core/kneeling-8.png",
+        "/agents/Umbrealla Core/kneeling-9.png",
+        "/agents/Umbrealla Core/kneeling-10.png"
+      ]
+    ],
+    blinkIntervalMs: { min: 4500, max: 9000 },
+    flashOnFrames: {
+      color: "rgba(255, 255, 255, 0.35)",
+      frames: [
+        "/agents/Umbrealla Core/shooting-6.png",
+        "/agents/Umbrealla Core/shooting-7.png",
+        "/agents/Umbrealla Core/shooting-8.png",
+        "/agents/Umbrealla Core/shooting-9.png",
+        "/agents/Umbrealla Core/shooting-10.png"
+      ]
+    },
     frameRate: 6,
     loop: true,
     status: "Idle",
@@ -175,9 +385,9 @@ const rawAgentPayloads: AgentPayload[] = [
     id: "review-05",
     name: "Birkin",
     role: "Mutation Analysis",
-    avatar: "/agents/William Birkin.png",
+    avatar: "not-a-valid-path" as never,
     background: "/backgrounds/birkin-room.png",
-    avatarFrames: ["/agents/William Birkin.png", 12 as never, null as never],
+    avatarFrames: ["bad-path-no-slash", 12 as never, null as never],
     blinkFrames: "bad-frame-data" as never,
     latestOutputPreview: undefined,
     latestOutput: "Recovered incomplete payload fields and resumed safe local rendering.",
@@ -221,6 +431,37 @@ function pickImageArray(value: unknown, fallback: string[]) {
   return normalized.length > 0 ? normalized : fallback;
 }
 
+function pickNestedImageArray(value: unknown, fallback: string[][] | undefined) {
+  if (!Array.isArray(value)) return fallback;
+  const normalized = value
+    .map((seq) => (Array.isArray(seq)
+      ? seq.filter((f): f is string => typeof f === "string" && f.startsWith("/"))
+      : []))
+    .filter((seq): seq is string[] => seq.length > 0);
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function pickBlinkInterval(value: unknown, fallback: Agent["blinkIntervalMs"]) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const v = value as { min?: unknown; max?: unknown };
+    if (typeof v.min === "number" && Number.isFinite(v.min) && typeof v.max === "number" && Number.isFinite(v.max)) {
+      return { min: v.min, max: v.max };
+    }
+  }
+  return fallback;
+}
+
+function pickFlashOnFrames(value: unknown, fallback: Agent["flashOnFrames"]) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const v = value as { color?: unknown; frames?: unknown };
+    if (typeof v.color === "string" && Array.isArray(v.frames)) {
+      const frames = v.frames.filter((f): f is string => typeof f === "string" && f.startsWith("/"));
+      if (frames.length > 0) return { color: v.color, frames };
+    }
+  }
+  return fallback;
+}
+
 export function normalizeAgentPayload(payload: AgentPayload, fallback: Agent): Agent {
   const normalized: Agent = {
     id: pickString(payload.id, fallback.id),
@@ -230,6 +471,9 @@ export function normalizeAgentPayload(payload: AgentPayload, fallback: Agent): A
     background: pickImagePath(payload.background, fallback.background),
     avatarFrames: pickImageArray(payload.avatarFrames, fallback.avatarFrames ?? [fallback.avatar]),
     blinkFrames: pickImageArray(payload.blinkFrames, fallback.blinkFrames ?? [fallback.avatar]),
+    blinkAnimations: pickNestedImageArray(payload.blinkAnimations, fallback.blinkAnimations),
+    blinkIntervalMs: pickBlinkInterval(payload.blinkIntervalMs, fallback.blinkIntervalMs),
+    flashOnFrames: pickFlashOnFrames(payload.flashOnFrames, fallback.flashOnFrames),
     frameRate: pickNumber(payload.frameRate, fallback.frameRate ?? 6),
     loop: pickBoolean(payload.loop, fallback.loop ?? true),
     status: pickStatus(payload.status, fallback.status),
