@@ -1,6 +1,7 @@
 import "server-only";
 
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import type { DatasetCatalogueEntry, DatasetKey, DatasetKind, DatasetLoadSummary } from "@/lib/dataset-models";
 import type { CommerceChannel, ResearchExample } from "@/lib/market-intelligence";
 import { estimateResearchExampleTokens, estimateTokenCount } from "@/lib/token-batching";
@@ -60,6 +61,9 @@ type DatasetDefinition = {
   parse: (parsed: unknown) => ResearchExample[];
 };
 
+// Datasets live in <repo>/data/. Resolved at runtime so the project is portable.
+const datasetPath = (filename: string) => path.join(process.cwd(), "data", filename);
+
 export type LocalTrainingData = {
   examples: ResearchExample[];
   files: DatasetLoadSummary[];
@@ -79,7 +83,7 @@ type LoadLocalTrainingDataOptions = {
 const DATASET_DEFINITIONS: DatasetDefinition[] = [
   {
     key: "shopify_high_selling",
-    path: "c:\\Users\\karli\\Downloads\\shopify_high_selling.json",
+    path: datasetPath("shopify_high_selling.json"),
     title: "Shopify High Selling Catalogue",
     kind: "market_evidence",
     description: "Commerce evidence focused on high-selling Shopify-style categories and commercial signals.",
@@ -90,7 +94,7 @@ const DATASET_DEFINITIONS: DatasetDefinition[] = [
   },
   {
     key: "print_on_demand",
-    path: "c:\\Users\\karli\\Downloads\\print_on_demand.json",
+    path: datasetPath("print_on_demand.json"),
     title: "Print On Demand Opportunity Set",
     kind: "market_evidence",
     description: "Validated print-on-demand and printable concepts with category-specific descriptions.",
@@ -101,7 +105,7 @@ const DATASET_DEFINITIONS: DatasetDefinition[] = [
   },
   {
     key: "fiverr_ai_jobs",
-    path: "c:\\Users\\karli\\Downloads\\fiverr_ai_jobs.json",
+    path: datasetPath("fiverr_ai_jobs.json"),
     title: "Fiverr AI Job Signals",
     kind: "market_evidence",
     description: "Service-market evidence centered on Fiverr-style AI gigs and deliverable patterns.",
@@ -112,7 +116,7 @@ const DATASET_DEFINITIONS: DatasetDefinition[] = [
   },
   {
     key: "jobs_dataset_2000",
-    path: "c:\\Users\\karli\\Downloads\\jobs_dataset_2000.json",
+    path: datasetPath("jobs_dataset_2000.json"),
     title: "Job Vocabulary Dataset 2000",
     kind: "job_vocabulary",
     description: "Broad role vocabulary for niche discovery and service naming.",
@@ -123,7 +127,7 @@ const DATASET_DEFINITIONS: DatasetDefinition[] = [
   },
   {
     key: "jobs_dataset_1000_1",
-    path: "c:\\Users\\karli\\Downloads\\jobs_dataset_1000 (1).json",
+    path: datasetPath("jobs_dataset_1000 (1).json"),
     title: "Job Vocabulary Dataset 1000",
     kind: "job_vocabulary",
     description: "Additional role vocabulary for target-buyer expansion and adjacent service discovery.",
@@ -134,7 +138,7 @@ const DATASET_DEFINITIONS: DatasetDefinition[] = [
   },
   {
     key: "jobs_dataset_remaining",
-    path: "c:\\Users\\karli\\Downloads\\jobs_dataset_remaining.json",
+    path: datasetPath("jobs_dataset_remaining.json"),
     title: "Job Vocabulary Dataset Remaining",
     kind: "job_vocabulary",
     description: "Remaining long-tail role titles used to broaden exploration and niche coverage.",
@@ -145,7 +149,7 @@ const DATASET_DEFINITIONS: DatasetDefinition[] = [
   },
   {
     key: "quality_datasets_1",
-    path: "c:\\Users\\karli\\Downloads\\quality_datasets (1).json",
+    path: datasetPath("quality_datasets (1).json"),
     title: "Quality Dataset Guidance",
     kind: "quality_guidance",
     description: "Research-quality guidance about useful commerce, search, sentiment, and freelance datasets.",
@@ -156,7 +160,7 @@ const DATASET_DEFINITIONS: DatasetDefinition[] = [
   },
   {
     key: "relevant_datasets",
-    path: "c:\\Users\\karli\\Downloads\\relevant_datasets.json",
+    path: datasetPath("relevant_datasets.json"),
     title: "Relevant Agent Dataset Library",
     kind: "agent_guidance",
     description: "Agent-training and instruction dataset summaries covering retrieval, planning, instruction tuning, and multimodal systems.",
