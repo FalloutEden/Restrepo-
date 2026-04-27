@@ -635,86 +635,6 @@ function buildSharedPayload(input: AgentRuntimeInput) {
   };
 }
 
-function inferFallbackServiceType(goal: string) {
-  const src = goal.toLowerCase();
-  if (/automation|zapier|make|workflow/.test(src)) return "automation setup";
-  if (/spreadsheet|dashboard|tracker|excel/.test(src)) return "spreadsheet creation";
-  if (/video|youtube|reel|short/.test(src)) return "video scripting";
-  if (/script/.test(src)) return "script writing";
-  if (/planner|worksheet|printable/.test(src)) return "planner design";
-  return "ai content generation";
-}
-
-function buildFallbackServiceOpportunity(
-  input: AgentRuntimeInput,
-  payload: ReturnType<typeof buildSharedPayload>
-): RuntimeOpportunitySeed {
-  const serviceType = inferFallbackServiceType(input.goal);
-  const niche = payload.nicheSignals[0] || "online business growth";
-  const targetBuyer = payload.buyerSignals[0] || "small businesses that need done-for-you execution";
-  const styleDirection = payload.styleSignals[0] || "premium clarity with structured service presentation";
-  const seed: RuntimeOpportunitySeed = {
-    runtimeId: "",
-    outputKind: "service",
-    title: `Productized ${serviceType} service for ${niche}`,
-    channel: "fiverr",
-    niche,
-    productServiceType: `${serviceType} service`,
-    deliverableType: "service package",
-    targetBuyer,
-    styleDirection,
-    whySelected: `A ${serviceType} service creates a direct client offer for ${niche}.`,
-    whyItMaySell: "Offers clear client outcomes, layered packages, and fast delivery path.",
-    sourceSignals: Array.from(new Set([...payload.sourceSignalSummary, `Fallback service: ${serviceType}`])),
-    researchStrength: 84, novelty: 78, productionFeasibility: 85, buyerClarity: 82,
-    buildGoal: `Create a sellable Fiverr gig for ${serviceType} targeting ${targetBuyer}.`,
-    buildConstraints: "Include concrete packages, turnaround, deliverables, and workflow notes.",
-    formatHint: "service", productTypeHint: `${serviceType} service`,
-    designNotes: ["Use premium Fiverr-style layout.", "Make packages easy to compare."],
-    styleWhy: `Chosen from market signals: ${styleDirection}.`,
-    approvalNotes: ["Keep delivery manual until approved."],
-    approvalSummary: "Fallback service opportunity — keeps a service lane in the queue.",
-    buildSummary: "Draft a Fiverr gig with title, packages, process, and fulfillment notes."
-  };
-  seed.runtimeId = buildSeedId(seed);
-  return seed;
-}
-
-function buildFallbackProductOpportunity(
-  _input: AgentRuntimeInput,
-  payload: ReturnType<typeof buildSharedPayload>
-): RuntimeOpportunitySeed {
-  const niche = payload.nicheSignals[0] || "planning systems";
-  const targetBuyer = payload.buyerSignals[0] || "buyers who want a ready-to-use digital product";
-  const styleDirection = payload.styleSignals[0] || "premium clean layout with direct buyer clarity";
-  const channel = payload.preferredChannels.find((c) => c !== "fiverr") ?? "etsy";
-  const seed: RuntimeOpportunitySeed = {
-    runtimeId: "",
-    outputKind: "product",
-    title: `Digital product for ${niche}`,
-    channel,
-    niche,
-    productServiceType: "digital product",
-    deliverableType: channel === "content" ? "content product" : "digital download",
-    targetBuyer,
-    styleDirection,
-    whySelected: "Preserves a product lane in the queue.",
-    whyItMaySell: "Converts research into a repeatable asset.",
-    sourceSignals: Array.from(new Set([...payload.sourceSignalSummary, `Fallback product: ${channel}`])),
-    researchStrength: 83, novelty: 77, productionFeasibility: 86, buyerClarity: 81,
-    buildGoal: `Create a sellable ${channel} digital product for ${targetBuyer}.`,
-    buildConstraints: "Keep output clear, premium, and aligned with market signals.",
-    formatHint: "printable", productTypeHint: "digital product",
-    designNotes: ["Use strongest approved style cues.", "Avoid generic blocky layouts."],
-    styleWhy: `Chosen from style signals: ${styleDirection}.`,
-    approvalNotes: ["Keep publishing manual.", "Validate buyer clarity."],
-    approvalSummary: "Fallback product opportunity — keeps a product lane in the queue.",
-    buildSummary: "Create a listing-ready digital product with matching style rationale."
-  };
-  seed.runtimeId = buildSeedId(seed);
-  return seed;
-}
-
 function toRuntimeSeed(opp: OpportunityRouterOutput["opportunities"][number]): RuntimeOpportunitySeed {
   const seed: RuntimeOpportunitySeed = {
     runtimeId: "",
@@ -779,19 +699,6 @@ function mergeOpportunityPlans(
       title: bp?.draftTitleHint || seed.title
     } satisfies RuntimeOpportunitySeed;
   });
-}
-
-function ensureMixedOpportunityTypes(input: AgentRuntimeInput, payload: ReturnType<typeof buildSharedPayload>, opportunities: RuntimeOpportunitySeed[]) {
-  const next = [...opportunities];
-  const hasService = next.some((e) => e.outputKind === "service");
-  const hasProduct = next.some((e) => e.outputKind === "product");
-  if ((input.channel === "all" || input.channel === "fiverr") && !hasService) {
-    next.push(buildFallbackServiceOpportunity(input, payload));
-  }
-  if ((input.channel === "all" || input.channel !== "fiverr") && !hasProduct) {
-    next.push(buildFallbackProductOpportunity(input, payload));
-  }
-  return next;
 }
 
 function traceWithSummary(trace: AgentRunTrace, data: unknown, fallback: string): AgentRunTrace {
@@ -884,10 +791,13 @@ export async function runAutonomousAgentRuntime(
   );
 
   const seeds = (routerResult.data?.opportunities ?? []).map(toRuntimeSeed);
-  const mergedOpportunities = ensureMixedOpportunityTypes(
-    input,
-    payload,
-    mergeOpportunityPlans(seeds, validationResult.data, strategyResult.data, designResult.data, buildResult.data, reviewResult.data)
+  const mergedOpportunities = mergeOpportunityPlans(
+    seeds,
+    validationResult.data,
+    strategyResult.data,
+    designResult.data,
+    buildResult.data,
+    reviewResult.data
   );
 
   return {

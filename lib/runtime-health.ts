@@ -6,34 +6,34 @@ export const EXPECTED_AGENT_COUNT = 8;
 
 const DEPENDENCY_CHECKS = [
   {
-    envVar: "OPENAI_API_KEY",
-    label: "OpenAI",
+    envVar: "ANTHROPIC_API_KEY",
+    label: "Anthropic (Claude)",
     severity: "fatal" as const,
-    message: "Required for server-side reasoning and orchestration."
+    message: "Missing ANTHROPIC_API_KEY. Required to run any agent — every step uses Claude."
   },
   {
-    envVar: "FIVERR_API_KEY",
-    label: "Fiverr",
-    severity: "warning" as const,
-    message: "Missing Fiverr integration key. Live Fiverr validation and future outbound steps remain unavailable."
+    envVar: "OPENAI_API_KEY",
+    label: "OpenAI (image generation)",
+    severity: "fatal" as const,
+    message: "Missing OPENAI_API_KEY. Required for product image generation."
   },
   {
     envVar: "SHOPIFY_API_KEY",
     label: "Shopify",
-    severity: "warning" as const,
-    message: "Missing Shopify integration key. Live Shopify validation and future outbound steps remain unavailable."
+    severity: "fatal" as const,
+    message: "Missing SHOPIFY_API_KEY. Required to create draft products in your store."
   },
   {
-    envVar: "ETSY_API_KEY",
-    label: "Etsy",
+    envVar: "PRINTFUL_API_KEY",
+    label: "Printful",
     severity: "warning" as const,
-    message: "Missing Etsy integration key. Live Etsy validation and future outbound steps remain unavailable."
+    message: "Missing PRINTFUL_API_KEY. Print-on-demand fulfillment will be unavailable."
   },
   {
-    envVar: "PRINT_ON_DEMAND_API_KEY",
-    label: "Print on Demand",
+    envVar: "ZENDROP_API_KEY",
+    label: "Zendrop",
     severity: "warning" as const,
-    message: "Missing print-on-demand integration key. Live POD validation and future outbound steps remain unavailable."
+    message: "Missing ZENDROP_API_KEY. Dropshipping fulfillment will be unavailable."
   }
 ];
 
@@ -45,6 +45,13 @@ export function buildRuntimeStartupReport(configuredAgentCount: number): Runtime
 
   const errors = checks.filter((check) => !check.present && check.severity === "fatal").map((check) => check.message);
   const warnings = checks.filter((check) => !check.present && check.severity === "warning").map((check) => check.message);
+
+  // At least one fulfillment source must be configured for autonomous runs to produce anything sellable.
+  const printfulPresent = checks.find((c) => c.envVar === "PRINTFUL_API_KEY")?.present;
+  const zendropPresent = checks.find((c) => c.envVar === "ZENDROP_API_KEY")?.present;
+  if (!printfulPresent && !zendropPresent) {
+    errors.push("No fulfillment source configured. Set PRINTFUL_API_KEY or ZENDROP_API_KEY (or both) to run.");
+  }
 
   if (configuredAgentCount !== EXPECTED_AGENT_COUNT) {
     errors.push(

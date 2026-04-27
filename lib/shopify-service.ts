@@ -95,6 +95,62 @@ async function shopifyGraphQL<T>(query: string, variables: Record<string, unknow
   return parsed.data as T;
 }
 
+export type ShopifyDraftSummary = {
+  id: number;
+  title: string;
+  handle?: string;
+  productType?: string;
+  tags: string[];
+  imageUrl?: string;
+  createdAt: string;
+  adminUrl: string;
+  storeUrl?: string;
+};
+
+export async function listShopifyDrafts(limit = 50): Promise<ShopifyDraftSummary[]> {
+  type Resp = {
+    products: Array<{
+      id: number;
+      title: string;
+      handle?: string;
+      product_type?: string;
+      tags?: string;
+      created_at: string;
+      image?: { src?: string };
+    }>;
+  };
+  const data = await shopifyRest<Resp>(
+    `/products.json?status=draft&limit=${Math.max(1, Math.min(250, limit))}&fields=id,title,handle,product_type,tags,created_at,image`,
+    { method: "GET" }
+  );
+  return data.products
+    .map((p) => ({
+      id: p.id,
+      title: p.title,
+      handle: p.handle,
+      productType: p.product_type,
+      tags: (p.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean),
+      imageUrl: p.image?.src,
+      createdAt: p.created_at,
+      adminUrl: `https://${SHOPIFY_STORE_DOMAIN}/admin/products/${p.id}`,
+      storeUrl: p.handle ? `https://${SHOPIFY_STORE_DOMAIN}/products/${p.handle}` : undefined
+    }))
+    .filter((p) => p.tags.includes("autonomous-product"));
+}
+
+export async function publishShopifyProduct(productId: number) {
+  await shopifyRest(`/products/${productId}.json`, {
+    method: "PUT",
+    body: JSON.stringify({ product: { id: productId, status: "active" } })
+  });
+  return { id: productId, status: "active" as const };
+}
+
+export async function deleteShopifyProduct(productId: number) {
+  await shopifyRest(`/products/${productId}.json`, { method: "DELETE" });
+  return { id: productId, deleted: true };
+}
+
 export async function uploadBufferToShopifyFiles(filename: string, mimeType: string, buffer: Buffer) {
   const stagedUploadsCreate = `
     mutation stagedUploadsCreate($input: [StagedUploadInput!]!) {
