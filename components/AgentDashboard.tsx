@@ -5,14 +5,11 @@ import { AgentCard } from "@/components/AgentCard";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
 import { AutonomousQueueBoard } from "@/components/AutonomousQueueBoard";
 import { DatasetCatalogue } from "@/components/DatasetCatalogue";
-import { MissionArchive } from "@/components/MissionArchive";
 import { MissionControlPanel } from "@/components/MissionControlPanel";
 import { MorningReportView } from "@/components/MorningReportView";
 import { MissionStatusBoard } from "@/components/MissionStatusBoard";
 import { PublishQueueView } from "@/components/PublishQueueView";
-import { ReferenceBoard } from "@/components/ReferenceBoard";
 import { TestingHarness } from "@/components/TestingHarness";
-import { WorkflowStudio } from "@/components/WorkflowStudio";
 import type { AgentRunTrace } from "@/lib/agent-runtime";
 import type {
   AutomationStage,
@@ -24,12 +21,9 @@ import type {
 } from "@/lib/dataset-models";
 import { AUTONOMOUS_BUILD_THRESHOLD, createQueueJob, type OpportunityQueueJob } from "@/lib/autonomous-research";
 import {
-  ingestReferenceUrl,
   setResearchExamplesContext,
-  storeResearchExample,
   type CommerceChannel,
-  type ResearchExample,
-  type ResearchExampleStatus
+  type ResearchExample
 } from "@/lib/market-intelligence";
 import {
   recordProductTrainingFeedback,
@@ -63,13 +57,8 @@ type AgentDashboardProps = {
 type DashboardTab =
   | "overview"
   | "catalogue"
-  | "workflow"
   | "testing"
-  | "research"
-  | "validation"
-  | "design_listing"
   | "approval"
-  | "archive"
   | "agents"
   | "settings";
 
@@ -158,13 +147,8 @@ function buildNavigationTabs(): Array<{ id: DashboardTab; label: string }> {
   return [
     { id: "overview", label: "Overview" },
     { id: "catalogue", label: "Data Catalogue" },
-    { id: "workflow", label: "Workflow Studio" },
     { id: "testing", label: "Testing Harness" },
-    { id: "research", label: "Research" },
-    { id: "validation", label: "Validation" },
-    { id: "design_listing", label: "Design & Listing" },
     { id: "approval", label: "Approval" },
-    { id: "archive", label: "Archive" },
     { id: "agents", label: "Agents" },
     { id: "settings", label: "Settings" }
   ];
@@ -433,9 +417,6 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
     );
   }, [approvalQueue, buildQueue, currentMorningRecord, shortlistQueue]);
 
-  const runningCount = liveAgents.filter((agent) => agent.status === "Running" || agent.status === "Retrying").length;
-  const healthyCount = liveAgents.filter((agent) => agent.status !== "Error" && agent.status !== "Failed").length;
-  const totalQueueDepth = liveAgents.reduce((sum, agent) => sum + agent.queueDepth, 0);
   const queuedJobCount = researchQueue.length + shortlistQueue.length + buildQueue.length + approvalQueue.length;
   const currentMissionPublishStatus = currentMorningRecord
     ? runnerState.publishQueue.find((item) => item.missionId === currentMorningRecord.mission.id)?.status ?? null
@@ -785,45 +766,6 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
     window.localStorage.setItem("workflow-run-label", workflowRunLabel);
   }, [workflowRunLabel]);
 
-  const handleSelectTemplate = (templateId: string) => {
-    const template = getWorkflowTemplateById(templateId);
-    if (!template) {
-      return;
-    }
-
-    setSelectedWorkflowId(templateId);
-    setWorkflowStages(cloneWorkflowStages(template.stages));
-    setMissionGoal(template.goal);
-    setMissionConstraints(template.constraints);
-    setSelectedChannel(template.defaultChannel);
-    setWorkflowRunLabel(template.name);
-  };
-
-  const handleMoveStage = (index: number, direction: -1 | 1) => {
-    setWorkflowStages((current) => {
-      const targetIndex = index + direction;
-      if (targetIndex < 0 || targetIndex >= current.length) {
-        return current;
-      }
-
-      const next = [...current];
-      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
-      return next;
-    });
-  };
-
-  const handleRemoveStage = (index: number) => {
-    setWorkflowStages((current) => (current.length <= 1 ? current : current.filter((_, currentIndex) => currentIndex !== index)));
-  };
-
-  const handleAddStage = (stage: AutomationStage) => {
-    setWorkflowStages((current) => (current.includes(stage) ? current : [...current, stage]));
-  };
-
-  const handleResetStages = () => {
-    setWorkflowStages(cloneWorkflowStages(selectedWorkflow.stages));
-  };
-
   const handleToggleDataset = (datasetKey: string) => {
     setSelectedDatasetKeys((current) =>
       current.includes(datasetKey) ? current.filter((key) => key !== datasetKey) : [...current, datasetKey]
@@ -978,7 +920,7 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
         setSelectedReviewMissionId(null);
         setBuildQueue([]);
         setApprovalQueue([]);
-        setActiveTab("validation");
+        setActiveTab("approval");
       }
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : "Unknown runtime error.");
@@ -1111,33 +1053,6 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
           : job
       )
     );
-  };
-
-  const handleStoreResearchExample = (entry: Omit<ResearchExample, "id" | "createdAt">) => {
-    const ingested = entry.url ? ingestReferenceUrl(entry.url) : null;
-    const notes = [entry.notes, ...(ingested?.notes ?? [])].filter(Boolean).join(" ");
-    const sellabilityNotes = [
-      entry.sellabilityNotes,
-      ingested?.pricingBands.length ? `Observed pricing cues: ${ingested.pricingBands.join(", ")}.` : ""
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-    setResearchExamples((current) =>
-      storeResearchExample(current, {
-        ...entry,
-        channel: entry.channel === "all" ? ingested?.channel ?? entry.channel : entry.channel,
-        niche: entry.niche || ingested?.nicheTags[0] || "",
-        productFormat: entry.productFormat || ingested?.productFormatHint || "printable",
-        deliverableType: entry.deliverableType || ingested?.deliverableTypeHint || "digital download",
-        notes,
-        sellabilityNotes
-      })
-    );
-  };
-
-  const handleSetResearchStatus = (id: string, status: ResearchExampleStatus) => {
-    setResearchExamples((current) => current.map((example) => (example.id === id ? { ...example, status } : example)));
   };
 
   const handleExportTestResults = () => {
@@ -1306,20 +1221,6 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
     </>
   );
 
-  const renderWorkflowTab = () => (
-    <WorkflowStudio
-      templates={sortedTemplates}
-      selectedTemplateId={selectedWorkflowId}
-      workflowStages={workflowStages}
-      workflowUsage={workflowUsage}
-      onSelectTemplate={handleSelectTemplate}
-      onMoveStage={handleMoveStage}
-      onRemoveStage={handleRemoveStage}
-      onAddStage={handleAddStage}
-      onResetStages={handleResetStages}
-    />
-  );
-
   const renderTestingTab = () => (
     <TestingHarness
       isBusy={runtimeBusy}
@@ -1339,106 +1240,6 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
       }}
       onExport={handleExportTestResults}
     />
-  );
-
-  const renderResearchTab = () => (
-    <>
-      <ReferenceBoard
-        examples={researchExamples}
-        selectedChannel={selectedChannel}
-        onSaveExample={handleStoreResearchExample}
-        onSetStatus={handleSetResearchStatus}
-      />
-      <section className="archive-shell">
-        <div className="status-header">
-          <div>
-            <span className="eyebrow">Research Signals</span>
-            <h2 className="section-title">Dataset-informed research context and agent findings</h2>
-          </div>
-        </div>
-        <div className="report-section-grid">
-          <section className="detail-card">
-            <h3>Research Summary</h3>
-            <p className="detail-body">{researchSummary || "Run a workflow to populate the latest dataset-backed research summary."}</p>
-          </section>
-          <section className="detail-card">
-            <h3>Source Signals</h3>
-            <p className="detail-body">{sourceSignalSummary.length > 0 ? sourceSignalSummary.join(" | ") : "No source signals yet."}</p>
-          </section>
-        </div>
-      </section>
-      <AutonomousQueueBoard
-        eyebrow="Research Queue"
-        title="Research candidates still collecting evidence"
-        emptyCopy="Lower-confidence opportunities stay here until stronger evidence or feedback moves them forward."
-        items={researchQueue}
-      />
-    </>
-  );
-
-  const renderValidationTab = () => (
-    <>
-      <AutonomousQueueBoard
-        eyebrow="Validation Queue"
-        title="Promising opportunities waiting for stronger validation or build capacity"
-        emptyCopy="Validated opportunities will appear here when they are promising but not yet ready for build automation."
-        items={shortlistQueue}
-      />
-      <details className="archive-shell advanced-shell">
-        <summary className="archive-summary">
-          <div>
-            <span className="eyebrow">Advanced</span>
-            <h2 className="section-title">Validation Rejections</h2>
-          </div>
-        </summary>
-        <AutonomousQueueBoard
-          eyebrow="Diversity Guard"
-          title="Opportunities rejected or down-ranked as too similar"
-          emptyCopy="No validation rejections yet."
-          items={rejectedSimilar}
-        />
-      </details>
-    </>
-  );
-
-  const renderDesignListingTab = () => (
-    <>
-      <section className="archive-shell">
-        <div className="status-header">
-          <div>
-            <span className="eyebrow">Design & Listing</span>
-            <h2 className="section-title">Draft builds produced by the research, validate, design, and list workflow</h2>
-          </div>
-        </div>
-        <div className="report-section-grid">
-          <section className="detail-card">
-            <h3>Listing Readiness</h3>
-            <p className="detail-body">
-              The design and list stages emphasize high-demand Fiverr gigs, print-on-demand concepts, and listing-ready product drafts. Built
-              drafts stay blocked for approval until you confirm them.
-            </p>
-          </section>
-          <section className="detail-card">
-            <h3>Run Quality</h3>
-            <p className="detail-body">
-              {workflowMetrics
-                ? `${workflowMetrics.builtDraftCount} drafts built with ${workflowMetrics.averageConfidence}% average confidence and ${workflowMetrics.conversionReadiness}% conversion readiness.`
-                : "Run the workflow to measure how design and listing quality is trending."}
-            </p>
-          </section>
-        </div>
-      </section>
-      <AutonomousQueueBoard
-        eyebrow="Draft Build Queue"
-        title="High-confidence opportunities already built into drafts"
-        emptyCopy="Built drafts will appear here after the workflow promotes them past the confidence threshold."
-        items={buildQueue}
-        onSelectReviewMission={(missionId) => {
-          setSelectedReviewMissionId(missionId);
-          setActiveTab("approval");
-        }}
-      />
-    </>
   );
 
   const renderApprovalTab = () => (
@@ -1513,8 +1314,6 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
       </details>
     </>
   );
-
-  const renderArchiveTab = () => <MissionArchive archive={runnerState.archive} />;
 
   const renderAgentsTab = () => (
     <>
@@ -1668,13 +1467,8 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
   const tabContentMap: Record<DashboardTab, ReactNode> = {
     overview: renderOverviewTab(),
     catalogue: renderCatalogueTab(),
-    workflow: renderWorkflowTab(),
     testing: renderTestingTab(),
-    research: renderResearchTab(),
-    validation: renderValidationTab(),
-    design_listing: renderDesignListingTab(),
     approval: renderApprovalTab(),
-    archive: renderArchiveTab(),
     agents: renderAgentsTab(),
     settings: renderSettingsTab()
   };
