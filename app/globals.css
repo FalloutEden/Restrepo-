@@ -862,7 +862,7 @@ a {
 
 .agent-card-stage {
   position: relative;
-  height: 204px;
+  height: 230px;
   padding: 0.9rem;
 }
 
@@ -941,6 +941,8 @@ a {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .agent-room-shade {
@@ -948,32 +950,59 @@ a {
   inset: 0;
   z-index: 1;
   background:
-    linear-gradient(180deg, rgba(8, 10, 12, 0.04), rgba(8, 10, 12, 0.18) 65%, rgba(7, 7, 8, 0.26)),
-    radial-gradient(circle at center 22%, rgba(255, 255, 255, 0.06), transparent 42%);
+    linear-gradient(180deg, rgba(8, 10, 12, 0.04), rgba(8, 10, 12, 0.22) 70%, rgba(7, 7, 8, 0.38)),
+    radial-gradient(circle at center 22%, rgba(255, 255, 255, 0.05), transparent 44%);
 }
 
+/* CRT scanline overlay — gives the RE retro-monitor feel */
+.agent-room-scanlines {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.13) 2px,
+    rgba(0, 0, 0, 0.13) 4px
+  );
+  border-radius: inherit;
+}
+
+/* Floor glow — color shifts by agent status */
 .agent-room-floor-glow {
   position: absolute;
   left: 50%;
-  bottom: 7%;
+  bottom: 6%;
   z-index: 1;
-  width: 48%;
-  height: 14%;
+  width: 52%;
+  height: 16%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(227, 56, 65, 0.22), rgba(16, 6, 7, 0.04) 72%, transparent 76%);
+  background: radial-gradient(circle, var(--glow-color, rgba(227, 56, 65, 0.26)), rgba(16, 6, 7, 0.04) 72%, transparent 76%);
   transform: translateX(-50%);
-  filter: blur(8px);
+  filter: blur(9px);
+  will-change: transform;
 }
+
+/* Status-reactive glow colors */
+.agent-status-running    { --glow-color: rgba(104, 211, 145, 0.32); }
+.agent-status-retrying   { --glow-color: rgba(240, 179, 75, 0.34); }
+.agent-status-idle       { --glow-color: rgba(130, 120, 180, 0.24); }
+.agent-status-completed  { --glow-color: rgba(80, 180, 240, 0.28); }
+.agent-status-blocked    { --glow-color: rgba(100, 80, 80, 0.20); }
+.agent-status-failed     { --glow-color: rgba(200, 60, 60, 0.22); }
+.agent-status-error      { --glow-color: rgba(227, 56, 65, 0.30); }
 
 .agent-visual-sprite {
   left: 50%;
   bottom: 5%;
-  z-index: 2;
+  z-index: 3;
   width: auto;
   object-fit: contain;
-  transform: translateX(-50%) translateY(0) scale(1);
+  /* JS drives the transform — this is just the fallback starting position */
+  transform: translateX(-50%) translateY(0) scaleX(1);
   transform-origin: center bottom;
-  animation: sprite-idle 2.8s ease-in-out infinite;
   will-change: transform;
 }
 
@@ -985,14 +1014,6 @@ a {
 .agent-visual-sprite-modal {
   height: 98%;
   max-width: 74%;
-}
-
-.agent-visual-frames .agent-visual-sprite {
-  animation-duration: 2.2s;
-}
-
-.agent-visual-idle .agent-visual-sprite {
-  animation-duration: 3.1s;
 }
 
 .agent-chip {
@@ -1315,16 +1336,7 @@ a {
   color: #ff7b83;
 }
 
-@keyframes sprite-idle {
-  0%,
-  100% {
-    transform: translateX(-50%) translateY(0) scale(1);
-  }
-
-  50% {
-    transform: translateX(-50%) translateY(-6px) scale(1.03);
-  }
-}
+/* sprite-idle replaced by JS rAF patrol in AgentVisual.tsx */
 
 @media (max-width: 1080px) {
   .dashboard-grid {
@@ -1405,130 +1417,82 @@ a {
   }
 
   .agent-card-stage {
-    height: 188px;
+    height: 210px;
   }
 
   .agent-visual-modal {
     min-height: 300px;
   }
 }
-.memorial-shell {
+/* ── Memorial — compact pill ─────────────────────────────────────────────── */
+.memorial-bar {
   width: min(1180px, calc(100% - 2rem));
-  margin: 0 auto 4rem;
-  padding: 0 0 1rem;
-}
-
-.memorial-header-row {
+  margin: 0 auto 3rem;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.9rem;
 }
 
-.memorial-kicker {
-  margin: 0;
-  color: var(--text-dim);
-  font-size: 0.78rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.memorial-toggle {
-  min-height: 2.5rem;
-  padding: 0.6rem 0.95rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+.memorial-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 1rem 0.45rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 999px;
-  background: rgba(12, 14, 15, 0.72);
-  color: var(--text-soft);
+  background: rgba(10, 12, 13, 0.72);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
   cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease;
 }
 
-.memorial-toggle:hover,
-.memorial-toggle:focus-visible {
-  border-color: rgba(255, 255, 255, 0.16);
+.memorial-pill:hover,
+.memorial-pill:focus-visible {
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text-soft);
   outline: none;
 }
 
-.memorial-card {
-  display: grid;
-  grid-template-columns: minmax(180px, 240px) 1fr;
+.memorial-pill-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(200, 180, 160, 0.5);
+  flex-shrink: 0;
+}
+
+.memorial-pill-chevron {
+  font-size: 0.6rem;
+  opacity: 0.6;
+  margin-left: 0.2rem;
+}
+
+.memorial-expand {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 1.4rem;
-  padding: 1.2rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 28%),
-    rgba(10, 12, 13, 0.76);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+  gap: 0.6rem;
 }
 
-.memorial-image {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1 / 1;
+.memorial-photo {
+  width: 120px;
+  height: 120px;
   object-fit: cover;
-  border-radius: 18px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  filter: saturate(0.92) brightness(0.94);
+  filter: saturate(0.88) brightness(0.92);
 }
 
-.memorial-copy {
-  display: grid;
-  gap: 0.5rem;
-  justify-items: center;
-  text-align: center;
-}
-
-.memorial-title,
-.memorial-dates,
-.memorial-message {
+.memorial-msg {
   margin: 0;
-}
-
-.memorial-title {
-  color: var(--white);
-  font-size: clamp(1.2rem, 2vw, 1.8rem);
-  letter-spacing: 0.04em;
-}
-
-.memorial-dates {
-  color: var(--text-soft);
-  font-size: 0.98rem;
-  letter-spacing: 0.14em;
-}
-
-.memorial-message {
-  color: #e5ddd3;
-  font-size: 1.02rem;
-}
-
-@media (max-width: 720px) {
-  .memorial-shell {
-    width: min(100% - 1rem, 100%);
-  }
-
-  .memorial-header-row,
-  .memorial-card {
-    grid-template-columns: 1fr;
-  }
-
-  .memorial-header-row {
-    display: grid;
-  }
-
-  .memorial-toggle {
-    justify-self: start;
-  }
-
-  .memorial-card {
-    justify-items: center;
-  }
-
-  .memorial-image {
-    max-width: 240px;
-  }
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  font-style: italic;
 }
 
 .reference-board-grid {
@@ -1698,5 +1662,298 @@ a {
   .catalogue-toolbar,
   .catalogue-metrics-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* =====================================================
+   AGENT HERO — front-page command center
+   ===================================================== */
+
+.agent-hero {
+  margin-bottom: 2rem;
+  padding: 2rem 2rem 1.75rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(135deg, rgba(179, 19, 27, 0.12), transparent 40%),
+    linear-gradient(180deg, rgba(16, 18, 21, 0.98), rgba(8, 10, 12, 0.96));
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+  position: relative;
+}
+
+.agent-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(255, 255, 255, 0.008) 3px,
+      rgba(255, 255, 255, 0.008) 4px
+    );
+  border-radius: inherit;
+  z-index: 0;
+}
+
+.agent-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.agent-hero-header {
+  margin-bottom: 1.5rem;
+}
+
+.agent-hero-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.agent-hero-pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--red-bright);
+  box-shadow: 0 0 6px var(--red-bright);
+  animation: hero-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes hero-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.75); }
+}
+
+.agent-hero-system-status {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.agent-hero-system-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.agent-hero-system-label {
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* ---- Launcher ---- */
+
+.agent-hero-launcher {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+  padding: 1.25rem 1.4rem;
+  border: 1px solid rgba(179, 19, 27, 0.28);
+  border-radius: 22px;
+  background: rgba(10, 12, 14, 0.7);
+}
+
+.agent-hero-input-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.agent-hero-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.85rem 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-size: 0.95rem;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.agent-hero-input::placeholder {
+  color: var(--text-dim);
+}
+
+.agent-hero-input:focus {
+  outline: none;
+  border-color: rgba(227, 56, 65, 0.42);
+  box-shadow: 0 0 0 3px rgba(179, 19, 27, 0.14);
+}
+
+.agent-hero-input:disabled {
+  opacity: 0.5;
+}
+
+.agent-hero-run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1.5rem;
+  min-height: 3rem;
+  border: 1px solid rgba(227, 56, 65, 0.48);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(227, 56, 65, 0.34), rgba(130, 10, 17, 0.92)),
+    #6b0f15;
+  color: #fff4f4;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: box-shadow 160ms ease, opacity 160ms ease;
+}
+
+.agent-hero-run-btn:hover:not(:disabled) {
+  box-shadow: 0 0 20px rgba(227, 56, 65, 0.35);
+}
+
+.agent-hero-run-btn:disabled,
+.agent-hero-run-btn--active {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.agent-hero-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: hero-spin 0.75s linear infinite;
+}
+
+@keyframes hero-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- Progress ---- */
+
+.agent-hero-progress {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.agent-hero-progress-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.agent-hero-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #b3131b, #e33841, #ffb381);
+  box-shadow: 0 0 12px rgba(227, 56, 65, 0.5);
+  transition: width 400ms ease;
+}
+
+.agent-hero-progress-fill--error {
+  background: rgba(255, 80, 90, 0.6);
+  box-shadow: none;
+}
+
+.agent-hero-progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.agent-hero-status-line {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.agent-hero-run-id {
+  color: var(--text-dim);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.72rem;
+  flex-shrink: 0;
+}
+
+/* ---- Stage pills ---- */
+
+.agent-hero-stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.agent-hero-stage-pill {
+  padding: 0.28rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: border-color 200ms, color 200ms;
+}
+
+.stage-running {
+  border-color: rgba(104, 211, 145, 0.4);
+  color: #68d391;
+  animation: stage-blink 1s ease-in-out infinite;
+}
+
+@keyframes stage-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.stage-completed {
+  border-color: rgba(142, 197, 255, 0.35);
+  color: #8ec5ff;
+}
+
+.stage-failed {
+  border-color: rgba(255, 80, 90, 0.38);
+  color: #ff7b83;
+}
+
+/* ---- Agent grid ---- */
+
+.agent-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 1180px) {
+  .agent-hero-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .agent-hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-hero-input-row {
+    flex-direction: column;
+  }
+
+  .agent-hero-title-row {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

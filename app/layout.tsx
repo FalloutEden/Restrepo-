@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Agent Dashboard MVP",
-  description: "A lightweight dashboard for monitoring AI agents with mock data."
+  title: "Umbrella Commerce Division",
+  description: "8-agent autonomous commerce group — research, route, build, ship."
 };
 
 type RootLayoutProps = {

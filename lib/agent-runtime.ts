@@ -1,13 +1,10 @@
 import "server-only";
 
-import { openai } from "@/lib/openai";
-import { withOpenAIRetry } from "@/lib/openai-retry";
-import type { ResponseFormatJSONSchema } from "openai/resources/shared";
+import { claude, CLAUDE_MODEL } from "@/lib/claude";
+import { withClaudeRetry } from "@/lib/claude-retry";
 import type { CommerceChannel, ResearchExample } from "@/lib/market-intelligence";
 import { extractResearchSignals, type AutonomousResearchInput, type RuntimeOpportunitySeed } from "@/lib/autonomous-research";
 import type { ProductTrainingFeedback, StyleFeedbackMap } from "@/lib/style-intelligence";
-
-const OPENAI_AGENT_MODEL = "gpt-5-chat";
 
 export type AgentRoleId =
   | "trend_research"
@@ -232,18 +229,18 @@ export const AGENT_ROLE_DEFINITIONS: AgentRoleDefinition[] = [
   }
 ];
 
-const trendResearchSchema = {
+// ── Claude tool schemas ────────────────────────────────────────────────────
+
+const CHANNEL_ENUM = ["etsy", "fiverr", "print_on_demand", "content", "other"] as const;
+
+const trendResearchTool = {
   name: "trend_research_output",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
+  description: "Return trend research results in structured format",
+  input_schema: {
+    type: "object" as const,
     properties: {
       summary: { type: "string" },
-      prioritizedChannels: {
-        type: "array",
-        items: { type: "string", enum: ["etsy", "fiverr", "print_on_demand", "content", "other"] }
-      },
+      prioritizedChannels: { type: "array", items: { type: "string", enum: CHANNEL_ENUM } },
       sourceSignals: { type: "array", items: { type: "string" } },
       approvedPatterns: { type: "array", items: { type: "string" } },
       avoidedPatterns: { type: "array", items: { type: "string" } },
@@ -251,36 +248,25 @@ const trendResearchSchema = {
       buyerSignals: { type: "array", items: { type: "string" } },
       qualityRisks: { type: "array", items: { type: "string" } }
     },
-    required: [
-      "summary",
-      "prioritizedChannels",
-      "sourceSignals",
-      "approvedPatterns",
-      "avoidedPatterns",
-      "whitespaceOpportunities",
-      "buyerSignals",
-      "qualityRisks"
-    ]
+    required: ["summary", "prioritizedChannels", "sourceSignals", "approvedPatterns", "avoidedPatterns", "whitespaceOpportunities", "buyerSignals", "qualityRisks"]
   }
-} as const;
+};
 
-const opportunityRouterSchema = {
+const opportunityRouterTool = {
   name: "opportunity_router_output",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
+  description: "Return opportunity routing results in structured format",
+  input_schema: {
+    type: "object" as const,
     properties: {
       summary: { type: "string" },
       opportunities: {
         type: "array",
         items: {
           type: "object",
-          additionalProperties: false,
           properties: {
             title: { type: "string" },
             outputKind: { type: "string", enum: ["product", "service"] },
-            channel: { type: "string", enum: ["etsy", "fiverr", "print_on_demand", "content", "other"] },
+            channel: { type: "string", enum: CHANNEL_ENUM },
             niche: { type: "string" },
             productServiceType: { type: "string" },
             deliverableType: { type: "string" },
@@ -294,46 +280,28 @@ const opportunityRouterSchema = {
             productionFeasibility: { type: "integer", minimum: 1, maximum: 100 },
             buyerClarity: { type: "integer", minimum: 1, maximum: 100 }
           },
-          required: [
-            "title",
-            "outputKind",
-            "channel",
-            "niche",
-            "productServiceType",
-            "deliverableType",
-            "targetBuyer",
-            "styleDirection",
-            "whySelected",
-            "whyItMaySell",
-            "sourceSignals",
-            "researchStrength",
-            "novelty",
-            "productionFeasibility",
-            "buyerClarity"
-          ]
+          required: ["title", "outputKind", "channel", "niche", "productServiceType", "deliverableType", "targetBuyer", "styleDirection", "whySelected", "whyItMaySell", "sourceSignals", "researchStrength", "novelty", "productionFeasibility", "buyerClarity"]
         }
       }
     },
     required: ["summary", "opportunities"]
   }
-} as const;
+};
 
-const validationSchema = {
+const validationTool = {
   name: "validation_guard_output",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
+  description: "Return validation results in structured format",
+  input_schema: {
+    type: "object" as const,
     properties: {
       summary: { type: "string" },
       reviews: {
         type: "array",
         items: {
           type: "object",
-          additionalProperties: false,
           properties: {
             title: { type: "string" },
-            channel: { type: "string", enum: ["etsy", "fiverr", "print_on_demand", "content", "other"] },
+            channel: { type: "string", enum: CHANNEL_ENUM },
             niche: { type: "string" },
             researchStrength: { type: "integer", minimum: 1, maximum: 100 },
             novelty: { type: "integer", minimum: 1, maximum: 100 },
@@ -341,39 +309,28 @@ const validationSchema = {
             buyerClarity: { type: "integer", minimum: 1, maximum: 100 },
             validationNotes: { type: "array", items: { type: "string" } }
           },
-          required: [
-            "title",
-            "channel",
-            "niche",
-            "researchStrength",
-            "novelty",
-            "productionFeasibility",
-            "buyerClarity",
-            "validationNotes"
-          ]
+          required: ["title", "channel", "niche", "researchStrength", "novelty", "productionFeasibility", "buyerClarity", "validationNotes"]
         }
       }
     },
     required: ["summary", "reviews"]
   }
-} as const;
+};
 
-const productStrategySchema = {
+const productStrategyTool = {
   name: "product_strategy_output",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
+  description: "Return product strategy results in structured format",
+  input_schema: {
+    type: "object" as const,
     properties: {
       summary: { type: "string" },
       plans: {
         type: "array",
         items: {
           type: "object",
-          additionalProperties: false,
           properties: {
             title: { type: "string" },
-            channel: { type: "string", enum: ["etsy", "fiverr", "print_on_demand", "content", "other"] },
+            channel: { type: "string", enum: CHANNEL_ENUM },
             niche: { type: "string" },
             buildGoal: { type: "string" },
             buildConstraints: { type: "string" },
@@ -387,24 +344,22 @@ const productStrategySchema = {
     },
     required: ["summary", "plans"]
   }
-} as const;
+};
 
-const designDirectionSchema = {
+const designDirectionTool = {
   name: "design_direction_output",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
+  description: "Return design direction results in structured format",
+  input_schema: {
+    type: "object" as const,
     properties: {
       summary: { type: "string" },
       directions: {
         type: "array",
         items: {
           type: "object",
-          additionalProperties: false,
           properties: {
             title: { type: "string" },
-            channel: { type: "string", enum: ["etsy", "fiverr", "print_on_demand", "content", "other"] },
+            channel: { type: "string", enum: CHANNEL_ENUM },
             niche: { type: "string" },
             styleDirection: { type: "string" },
             styleWhy: { type: "string" },
@@ -416,24 +371,22 @@ const designDirectionSchema = {
     },
     required: ["summary", "directions"]
   }
-} as const;
+};
 
-const buildSchema = {
+const buildTool = {
   name: "build_output",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
+  description: "Return build results in structured format",
+  input_schema: {
+    type: "object" as const,
     properties: {
       summary: { type: "string" },
       builds: {
         type: "array",
         items: {
           type: "object",
-          additionalProperties: false,
           properties: {
             title: { type: "string" },
-            channel: { type: "string", enum: ["etsy", "fiverr", "print_on_demand", "content", "other"] },
+            channel: { type: "string", enum: CHANNEL_ENUM },
             niche: { type: "string" },
             buildSummary: { type: "string" },
             draftTitleHint: { type: "string" },
@@ -445,24 +398,22 @@ const buildSchema = {
     },
     required: ["summary", "builds"]
   }
-} as const;
+};
 
-const reviewSchema = {
+const reviewTool = {
   name: "review_output",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
+  description: "Return review results in structured format",
+  input_schema: {
+    type: "object" as const,
     properties: {
       summary: { type: "string" },
       reviews: {
         type: "array",
         items: {
           type: "object",
-          additionalProperties: false,
           properties: {
             title: { type: "string" },
-            channel: { type: "string", enum: ["etsy", "fiverr", "print_on_demand", "content", "other"] },
+            channel: { type: "string", enum: CHANNEL_ENUM },
             niche: { type: "string" },
             approvalSummary: { type: "string" },
             approvalNotes: { type: "array", items: { type: "string" } }
@@ -473,14 +424,13 @@ const reviewSchema = {
     },
     required: ["summary", "reviews"]
   }
-} as const;
+};
 
-const runtimeMonitorSchema = {
+const runtimeMonitorTool = {
   name: "runtime_monitor_output",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
+  description: "Return runtime monitor results in structured format",
+  input_schema: {
+    type: "object" as const,
     properties: {
       summary: { type: "string" },
       handoffNotes: { type: "array", items: { type: "string" } },
@@ -488,21 +438,23 @@ const runtimeMonitorSchema = {
     },
     required: ["summary", "handoffNotes", "watchouts"]
   }
-} as const;
+};
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function compactReferenceExamples(referenceExamples: ResearchExample[]) {
-  return referenceExamples.slice(0, 42).map((example) => ({
-    title: example.title,
-    channel: example.channel,
-    niche: example.niche,
-    deliverableType: example.deliverableType,
-    productFormat: example.productFormat,
-    status: example.status,
-    whatLooksGood: example.whatLooksGood,
-    sellabilityNotes: example.sellabilityNotes,
-    visualStyleNotes: example.visualStyleNotes,
-    styleComments: example.styleComments,
-    notes: example.notes
+  return referenceExamples.slice(0, 42).map((ex) => ({
+    title: ex.title,
+    channel: ex.channel,
+    niche: ex.niche,
+    deliverableType: ex.deliverableType,
+    productFormat: ex.productFormat,
+    status: ex.status,
+    whatLooksGood: ex.whatLooksGood,
+    sellabilityNotes: ex.sellabilityNotes,
+    visualStyleNotes: ex.visualStyleNotes,
+    styleComments: ex.styleComments,
+    notes: ex.notes
   }));
 }
 
@@ -537,9 +489,11 @@ function buildSeedId(seed: Pick<RuntimeOpportunitySeed, "title" | "channel" | "n
     .replace(/^-+|-+$/g, "");
 }
 
+// ── Core Claude agent executor ─────────────────────────────────────────────
+
 async function executeStructuredAgent<T>(
   role: AgentRoleDefinition,
-  schema: ResponseFormatJSONSchema["json_schema"],
+  tool: { name: string; description: string; input_schema: object },
   payload: Record<string, unknown>,
   options: AgentRuntimeOptions
 ): Promise<AgentExecutionResult<T>> {
@@ -551,30 +505,26 @@ async function executeStructuredAgent<T>(
     roleId: role.id,
     roleName: role.name,
     status: "running",
-    message: "Starting structured OpenAI call.",
+    message: `${role.name} is analyzing...`,
     batchIndex
   });
 
   try {
-    const completion = await withOpenAIRetry(
+    const response = await withClaudeRetry(
       async () => {
         attempts += 1;
-        return openai.chat.completions.create({
-          model: OPENAI_AGENT_MODEL,
+        return claude.messages.create({
+          model: CLAUDE_MODEL,
+          max_tokens: 8000,
+          system: role.systemPrompt,
+          tools: [tool as import("@anthropic-ai/sdk/resources").Tool],
+          tool_choice: { type: "tool", name: tool.name },
           messages: [
-            {
-              role: "system",
-              content: role.systemPrompt
-            },
             {
               role: "user",
               content: JSON.stringify(payload, null, 2)
             }
-          ],
-          response_format: {
-            type: "json_schema",
-            json_schema: schema
-          }
+          ]
         });
       },
       {
@@ -585,7 +535,7 @@ async function executeStructuredAgent<T>(
             roleId: role.id,
             roleName: role.name,
             status: "retrying",
-            message: `OpenAI rate limit encountered. Waiting before retry ${attempt}.`,
+            message: `Rate limit hit. Retrying attempt ${attempt}...`,
             batchIndex,
             attempt,
             retryDelayMs: delayMs
@@ -594,19 +544,19 @@ async function executeStructuredAgent<T>(
       }
     );
 
-    const content = completion.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error(`${role.name} returned an empty response.`);
+    const toolUseBlock = response.content.find((b) => b.type === "tool_use");
+    if (!toolUseBlock || toolUseBlock.type !== "tool_use") {
+      throw new Error(`${role.name} did not return a tool_use block.`);
     }
 
-    const data = JSON.parse(content) as T;
+    const data = toolUseBlock.input as T;
     const summary =
       typeof data === "object" &&
       data &&
       "summary" in (data as Record<string, unknown>) &&
       typeof (data as Record<string, unknown>).summary === "string"
         ? ((data as Record<string, unknown>).summary as string)
-        : `${role.name} completed successfully.`;
+        : `${role.name} completed.`;
 
     options.onStatus?.({
       roleId: role.id,
@@ -635,7 +585,7 @@ async function executeStructuredAgent<T>(
       }
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown agent execution failure.";
+    const message = error instanceof Error ? error.message : "Unknown agent failure.";
     options.onStatus?.({
       roleId: role.id,
       roleName: role.name,
@@ -652,7 +602,7 @@ async function executeStructuredAgent<T>(
         roleId: role.id,
         name: role.name,
         responsibility: role.responsibility,
-        summary: `${role.name} failed during batch execution.`,
+        summary: `${role.name} failed.`,
         itemCount: 0,
         status: "failed",
         attempts,
@@ -666,7 +616,6 @@ async function executeStructuredAgent<T>(
 
 function buildSharedPayload(input: AgentRuntimeInput) {
   const signals = extractResearchSignals(input);
-
   return {
     goal: input.goal,
     channelScope: input.channel,
@@ -687,41 +636,23 @@ function buildSharedPayload(input: AgentRuntimeInput) {
 }
 
 function inferFallbackServiceType(goal: string) {
-  const source = goal.toLowerCase();
-
-  if (/automation|zapier|make|workflow/.test(source)) {
-    return "automation setup";
-  }
-
-  if (/spreadsheet|dashboard|tracker|excel/.test(source)) {
-    return "spreadsheet creation";
-  }
-
-  if (/video|youtube|reel|short/.test(source)) {
-    return "video scripting";
-  }
-
-  if (/script/.test(source)) {
-    return "script writing";
-  }
-
-  if (/image|thumbnail|mockup/.test(source)) {
-    return "image generation";
-  }
-
-  if (/planner|worksheet|printable/.test(source)) {
-    return "planner design";
-  }
-
+  const src = goal.toLowerCase();
+  if (/automation|zapier|make|workflow/.test(src)) return "automation setup";
+  if (/spreadsheet|dashboard|tracker|excel/.test(src)) return "spreadsheet creation";
+  if (/video|youtube|reel|short/.test(src)) return "video scripting";
+  if (/script/.test(src)) return "script writing";
+  if (/planner|worksheet|printable/.test(src)) return "planner design";
   return "ai content generation";
 }
 
-function buildFallbackServiceOpportunity(input: AgentRuntimeInput, payload: ReturnType<typeof buildSharedPayload>): RuntimeOpportunitySeed {
+function buildFallbackServiceOpportunity(
+  input: AgentRuntimeInput,
+  payload: ReturnType<typeof buildSharedPayload>
+): RuntimeOpportunitySeed {
   const serviceType = inferFallbackServiceType(input.goal);
   const niche = payload.nicheSignals[0] || "online business growth";
   const targetBuyer = payload.buyerSignals[0] || "small businesses that need done-for-you execution";
   const styleDirection = payload.styleSignals[0] || "premium clarity with structured service presentation";
-
   const seed: RuntimeOpportunitySeed = {
     runtimeId: "",
     outputKind: "service",
@@ -732,34 +663,31 @@ function buildFallbackServiceOpportunity(input: AgentRuntimeInput, payload: Retu
     deliverableType: "service package",
     targetBuyer,
     styleDirection,
-    whySelected: `A ${serviceType} service creates a direct client offer for the ${niche} niche and preserves a service lane in the queue.`,
-    whyItMaySell: "It offers a clear client outcome, layered packages, and a fast path to delivery.",
-    sourceSignals: Array.from(new Set([...payload.sourceSignalSummary, `Fallback service type: ${serviceType}`])),
-    researchStrength: 84,
-    novelty: 78,
-    productionFeasibility: 85,
-    buyerClarity: 82,
+    whySelected: `A ${serviceType} service creates a direct client offer for ${niche}.`,
+    whyItMaySell: "Offers clear client outcomes, layered packages, and fast delivery path.",
+    sourceSignals: Array.from(new Set([...payload.sourceSignalSummary, `Fallback service: ${serviceType}`])),
+    researchStrength: 84, novelty: 78, productionFeasibility: 85, buyerClarity: 82,
     buildGoal: `Create a sellable Fiverr gig for ${serviceType} targeting ${targetBuyer}.`,
-    buildConstraints: "Include concrete packages, turnaround, deliverables, and reusable workflow notes.",
-    formatHint: "service",
-    productTypeHint: `${serviceType} service`,
-    designNotes: ["Use a premium Fiverr-style service layout.", "Make packages easy to compare."],
-    styleWhy: `Chosen from local market and style signals: ${styleDirection}.`,
-    approvalNotes: ["Keep delivery manual until approved.", "Validate package scope before outbound use."],
-    approvalSummary: "Fallback service opportunity added so the queue keeps a service lane.",
-    buildSummary: "Draft a Fiverr-style gig with title, packages, process, and fulfillment notes."
+    buildConstraints: "Include concrete packages, turnaround, deliverables, and workflow notes.",
+    formatHint: "service", productTypeHint: `${serviceType} service`,
+    designNotes: ["Use premium Fiverr-style layout.", "Make packages easy to compare."],
+    styleWhy: `Chosen from market signals: ${styleDirection}.`,
+    approvalNotes: ["Keep delivery manual until approved."],
+    approvalSummary: "Fallback service opportunity — keeps a service lane in the queue.",
+    buildSummary: "Draft a Fiverr gig with title, packages, process, and fulfillment notes."
   };
-
   seed.runtimeId = buildSeedId(seed);
   return seed;
 }
 
-function buildFallbackProductOpportunity(input: AgentRuntimeInput, payload: ReturnType<typeof buildSharedPayload>): RuntimeOpportunitySeed {
+function buildFallbackProductOpportunity(
+  _input: AgentRuntimeInput,
+  payload: ReturnType<typeof buildSharedPayload>
+): RuntimeOpportunitySeed {
   const niche = payload.nicheSignals[0] || "planning systems";
   const targetBuyer = payload.buyerSignals[0] || "buyers who want a ready-to-use digital product";
   const styleDirection = payload.styleSignals[0] || "premium clean layout with direct buyer clarity";
-  const channel = payload.preferredChannels.find((entry) => entry !== "fiverr") ?? "etsy";
-
+  const channel = payload.preferredChannels.find((c) => c !== "fiverr") ?? "etsy";
   const seed: RuntimeOpportunitySeed = {
     runtimeId: "",
     outputKind: "product",
@@ -770,48 +698,42 @@ function buildFallbackProductOpportunity(input: AgentRuntimeInput, payload: Retu
     deliverableType: channel === "content" ? "content product" : "digital download",
     targetBuyer,
     styleDirection,
-    whySelected: "This preserves a product lane in the queue so the run does not collapse into services only.",
-    whyItMaySell: "It converts the strongest saved research into a repeatable asset buyers can purchase without custom work.",
-    sourceSignals: Array.from(new Set([...payload.sourceSignalSummary, `Fallback product channel: ${channel}`])),
-    researchStrength: 83,
-    novelty: 77,
-    productionFeasibility: 86,
-    buyerClarity: 81,
+    whySelected: "Preserves a product lane in the queue.",
+    whyItMaySell: "Converts research into a repeatable asset.",
+    sourceSignals: Array.from(new Set([...payload.sourceSignalSummary, `Fallback product: ${channel}`])),
+    researchStrength: 83, novelty: 77, productionFeasibility: 86, buyerClarity: 81,
     buildGoal: `Create a sellable ${channel} digital product for ${targetBuyer}.`,
-    buildConstraints: "Keep the output clear, premium, and aligned with saved market signals.",
-    formatHint: "printable",
-    productTypeHint: "digital product",
-    designNotes: ["Use the strongest approved style cues from research.", "Avoid generic blocky layouts."],
-    styleWhy: `Chosen from local style and market signals: ${styleDirection}.`,
-    approvalNotes: ["Keep publishing manual.", "Validate buyer clarity before approval."],
-    approvalSummary: "Fallback product opportunity added so the queue keeps a product lane.",
-    buildSummary: "Create a listing-ready digital product output with matching style rationale."
+    buildConstraints: "Keep output clear, premium, and aligned with market signals.",
+    formatHint: "printable", productTypeHint: "digital product",
+    designNotes: ["Use strongest approved style cues.", "Avoid generic blocky layouts."],
+    styleWhy: `Chosen from style signals: ${styleDirection}.`,
+    approvalNotes: ["Keep publishing manual.", "Validate buyer clarity."],
+    approvalSummary: "Fallback product opportunity — keeps a product lane in the queue.",
+    buildSummary: "Create a listing-ready digital product with matching style rationale."
   };
-
   seed.runtimeId = buildSeedId(seed);
   return seed;
 }
 
-function toRuntimeSeed(opportunity: OpportunityRouterOutput["opportunities"][number]) {
+function toRuntimeSeed(opp: OpportunityRouterOutput["opportunities"][number]): RuntimeOpportunitySeed {
   const seed: RuntimeOpportunitySeed = {
     runtimeId: "",
-    outputKind: opportunity.outputKind,
-    title: opportunity.title,
-    channel: opportunity.channel,
-    niche: opportunity.niche,
-    productServiceType: opportunity.productServiceType,
-    deliverableType: opportunity.deliverableType,
-    targetBuyer: opportunity.targetBuyer,
-    styleDirection: opportunity.styleDirection,
-    whySelected: opportunity.whySelected,
-    whyItMaySell: opportunity.whyItMaySell,
-    sourceSignals: opportunity.sourceSignals,
-    researchStrength: opportunity.researchStrength,
-    novelty: opportunity.novelty,
-    productionFeasibility: opportunity.productionFeasibility,
-    buyerClarity: opportunity.buyerClarity
+    outputKind: opp.outputKind,
+    title: opp.title,
+    channel: opp.channel,
+    niche: opp.niche,
+    productServiceType: opp.productServiceType,
+    deliverableType: opp.deliverableType,
+    targetBuyer: opp.targetBuyer,
+    styleDirection: opp.styleDirection,
+    whySelected: opp.whySelected,
+    whyItMaySell: opp.whyItMaySell,
+    sourceSignals: opp.sourceSignals,
+    researchStrength: opp.researchStrength,
+    novelty: opp.novelty,
+    productionFeasibility: opp.productionFeasibility,
+    buyerClarity: opp.buyerClarity
   };
-
   seed.runtimeId = buildSeedId(seed);
   return seed;
 }
@@ -824,291 +746,168 @@ function mergeOpportunityPlans(
   build: BuildOutput | null,
   review: ReviewOutput | null
 ) {
-  const validationMap = new Map(
-    (validation?.reviews ?? []).map((entry) => [createMatchKey(entry.title, entry.channel, entry.niche), entry])
-  );
-  const strategyMap = new Map(
-    (strategy?.plans ?? []).map((entry) => [createMatchKey(entry.title, entry.channel, entry.niche), entry])
-  );
-  const designMap = new Map(
-    (design?.directions ?? []).map((entry) => [createMatchKey(entry.title, entry.channel, entry.niche), entry])
-  );
-  const buildMap = new Map(
-    (build?.builds ?? []).map((entry) => [createMatchKey(entry.title, entry.channel, entry.niche), entry])
-  );
-  const reviewMap = new Map(
-    (review?.reviews ?? []).map((entry) => [createMatchKey(entry.title, entry.channel, entry.niche), entry])
-  );
+  const validationMap = new Map((validation?.reviews ?? []).map((e) => [createMatchKey(e.title, e.channel, e.niche), e]));
+  const strategyMap = new Map((strategy?.plans ?? []).map((e) => [createMatchKey(e.title, e.channel, e.niche), e]));
+  const designMap = new Map((design?.directions ?? []).map((e) => [createMatchKey(e.title, e.channel, e.niche), e]));
+  const buildMap = new Map((build?.builds ?? []).map((e) => [createMatchKey(e.title, e.channel, e.niche), e]));
+  const reviewMap = new Map((review?.reviews ?? []).map((e) => [createMatchKey(e.title, e.channel, e.niche), e]));
 
   return seeds.map((seed) => {
     const key = createMatchKey(seed.title, seed.channel, seed.niche);
-    const validationPlan = validationMap.get(key);
-    const strategyPlan = strategyMap.get(key);
-    const designPlan = designMap.get(key);
-    const buildPlan = buildMap.get(key);
-    const reviewPlan = reviewMap.get(key);
-
+    const vp = validationMap.get(key);
+    const sp = strategyMap.get(key);
+    const dp = designMap.get(key);
+    const bp = buildMap.get(key);
+    const rp = reviewMap.get(key);
     return {
       ...seed,
-      researchStrength: validationPlan?.researchStrength ?? seed.researchStrength,
-      novelty: validationPlan?.novelty ?? seed.novelty,
-      productionFeasibility: validationPlan?.productionFeasibility ?? seed.productionFeasibility,
-      buyerClarity: validationPlan?.buyerClarity ?? seed.buyerClarity,
-      sourceSignals: Array.from(
-        new Set([
-          ...seed.sourceSignals,
-          ...(validationPlan?.validationNotes ?? []),
-          ...(strategyPlan?.feasibilityNotes ?? []),
-          ...(designPlan?.designNotes ?? []),
-          ...(reviewPlan?.approvalNotes ?? [])
-        ])
-      ),
-      buildGoal: strategyPlan?.buildGoal,
-      buildConstraints: strategyPlan?.buildConstraints,
-      formatHint: strategyPlan?.formatHint,
-      productTypeHint: strategyPlan?.productTypeHint,
-      styleDirection: designPlan?.styleDirection ?? seed.styleDirection,
-      designNotes: designPlan?.designNotes ?? [],
-      styleWhy: designPlan?.styleWhy,
-      approvalNotes: reviewPlan?.approvalNotes ?? [],
-      approvalSummary: reviewPlan?.approvalSummary,
-      buildSummary: buildPlan?.buildSummary,
-      title: buildPlan?.draftTitleHint || seed.title
+      researchStrength: vp?.researchStrength ?? seed.researchStrength,
+      novelty: vp?.novelty ?? seed.novelty,
+      productionFeasibility: vp?.productionFeasibility ?? seed.productionFeasibility,
+      buyerClarity: vp?.buyerClarity ?? seed.buyerClarity,
+      sourceSignals: Array.from(new Set([...seed.sourceSignals, ...(vp?.validationNotes ?? []), ...(sp?.feasibilityNotes ?? []), ...(dp?.designNotes ?? []), ...(rp?.approvalNotes ?? [])])),
+      buildGoal: sp?.buildGoal,
+      buildConstraints: sp?.buildConstraints,
+      formatHint: sp?.formatHint,
+      productTypeHint: sp?.productTypeHint,
+      styleDirection: dp?.styleDirection ?? seed.styleDirection,
+      designNotes: dp?.designNotes ?? [],
+      styleWhy: dp?.styleWhy,
+      approvalNotes: rp?.approvalNotes ?? [],
+      approvalSummary: rp?.approvalSummary,
+      buildSummary: bp?.buildSummary,
+      title: bp?.draftTitleHint || seed.title
     } satisfies RuntimeOpportunitySeed;
   });
 }
 
-function ensureMixedOpportunityTypes(
-  input: AgentRuntimeInput,
-  payload: ReturnType<typeof buildSharedPayload>,
-  opportunities: RuntimeOpportunitySeed[]
-) {
+function ensureMixedOpportunityTypes(input: AgentRuntimeInput, payload: ReturnType<typeof buildSharedPayload>, opportunities: RuntimeOpportunitySeed[]) {
   const next = [...opportunities];
-  const hasService = next.some((entry) => entry.outputKind === "service");
-  const hasProduct = next.some((entry) => entry.outputKind === "product");
-
+  const hasService = next.some((e) => e.outputKind === "service");
+  const hasProduct = next.some((e) => e.outputKind === "product");
   if ((input.channel === "all" || input.channel === "fiverr") && !hasService) {
     next.push(buildFallbackServiceOpportunity(input, payload));
   }
-
   if ((input.channel === "all" || input.channel !== "fiverr") && !hasProduct) {
     next.push(buildFallbackProductOpportunity(input, payload));
   }
-
   return next;
 }
 
-function createTraceFromOutput(trace: AgentRunTrace, output: unknown, fallbackSummary: string) {
-  if (!output || trace.status === "failed") {
-    return trace;
-  }
-
+function traceWithSummary(trace: AgentRunTrace, data: unknown, fallback: string): AgentRunTrace {
+  if (!data || trace.status === "failed") return trace;
   const summary =
-    typeof output === "object" &&
-    output &&
-    "summary" in (output as Record<string, unknown>) &&
-    typeof (output as Record<string, unknown>).summary === "string"
-      ? ((output as Record<string, unknown>).summary as string)
-      : fallbackSummary;
-
-  return {
-    ...trace,
-    summary
-  };
+    typeof data === "object" && data && "summary" in (data as Record<string, unknown>) && typeof (data as Record<string, unknown>).summary === "string"
+      ? ((data as Record<string, unknown>).summary as string)
+      : fallback;
+  return { ...trace, summary };
 }
+
+// ── Main runtime ───────────────────────────────────────────────────────────
 
 export async function runAutonomousAgentRuntime(
   input: AgentRuntimeInput,
   options: AgentRuntimeOptions = {}
 ): Promise<AgentRuntimeOutput> {
-  const enabledAgents = AGENT_ROLE_DEFINITIONS.filter((role) => !role.disabled);
-  const sharedPayload = buildSharedPayload(input);
+  const enabled = AGENT_ROLE_DEFINITIONS.filter((r) => !r.disabled);
+  const payload = buildSharedPayload(input);
 
-  const trendResearchRole = enabledAgents.find((role) => role.id === "trend_research")!;
-  const opportunityRouterRole = enabledAgents.find((role) => role.id === "opportunity_router")!;
-  const validationRole = enabledAgents.find((role) => role.id === "validation_guard")!;
-  const productStrategyRole = enabledAgents.find((role) => role.id === "product_strategy")!;
-  const designDirectionRole = enabledAgents.find((role) => role.id === "design_direction")!;
-  const buildRole = enabledAgents.find((role) => role.id === "build")!;
-  const reviewRole = enabledAgents.find((role) => role.id === "review_approval")!;
-  const runtimeMonitorRole = enabledAgents.find((role) => role.id === "runtime_monitor")!;
+  const role = (id: AgentRoleId) => enabled.find((r) => r.id === id)!;
 
-  const trendPromise = executeStructuredAgent<TrendResearchOutput>(trendResearchRole, trendResearchSchema, sharedPayload, options);
+  // Step 1: Trend Research
+  const trendResult = await executeStructuredAgent<TrendResearchOutput>(role("trend_research"), trendResearchTool, payload, options);
 
-  const routerPromise = trendPromise.then((trendResult) =>
-    executeStructuredAgent<OpportunityRouterOutput>(
-      opportunityRouterRole,
-      opportunityRouterSchema,
-      {
-        ...sharedPayload,
-        researchSummary: trendResult.data?.summary ?? "Use the supplied evidence directly if the trend summary is unavailable.",
-        prioritizedChannels: trendResult.data?.prioritizedChannels ?? sharedPayload.preferredChannels,
-        whitespaceOpportunities: trendResult.data?.whitespaceOpportunities ?? [],
-        buyerSignals: trendResult.data?.buyerSignals ?? sharedPayload.buyerSignals
-      },
-      options
-    )
+  // Step 2: Opportunity Router (waits for trend)
+  const routerResult = await executeStructuredAgent<OpportunityRouterOutput>(
+    role("opportunity_router"),
+    opportunityRouterTool,
+    {
+      ...payload,
+      researchSummary: trendResult.data?.summary ?? "Use supplied evidence directly.",
+      prioritizedChannels: trendResult.data?.prioritizedChannels ?? payload.preferredChannels,
+      whitespaceOpportunities: trendResult.data?.whitespaceOpportunities ?? [],
+      buyerSignals: trendResult.data?.buyerSignals ?? payload.buyerSignals
+    },
+    options
   );
 
-  const validationPromise = Promise.all([trendPromise, routerPromise]).then(([trendResult, routerResult]) =>
+  // Steps 3-5: Validation, Strategy, Design in parallel
+  const [validationResult, strategyResult, designResult] = await Promise.all([
     executeStructuredAgent<ValidationOutput>(
-      validationRole,
-      validationSchema,
-      {
-        ...sharedPayload,
-        researchSummary: trendResult.data?.summary ?? "",
-        opportunities: routerResult.data?.opportunities ?? []
-      },
+      role("validation_guard"), validationTool,
+      { ...payload, researchSummary: trendResult.data?.summary ?? "", opportunities: routerResult.data?.opportunities ?? [] },
       options
-    )
-  );
-
-  const strategyPromise = Promise.all([trendPromise, routerPromise]).then(([trendResult, routerResult]) =>
+    ),
     executeStructuredAgent<ProductStrategyOutput>(
-      productStrategyRole,
-      productStrategySchema,
-      {
-        ...sharedPayload,
-        researchSummary: trendResult.data?.summary ?? "",
-        opportunities: routerResult.data?.opportunities ?? []
-      },
+      role("product_strategy"), productStrategyTool,
+      { ...payload, researchSummary: trendResult.data?.summary ?? "", opportunities: routerResult.data?.opportunities ?? [] },
       options
-    )
-  );
-
-  const designPromise = Promise.all([trendPromise, routerPromise]).then(([trendResult, routerResult]) =>
+    ),
     executeStructuredAgent<DesignDirectionOutput>(
-      designDirectionRole,
-      designDirectionSchema,
-      {
-        ...sharedPayload,
-        researchSummary: trendResult.data?.summary ?? "",
-        opportunities: routerResult.data?.opportunities ?? []
-      },
+      role("design_direction"), designDirectionTool,
+      { ...payload, researchSummary: trendResult.data?.summary ?? "", opportunities: routerResult.data?.opportunities ?? [] },
       options
     )
-  );
-
-  const buildPromise = Promise.all([trendPromise, routerPromise, strategyPromise]).then(([trendResult, routerResult, strategyResult]) =>
-    executeStructuredAgent<BuildOutput>(
-      buildRole,
-      buildSchema,
-      {
-        ...sharedPayload,
-        researchSummary: trendResult.data?.summary ?? "",
-        opportunities: routerResult.data?.opportunities ?? [],
-        plans: strategyResult.data?.plans ?? []
-      },
-      options
-    )
-  );
-
-  const reviewPromise = Promise.all([routerPromise, strategyPromise]).then(([routerResult, strategyResult]) =>
-    executeStructuredAgent<ReviewOutput>(
-      reviewRole,
-      reviewSchema,
-      {
-        ...sharedPayload,
-        opportunities: routerResult.data?.opportunities ?? [],
-        plans: strategyResult.data?.plans ?? []
-      },
-      options
-    )
-  );
-
-  const monitorPromise = Promise.all([
-    trendPromise,
-    routerPromise,
-    validationPromise,
-    strategyPromise,
-    designPromise,
-    buildPromise,
-    reviewPromise
-  ]).then(([trendResult, routerResult, validationResult, strategyResult, designResult, buildResult, reviewResult]) =>
-    executeStructuredAgent<RuntimeMonitorOutput>(
-      runtimeMonitorRole,
-      runtimeMonitorSchema,
-      {
-        ...sharedPayload,
-        researchSummary: trendResult.data?.summary ?? "",
-        routerSummary: routerResult.data?.summary ?? "",
-        validationSummary: validationResult.data?.summary ?? "",
-        strategySummary: strategyResult.data?.summary ?? "",
-        designSummary: designResult.data?.summary ?? "",
-        buildSummary: buildResult.data?.summary ?? "",
-        reviewSummary: reviewResult.data?.summary ?? "",
-        agentStatuses: [
-          trendResult.trace,
-          routerResult.trace,
-          validationResult.trace,
-          strategyResult.trace,
-          designResult.trace,
-          buildResult.trace,
-          reviewResult.trace
-        ].map((trace) => ({
-          roleId: trace.roleId,
-          status: trace.status,
-          error: trace.error ?? ""
-        }))
-      },
-      options
-    )
-  );
-
-  const [
-    trendResult,
-    routerResult,
-    validationResult,
-    strategyResult,
-    designResult,
-    buildResult,
-    reviewResult,
-    monitorResult
-  ] = await Promise.all([
-    trendPromise,
-    routerPromise,
-    validationPromise,
-    strategyPromise,
-    designPromise,
-    buildPromise,
-    reviewPromise,
-    monitorPromise
   ]);
+
+  // Step 6: Build (waits for strategy)
+  const buildResult = await executeStructuredAgent<BuildOutput>(
+    role("build"), buildTool,
+    { ...payload, researchSummary: trendResult.data?.summary ?? "", opportunities: routerResult.data?.opportunities ?? [], plans: strategyResult.data?.plans ?? [] },
+    options
+  );
+
+  // Step 7: Review (waits for strategy + build)
+  const reviewResult = await executeStructuredAgent<ReviewOutput>(
+    role("review_approval"), reviewTool,
+    { ...payload, opportunities: routerResult.data?.opportunities ?? [], plans: strategyResult.data?.plans ?? [] },
+    options
+  );
+
+  // Step 8: Runtime Monitor
+  const monitorResult = await executeStructuredAgent<RuntimeMonitorOutput>(
+    role("runtime_monitor"), runtimeMonitorTool,
+    {
+      ...payload,
+      researchSummary: trendResult.data?.summary ?? "",
+      routerSummary: routerResult.data?.summary ?? "",
+      validationSummary: validationResult.data?.summary ?? "",
+      strategySummary: strategyResult.data?.summary ?? "",
+      designSummary: designResult.data?.summary ?? "",
+      buildSummary: buildResult.data?.summary ?? "",
+      reviewSummary: reviewResult.data?.summary ?? "",
+      agentStatuses: [trendResult, routerResult, validationResult, strategyResult, designResult, buildResult, reviewResult].map((r) => ({
+        roleId: r.trace.roleId, status: r.trace.status, error: r.trace.error ?? ""
+      }))
+    },
+    options
+  );
 
   const seeds = (routerResult.data?.opportunities ?? []).map(toRuntimeSeed);
   const mergedOpportunities = ensureMixedOpportunityTypes(
     input,
-    sharedPayload,
-    mergeOpportunityPlans(
-      seeds,
-      validationResult.data,
-      strategyResult.data,
-      designResult.data,
-      buildResult.data,
-      reviewResult.data
-    )
+    payload,
+    mergeOpportunityPlans(seeds, validationResult.data, strategyResult.data, designResult.data, buildResult.data, reviewResult.data)
   );
 
   return {
     researchSummary: [trendResult.data?.summary, monitorResult.data?.summary].filter(Boolean).join(" "),
-    sourceSignalSummary: Array.from(
-      new Set([
-        ...sharedPayload.sourceSignalSummary,
-        ...(trendResult.data?.sourceSignals ?? []),
-        ...(monitorResult.data?.handoffNotes ?? []),
-        ...(monitorResult.data?.watchouts ?? [])
-      ])
-    ),
+    sourceSignalSummary: Array.from(new Set([
+      ...payload.sourceSignalSummary,
+      ...(trendResult.data?.sourceSignals ?? []),
+      ...(monitorResult.data?.handoffNotes ?? []),
+      ...(monitorResult.data?.watchouts ?? [])
+    ])),
     opportunities: mergedOpportunities,
     agentRuns: [
-      createTraceFromOutput(trendResult.trace, trendResult.data, "Trend research completed."),
-      createTraceFromOutput(routerResult.trace, routerResult.data, "Opportunity routing completed."),
-      createTraceFromOutput(validationResult.trace, validationResult.data, "Validation completed."),
-      createTraceFromOutput(strategyResult.trace, strategyResult.data, "Product strategy completed."),
-      createTraceFromOutput(designResult.trace, designResult.data, "Design direction completed."),
-      createTraceFromOutput(buildResult.trace, buildResult.data, "Build planning completed."),
-      createTraceFromOutput(reviewResult.trace, reviewResult.data, "Approval review completed."),
-      createTraceFromOutput(monitorResult.trace, monitorResult.data, "Runtime monitoring completed.")
+      traceWithSummary(trendResult.trace, trendResult.data, "Trend research completed."),
+      traceWithSummary(routerResult.trace, routerResult.data, "Opportunity routing completed."),
+      traceWithSummary(validationResult.trace, validationResult.data, "Validation completed."),
+      traceWithSummary(strategyResult.trace, strategyResult.data, "Product strategy completed."),
+      traceWithSummary(designResult.trace, designResult.data, "Design direction completed."),
+      traceWithSummary(buildResult.trace, buildResult.data, "Build planning completed."),
+      traceWithSummary(reviewResult.trace, reviewResult.data, "Approval review completed."),
+      traceWithSummary(monitorResult.trace, monitorResult.data, "Runtime monitoring completed.")
     ]
   };
 }

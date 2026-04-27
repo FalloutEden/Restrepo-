@@ -1,46 +1,38 @@
 import { NextResponse } from "next/server";
-import { openai } from "@/lib/openai";
+import { openai, IMAGE_MODEL } from "@/lib/openai";
 
 export const runtime = "nodejs";
 
+type GenerateImageRequest = {
+  prompt: string;
+  size?: "1024x1024" | "1024x1792" | "1792x1024";
+};
+
 export async function POST(request: Request) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: "Missing OpenAI API key" }, { status: 500 });
-    }
-
-    const body = (await request.json()) as { prompt?: string; size?: "1024x1024" | "1024x1536" | "1536x1024" };
+    const body = (await request.json()) as GenerateImageRequest;
     const prompt = body.prompt?.trim();
-    const size = body.size ?? "1024x1024";
 
     if (!prompt) {
-      return NextResponse.json({ error: "Missing image prompt" }, { status: 400 });
+      return NextResponse.json({ error: "prompt is required" }, { status: 400 });
     }
 
     const response = await openai.images.generate({
-      model: "gpt-image-1",
+      model: IMAGE_MODEL,
       prompt,
-      size
+      n: 1,
+      size: body.size ?? "1024x1024",
+      response_format: "b64_json"
     });
 
-    const imageBase64 = response.data?.[0]?.b64_json;
-
-    if (!imageBase64) {
-      return NextResponse.json({ error: "Image generation failed" }, { status: 500 });
+    const b64 = response.data?.[0]?.b64_json;
+    if (!b64) {
+      return NextResponse.json({ error: "No image returned from OpenAI." }, { status: 502 });
     }
 
-    return NextResponse.json({
-      imageBase64,
-      imageDataUrl: `data:image/png;base64,${imageBase64}`
-    });
+    return NextResponse.json({ imageBase64: b64 });
   } catch (error) {
-    console.error("GENERATE IMAGE ERROR:", error);
-
-    return Response.json(
-      {
-        error: error instanceof Error ? error.message : "Unknown image generation error"
-      },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Image generation failed.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

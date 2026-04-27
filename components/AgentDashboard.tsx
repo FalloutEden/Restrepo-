@@ -327,7 +327,7 @@ function buildExportPayload(payload: object, fileName: string) {
 }
 
 export function AgentDashboard({ agents }: AgentDashboardProps) {
-  const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  const [activeTab, setActiveTab] = useState<DashboardTab>("agents");
   const [selectedWorkflowId, setSelectedWorkflowId] = useState(DEFAULT_TEMPLATE_ID);
   const [workflowStages, setWorkflowStages] = useState<AutomationStage[]>(() =>
     cloneWorkflowStages(getWorkflowTemplateById(DEFAULT_TEMPLATE_ID)?.stages ?? ["research", "validate", "design", "list"])
@@ -1581,7 +1581,7 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
           <p className="detail-body">Channel scope: {selectedChannel}</p>
           <p className="detail-body">Execution mode: {executionMode}</p>
           <p className="detail-body">Outbound approval: {outboundApproved ? "Granted" : "Not granted"}</p>
-          <p className="detail-body">Agent runtime: server-side OpenAI API</p>
+          <p className="detail-body">Agent runtime: server-side Claude API (Anthropic)</p>
           <p className="detail-body">Automatic publishing: disabled</p>
           <p className="detail-body">Build threshold: {confidenceThreshold}% confidence</p>
           <p className="detail-body">Selected datasets: {selectedDatasetKeys.length}</p>
@@ -1680,38 +1680,7 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
   };
 
   return (
-    <main className="page-shell">
-      <section className="hero-panel">
-        <span className="eyebrow">Autonomous Revenue Control Room</span>
-        <h1 className="hero-title">Connect real datasets to real agents and run the automation chain from research to listing.</h1>
-        <p className="hero-copy">
-          The dashboard now treats datasets as first-class workflow inputs. Choose the catalogues you want, launch a template or custom chain,
-          test it with logs and metrics, and route the strongest Fiverr gigs, print-on-demand designs, and product listings into approval-ready
-          drafts.
-        </p>
-
-        <div className="hero-stats dashboard-stats-wide">
-          <div className="stat-card">
-            <span className="stat-label">Active Agents</span>
-            <span className="stat-value">{runningCount}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">Healthy Agents</span>
-            <span className="stat-value">
-              {healthyCount}/{liveAgents.length}
-            </span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">Queued Jobs</span>
-            <span className="stat-value">{queuedJobCount}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">Queued Tasks</span>
-            <span className="stat-value">{totalQueueDepth}</span>
-          </div>
-        </div>
-      </section>
-
+    <div>
       <nav className="tab-nav" aria-label="Dashboard sections">
         {buildNavigationTabs().map((tab) => (
           <button
@@ -1728,6 +1697,6 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
       {tabContentMap[activeTab]}
 
       {selectedAgent ? <AgentDetailModal agent={selectedAgent} onClose={() => setSelectedAgentId(null)} /> : null}
-    </main>
+    </div>
   );
 }

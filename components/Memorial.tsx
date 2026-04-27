@@ -3,32 +3,27 @@
 import { useState } from "react";
 
 export function Memorial() {
-  const [isVisible, setIsVisible] = useState(true);
+  const [open, setOpen] = useState(false);
 
   return (
-    <section className="memorial-shell" aria-label="Memorial for Elsa">
-      <div className="memorial-header-row">
-        <p className="memorial-kicker">Memorial</p>
-        <button
-          type="button"
-          className="memorial-toggle"
-          onClick={() => setIsVisible((current) => !current)}
-          aria-expanded={isVisible}
-        >
-          {isVisible ? "Hide" : "Show"}
-        </button>
-      </div>
+    <div className="memorial-bar">
+      <button
+        type="button"
+        className="memorial-pill"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="memorial-pill-dot" aria-hidden="true" />
+        In memory of Elsa &nbsp;·&nbsp; 08/2014 – 09/2025
+        <span className="memorial-pill-chevron" aria-hidden="true">{open ? "▲" : "▼"}</span>
+      </button>
 
-      {isVisible ? (
-        <div className="memorial-card">
-          <img className="memorial-image" src="/images/elsa.jpg" alt="Elsa" />
-          <div className="memorial-copy">
-            <p className="memorial-title">In loving memory of Elsa</p>
-            <p className="memorial-dates">08/2014 - 09/2025</p>
-            <p className="memorial-message">Keeping my promise.</p>
-          </div>
+      {open && (
+        <div className="memorial-expand">
+          <img className="memorial-photo" src="/images/elsa.jpg" alt="Elsa" />
+          <p className="memorial-msg">Keeping my promise.</p>
         </div>
-      ) : null}
-    </section>
+      )}
+    </div>
   );
 }
