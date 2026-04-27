@@ -78,6 +78,7 @@ export function AgentHero() {
   const [activeStages, setActiveStages] = useState<Record<string, string>>({});
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+  const [events, setEvents] = useState<PipelineEvent[]>([]);
   const esRef = useRef<EventSource | null>(null);
 
   // Clean up EventSource on unmount
@@ -98,6 +99,13 @@ export function AgentHero() {
   const handleSSEPayload = useCallback(
     (payload: SSEPayload) => {
       let lastError: string | null = null;
+      // Accumulate every event for the log panel (cap to last 200 to bound memory)
+      if (payload.events.length > 0) {
+        setEvents((prev) => {
+          const next = [...prev, ...payload.events];
+          return next.length > 200 ? next.slice(next.length - 200) : next;
+        });
+      }
       for (const evt of payload.events) {
         if (evt.type === "agent" && evt.roleId) {
           const displayStatus = EXEC_TO_STATUS[evt.status] ?? "Running";
@@ -143,6 +151,7 @@ export function AgentHero() {
     setStatusLine("Initializing Umbrella command pipeline...");
     setActiveStages({});
     setRunError(null);
+    setEvents([]);
 
     // Reset all agents to Idle (clean state, no demo defaults bleeding through)
     setAgents(
@@ -315,6 +324,40 @@ export function AgentHero() {
               );
             })}
           </div>
+        )}
+
+        {/* Event log — collapsible, shows real-time pipeline events */}
+        {events.length > 0 && (
+          <details className="agent-hero-log" open={runState === "running" || runState === "starting"}>
+            <summary className="agent-hero-log-summary">
+              <span className="agent-hero-log-label">Pipeline log</span>
+              <span className="agent-hero-log-count">{events.length} event{events.length === 1 ? "" : "s"}</span>
+            </summary>
+            <div className="agent-hero-log-list">
+              {events.slice().reverse().map((evt) => {
+                const time = new Date(evt.timestamp).toLocaleTimeString([], { hour12: false });
+                const cls =
+                  evt.status === "failed" || evt.error
+                    ? "log-row-failed"
+                    : evt.status === "completed"
+                      ? "log-row-completed"
+                      : evt.status === "running" || evt.status === "retrying"
+                        ? "log-row-running"
+                        : "";
+                return (
+                  <div key={evt.index} className={`agent-hero-log-row ${cls}`}>
+                    <span className="agent-hero-log-time">{time}</span>
+                    <span className="agent-hero-log-type">{evt.roleName ?? evt.type}</span>
+                    <span className="agent-hero-log-msg">
+                      {evt.message}
+                      {typeof evt.itemCount === "number" && evt.itemCount > 0 ? ` · ${evt.itemCount} item${evt.itemCount === 1 ? "" : "s"}` : ""}
+                      {evt.error ? ` — ${evt.error}` : ""}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </details>
         )}
       </div>
 

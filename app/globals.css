@@ -1903,6 +1903,112 @@ a {
   flex-shrink: 0;
 }
 
+/* ---- Pipeline event log ---- */
+
+.agent-hero-log {
+  margin-top: 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(15, 12, 18, 0.55);
+  overflow: hidden;
+}
+
+.agent-hero-log-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.85rem;
+  cursor: pointer;
+  list-style: none;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.agent-hero-log-summary::-webkit-details-marker {
+  display: none;
+}
+
+.agent-hero-log-summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 0.45rem;
+  transition: transform 0.15s ease;
+  color: var(--text-dim);
+}
+
+.agent-hero-log[open] .agent-hero-log-summary::before {
+  transform: rotate(90deg);
+}
+
+.agent-hero-log-label {
+  flex: 1;
+}
+
+.agent-hero-log-count {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.68rem;
+}
+
+.agent-hero-log-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 18rem;
+  overflow-y: auto;
+  padding: 0.4rem 0.6rem 0.6rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.agent-hero-log-row {
+  display: grid;
+  grid-template-columns: 4.6rem 8rem 1fr;
+  gap: 0.6rem;
+  padding: 0.3rem 0.25rem;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.agent-hero-log-row:last-child {
+  border-bottom: none;
+}
+
+.agent-hero-log-time {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.agent-hero-log-type {
+  color: rgba(178, 200, 230, 0.88);
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-hero-log-msg {
+  color: rgba(228, 228, 235, 0.82);
+}
+
+.agent-hero-log-row.log-row-completed .agent-hero-log-type {
+  color: rgb(110, 220, 150);
+}
+
+.agent-hero-log-row.log-row-running .agent-hero-log-type {
+  color: rgb(255, 215, 110);
+}
+
+.agent-hero-log-row.log-row-failed .agent-hero-log-type {
+  color: rgb(248, 113, 113);
+}
+
+.agent-hero-log-row.log-row-failed .agent-hero-log-msg {
+  color: rgb(254, 202, 202);
+}
+
 /* ---- Failure banner ---- */
 
 .agent-hero-failure-banner {
