@@ -10,5 +10,7 @@ export const claude = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 });
 
-// Model to use for all agent calls
-export const CLAUDE_MODEL = "claude-sonnet-4-6";
+// Model to use for all agent calls. Override via CLAUDE_MODEL env var if your
+// account doesn't have access to the default (Anthropic returns 400 invalid model
+// id when an alias isn't enabled for the account/plan).
+export const CLAUDE_MODEL = process.env.CLAUDE_MODEL?.trim() || "claude-sonnet-4-5";
