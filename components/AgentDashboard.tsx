@@ -5,11 +5,9 @@ import { AgentCard } from "@/components/AgentCard";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
 import { AutonomousQueueBoard } from "@/components/AutonomousQueueBoard";
 import { DatasetCatalogue } from "@/components/DatasetCatalogue";
-import { MissionControlPanel } from "@/components/MissionControlPanel";
 import { MorningReportView } from "@/components/MorningReportView";
 import { MissionStatusBoard } from "@/components/MissionStatusBoard";
 import { PublishQueueView } from "@/components/PublishQueueView";
-import { TestingHarness } from "@/components/TestingHarness";
 import type { AgentRunTrace } from "@/lib/agent-runtime";
 import type {
   AutomationStage,
@@ -57,7 +55,6 @@ type AgentDashboardProps = {
 type DashboardTab =
   | "overview"
   | "catalogue"
-  | "testing"
   | "approval"
   | "agents"
   | "settings";
@@ -147,7 +144,6 @@ function buildNavigationTabs(): Array<{ id: DashboardTab; label: string }> {
   return [
     { id: "overview", label: "Overview" },
     { id: "catalogue", label: "Data Catalogue" },
-    { id: "testing", label: "Testing Harness" },
     { id: "approval", label: "Approval" },
     { id: "agents", label: "Agents" },
     { id: "settings", label: "Settings" }
@@ -782,161 +778,10 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
     setSelectedDatasetKeys([]);
   };
 
-  const handleRunMission = async () => {
-    if (startupCheck?.errors.length) {
-      setRuntimeError(startupCheck.errors.join(" "));
-      setActiveTab("settings");
-      return;
-    }
-
-    if (selectedDatasetKeys.length === 0) {
-      setRuntimeError("No datasets are selected. Open the Data Catalogue and select at least one loaded dataset before running the workflow.");
-      setActiveTab("catalogue");
-      return;
-    }
-
-    setRuntimeBusy(true);
-    setRuntimeError("");
-    setRuntimeStatus("The eight-agent runtime is analyzing the selected datasets, references, and feedback in token-safe batches.");
-    setAgentRuns(
-      agents.map((agent, index) => ({
-        roleId:
-          ([
-            "trend_research",
-            "opportunity_router",
-            "validation_guard",
-            "product_strategy",
-            "design_direction",
-            "review_approval",
-            "build",
-            "runtime_monitor"
-          ][index] as AgentRunTrace["roleId"]) ?? "runtime_monitor",
-        name: agent.role,
-        responsibility: agent.latestOutputPreview,
-        summary: "Waiting for the server runtime to finish this pass.",
-        itemCount: 0,
-        status: "running",
-        attempts: 0,
-        retryCount: 0,
-        batchIndex: 0
-      }))
-    );
-
-    try {
-      const response = await fetch("/api/autonomous-run", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          goal: missionGoal,
-          channel: selectedChannel,
-          referenceExamples: researchExamples,
-          productFeedback,
-          styleFeedback,
-          confidenceThreshold,
-          selectedDatasetKeys,
-          workflowTemplateId: selectedWorkflowId,
-          workflowChain: workflowStages,
-          runLabel: workflowRunLabel,
-          maxTokensPerMinute
-        })
-      });
-      const payload = (await response.json()) as AutonomousRunResponse;
-
-      if (!response.ok) {
-        throw new Error([payload.error, payload.action].filter(Boolean).join(" "));
-      }
-
-      setRuntimeStatus("Batch processing finished. Draft builds are being queued for review and any throttling details are available in the logs.");
-      setResearchSummary(payload.runtime.researchSummary);
-      setSourceSignalSummary(payload.runtime.sourceSignalSummary);
-      setAgentRuns(payload.runtime.agentRuns);
-      setConfidenceThreshold(payload.confidenceThreshold);
-      setTrainingDataSummary(payload.trainingData ?? null);
-      setStartupCheck(payload.startupCheck ?? null);
-      setMaxTokensPerMinute(payload.workflow.maxTokensPerMinute ?? DEFAULT_MAX_TOKENS_PER_MINUTE);
-      setTrainingExamples(payload.trainingExamples ?? []);
-      setWorkflowLogs(payload.logs);
-      setWorkflowMetrics(payload.metrics);
-      setWorkflowRunLabel(payload.workflow.runLabel);
-      setResearchQueue(payload.queues.researchQueue);
-      setShortlistQueue(payload.queues.shortlistQueue);
-      setRejectedSimilar(payload.queues.rejectedSimilar);
-
-      if (payload.trainingData?.datasets?.length) {
-        setDatasetCatalogue(payload.trainingData.datasets);
-      }
-
-      const builtResults = payload.queues.draftBuildQueue.map((job) =>
-        buildDraftRecord(job, missionGoal, missionConstraints, missionPriority, executionMode, agents)
-      );
-      const builtQueue = builtResults.map(({ job, record }) =>
-        createQueueJob(
-          {
-            ...job,
-            status: "built",
-            nextAction: "Draft built. Compare the generated output to the original opportunity rationale before approving."
-          },
-          {
-            missionId: record.mission.id,
-            selectedStyle: record.report.finalProduct.selectedStyleProfile.name
-          }
-        )
-      );
-      const approvalJobs = builtResults.map(({ job, record }) =>
-        createQueueJob(
-          {
-            ...job,
-            status: "queued_for_approval",
-            nextAction: "Draft is ready. Wait for human approval before any outbound action."
-          },
-          {
-            missionId: record.mission.id,
-            selectedStyle: record.report.finalProduct.selectedStyleProfile.name,
-            reviewStatus: "pending"
-          }
-        )
-      );
-      const primaryRecord = builtResults[0]?.record ?? null;
-
-      setBuildQueue(builtQueue);
-      setApprovalQueue(approvalJobs);
-      setRunnerState((current) => ({
-        ...current,
-        activeMission: primaryRecord?.mission ?? null,
-        tasks: primaryRecord?.tasks ?? [],
-        artifacts: primaryRecord?.artifacts ?? [],
-        report: primaryRecord?.report ?? null,
-        archive: [...builtResults.map((result) => result.record), ...current.archive]
-      }));
-      setDatasetUsage((current) => incrementUsageMap(current, payload.workflow.selectedDatasetKeys));
-      setWorkflowUsage((current) => incrementUsageMap(current, [selectedWorkflowId]));
-
-      if (primaryRecord) {
-        setSelectedReviewMissionId(primaryRecord.mission.id);
-        setActiveTab("approval");
-      } else {
-        setSelectedReviewMissionId(null);
-        setBuildQueue([]);
-        setApprovalQueue([]);
-        setActiveTab("approval");
-      }
-    } catch (error) {
-      setRuntimeError(error instanceof Error ? error.message : "Unknown runtime error.");
-      setRuntimeStatus("Workflow execution failed.");
-      setAgentRuns((current) =>
-        current.map((trace) => ({
-          ...trace,
-          status: trace.status === "completed" ? trace.status : "failed",
-          error: error instanceof Error ? error.message : "Unknown runtime error."
-        }))
-      );
-      setActiveTab("testing");
-    } finally {
-      setRuntimeBusy(false);
-    }
-  };
+  // handleRunMission removed — the legacy /api/autonomous-run endpoint and its
+  // batch-the-whole-dataset architecture are gone. Use the AgentHero launcher
+  // (top of the page) which calls /api/autonomous-run/start and streams progress
+  // via SSE.
 
   const handleSubmitProductFeedback = (record: MissionRecord, rating: ProductFeedbackRating, notes: string) => {
     const styleId = record.report.finalProduct.selectedStyleProfile.id;
@@ -1088,31 +933,25 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
 
   const renderOverviewTab = () => (
     <>
-      <MissionControlPanel
-        goal={missionGoal}
-        constraints={missionConstraints}
-        channel={selectedChannel}
-        priority={missionPriority}
-        executionMode={executionMode}
-        outboundApproved={outboundApproved}
-        activeMission={runnerState.activeMission}
-        isBusy={runtimeBusy}
-        onGoalChange={setMissionGoal}
-        onConstraintsChange={setMissionConstraints}
-        onChannelChange={setSelectedChannel}
-        onPriorityChange={setMissionPriority}
-        onExecutionModeChange={setExecutionMode}
-        onOutboundApprovedChange={setOutboundApproved}
-        onSubmit={() => {
-          void handleRunMission();
-        }}
-      />
+      <section className="archive-shell">
+        <div className="status-header">
+          <div>
+            <span className="eyebrow">Run Pipeline</span>
+            <h2 className="section-title">Use the launcher at the top of the page</h2>
+            <p className="detail-body">
+              The legacy "Run Mission" workflow has been removed. Click <strong>Run Pipeline</strong> in the
+              hero section above to fire the autonomous run. Real-time progress streams to the hero
+              event log; finished drafts land in the Approval tab.
+            </p>
+          </div>
+        </div>
+      </section>
 
       <section className="archive-shell">
         <div className="status-header">
           <div>
             <span className="eyebrow">Automation Snapshot</span>
-            <h2 className="section-title">Real workflow status, selected data coverage, and progress toward the $56k/month push</h2>
+            <h2 className="section-title">Selected data coverage and runtime context</h2>
           </div>
         </div>
 
@@ -1221,27 +1060,6 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
     </>
   );
 
-  const renderTestingTab = () => (
-    <TestingHarness
-      isBusy={runtimeBusy}
-      runLabel={workflowRunLabel}
-      errorMessage={runtimeError}
-      selectedDatasetCount={selectedDatasetKeys.length}
-      selectedWorkflowName={selectedWorkflow.name}
-      tokenLoad={selectedTokenLoad}
-      tokenLimit={maxTokensPerMinute}
-      batchCount={estimatedBatchCount}
-      startupWarnings={startupCheck?.warnings ?? []}
-      startupErrors={startupCheck?.errors ?? []}
-      logs={workflowLogs}
-      metrics={workflowMetrics}
-      onRun={() => {
-        void handleRunMission();
-      }}
-      onExport={handleExportTestResults}
-    />
-  );
-
   const renderApprovalTab = () => (
     <>
       <AutonomousQueueBoard
@@ -1292,9 +1110,7 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
       <MorningReportView
         record={currentMorningRecord}
         onApproveProduct={handleApproveProduct}
-        onRedoProduct={() => {
-          void handleRunMission();
-        }}
+        onRedoProduct={() => { /* legacy run path removed; use the AgentHero launcher */ }}
         onSubmitTrainingFeedback={handleSubmitProductFeedback}
         publishQueueStatus={currentMissionPublishStatus}
       />
@@ -1467,7 +1283,6 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
   const tabContentMap: Record<DashboardTab, ReactNode> = {
     overview: renderOverviewTab(),
     catalogue: renderCatalogueTab(),
-    testing: renderTestingTab(),
     approval: renderApprovalTab(),
     agents: renderAgentsTab(),
     settings: renderSettingsTab()
