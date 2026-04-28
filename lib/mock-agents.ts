@@ -433,6 +433,15 @@ const agentDefaults: Agent[] = [
       ]
     ],
     blinkIntervalMs: { min: 4000, max: 9000 },
+    flashOnFrames: {
+      color: "rgba(255, 220, 140, 0.40)",
+      frames: [
+        "/agents/Commander/attack-4.png",
+        "/agents/Commander/attack-5.png",
+        "/agents/Commander/attack-9.png",
+        "/agents/Commander/attack-10.png"
+      ]
+    },
     frameRate: 6,
     loop: true,
     status: "Idle",
