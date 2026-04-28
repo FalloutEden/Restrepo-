@@ -15,7 +15,10 @@ const ROLE_TO_AGENT_ID: Record<string, string> = {
   review_approval: "review-05",
   validation_guard: "triage-06",
   build: "builder-07",
-  runtime_monitor: "memory-08"
+  runtime_monitor: "memory-08",
+  research_jobs: "research-jobs-09",
+  research_longtail: "research-longtail-10",
+  research_meta: "research-meta-11"
 };
 
 // Map pipeline execution status → display status
@@ -50,7 +53,10 @@ type SSEPayload = {
 };
 
 const PIPELINE_STAGES = [
-  { roleId: "trend_research", label: "Research" },
+  { roleId: "trend_research", label: "Research: Market" },
+  { roleId: "research_jobs", label: "Research: Jobs" },
+  { roleId: "research_longtail", label: "Research: Long-tail" },
+  { roleId: "research_meta", label: "Research: Meta" },
   { roleId: "opportunity_router", label: "Routing" },
   { roleId: "product_strategy", label: "Strategy" },
   { roleId: "design_direction", label: "Design" },
@@ -206,7 +212,7 @@ export function AgentHero() {
   }, [goal, runState, handleSSEPayload]);
 
   const completedCount = Object.values(activeStages).filter((s) => s === "completed").length;
-  const progressPct = runState === "completed" ? 100 : Math.round((completedCount / 8) * 100);
+  const progressPct = runState === "completed" ? 100 : Math.round((completedCount / PIPELINE_STAGES.length) * 100);
 
   return (
     <section className="agent-hero">
@@ -240,7 +246,7 @@ export function AgentHero() {
           Autonomous<br />Commerce Group
         </h1>
         <p className="hero-copy">
-          8 specialized agents running 24/7 — researching trends, routing opportunities,
+          11 specialized agents running 24/7 — four parallel research operatives, opportunity routing,
           building products, and pushing them live.
         </p>
       </div>

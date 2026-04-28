@@ -2,7 +2,7 @@ import "server-only";
 
 import type { RuntimeStartupReport } from "@/lib/dataset-models";
 
-export const EXPECTED_AGENT_COUNT = 8;
+export const EXPECTED_AGENT_COUNT = 11;
 
 const DEPENDENCY_CHECKS = [
   {

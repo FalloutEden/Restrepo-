@@ -8,6 +8,9 @@ import type { ProductTrainingFeedback, StyleFeedbackMap } from "@/lib/style-inte
 
 export type AgentRoleId =
   | "trend_research"
+  | "research_jobs"
+  | "research_longtail"
+  | "research_meta"
   | "opportunity_router"
   | "validation_guard"
   | "product_strategy"
@@ -175,9 +178,30 @@ export const AGENT_ROLE_DEFINITIONS: AgentRoleDefinition[] = [
   {
     id: "trend_research",
     name: "Trend Research Agent",
-    responsibility: "Analyze saved research, references, and feedback to find premium, sellable patterns and whitespace.",
+    responsibility: "Analyze market-evidence datasets (Shopify, print-on-demand, Fiverr) to find premium, sellable commerce patterns.",
     systemPrompt:
-      "You are the Trend Research Agent for an autonomous commerce lab. Work only from the supplied evidence. Summarize what appears to sell, what looks premium, where demand clusters, and what patterns to avoid."
+      "You are the Trend Research Agent. Focus your analysis on the MARKET-EVIDENCE datasets in the evidence (high-selling Shopify catalogues, print-on-demand category data, Fiverr gig signals). Summarize what is provably selling, where premium pricing is supported, what categories are saturated, and where the strongest buyer demand clusters. Cite the specific dataset signals that justify each claim."
+  },
+  {
+    id: "research_jobs",
+    name: "Vocabulary Research Agent",
+    responsibility: "Mine the core job-vocabulary datasets for buyer-language patterns and role-driven niche signals.",
+    systemPrompt:
+      "You are the Vocabulary Research Agent. Focus on the JOB-VOCABULARY datasets (the core 1k/2k role title corpora). Surface buyer titles and role-based niches that map to commercially viable products or services. Avoid generic enterprise roles; favor identity-driven niches where buyers self-identify with the title and would buy themed gifts, planners, or tools."
+  },
+  {
+    id: "research_longtail",
+    name: "Long-Tail Reconnaissance Agent",
+    responsibility: "Comb the long-tail job vocabulary for edge-case niches and underserved buyer segments.",
+    systemPrompt:
+      "You are the Long-Tail Reconnaissance Agent. Focus on the LONG-TAIL JOB VOCABULARY (the extended remainder dataset of less-common role titles). Find narrow, underserved niches with buyer-identity pull. Reject titles that are too obscure to have purchase intent. Prioritize roles where a small dedicated audience would predictably buy themed merchandise or tools."
+  },
+  {
+    id: "research_meta",
+    name: "Meta-Research Agent",
+    responsibility: "Apply dataset-quality and research-methodology guidance to weight signal strength across the other research operatives.",
+    systemPrompt:
+      "You are the Meta-Research Agent. Focus on the QUALITY/META datasets (research-quality guidance and relevant-dataset library). Use them to recommend which signal types deserve weight, flag where evidence is thin, and identify methodology improvements for future runs. Your output should be quality cues and risks, not product opportunities directly."
   },
   {
     id: "opportunity_router",
@@ -725,19 +749,41 @@ export async function runAutonomousAgentRuntime(
 
   const role = (id: AgentRoleId) => enabled.find((r) => r.id === id)!;
 
-  // Step 1: Trend Research
-  const trendResult = await executeStructuredAgent<TrendResearchOutput>(role("trend_research"), trendResearchTool, payload, options);
+  // Step 1: 4 research operatives in parallel — each focuses on a different dataset slice
+  // (market evidence / job vocabulary core / long-tail / meta-quality). Same payload, different focus
+  // prompts. Their outputs merge into a single combined research view before routing.
+  const [trendResult, jobsResult, longtailResult, metaResult] = await Promise.all([
+    executeStructuredAgent<TrendResearchOutput>(role("trend_research"), trendResearchTool, payload, options),
+    executeStructuredAgent<TrendResearchOutput>(role("research_jobs"), trendResearchTool, payload, options),
+    executeStructuredAgent<TrendResearchOutput>(role("research_longtail"), trendResearchTool, payload, options),
+    executeStructuredAgent<TrendResearchOutput>(role("research_meta"), trendResearchTool, payload, options)
+  ]);
 
-  // Step 2: Opportunity Router (waits for trend)
+  // Merge: combine summaries and dedupe array signals across the 4 operatives.
+  const allTrend = [trendResult, jobsResult, longtailResult, metaResult];
+  const mergedTrend: TrendResearchOutput = {
+    summary: allTrend.map((r) => r.data?.summary).filter(Boolean).join(" "),
+    prioritizedChannels: Array.from(
+      new Set(allTrend.flatMap((r) => r.data?.prioritizedChannels ?? []))
+    ) as TrendResearchOutput["prioritizedChannels"],
+    sourceSignals: Array.from(new Set(allTrend.flatMap((r) => r.data?.sourceSignals ?? []))),
+    approvedPatterns: Array.from(new Set(allTrend.flatMap((r) => r.data?.approvedPatterns ?? []))),
+    avoidedPatterns: Array.from(new Set(allTrend.flatMap((r) => r.data?.avoidedPatterns ?? []))),
+    whitespaceOpportunities: Array.from(new Set(allTrend.flatMap((r) => r.data?.whitespaceOpportunities ?? []))),
+    buyerSignals: Array.from(new Set(allTrend.flatMap((r) => r.data?.buyerSignals ?? []))),
+    qualityRisks: Array.from(new Set(allTrend.flatMap((r) => r.data?.qualityRisks ?? [])))
+  };
+
+  // Step 2: Opportunity Router (uses merged research)
   const routerResult = await executeStructuredAgent<OpportunityRouterOutput>(
     role("opportunity_router"),
     opportunityRouterTool,
     {
       ...payload,
-      researchSummary: trendResult.data?.summary ?? "Use supplied evidence directly.",
-      prioritizedChannels: trendResult.data?.prioritizedChannels ?? payload.preferredChannels,
-      whitespaceOpportunities: trendResult.data?.whitespaceOpportunities ?? [],
-      buyerSignals: trendResult.data?.buyerSignals ?? payload.buyerSignals
+      researchSummary: mergedTrend.summary || "Use supplied evidence directly.",
+      prioritizedChannels: mergedTrend.prioritizedChannels.length > 0 ? mergedTrend.prioritizedChannels : payload.preferredChannels,
+      whitespaceOpportunities: mergedTrend.whitespaceOpportunities,
+      buyerSignals: mergedTrend.buyerSignals.length > 0 ? mergedTrend.buyerSignals : payload.buyerSignals
     },
     options
   );
@@ -746,17 +792,17 @@ export async function runAutonomousAgentRuntime(
   const [validationResult, strategyResult, designResult] = await Promise.all([
     executeStructuredAgent<ValidationOutput>(
       role("validation_guard"), validationTool,
-      { ...payload, researchSummary: trendResult.data?.summary ?? "", opportunities: routerResult.data?.opportunities ?? [] },
+      { ...payload, researchSummary: mergedTrend.summary, opportunities: routerResult.data?.opportunities ?? [] },
       options
     ),
     executeStructuredAgent<ProductStrategyOutput>(
       role("product_strategy"), productStrategyTool,
-      { ...payload, researchSummary: trendResult.data?.summary ?? "", opportunities: routerResult.data?.opportunities ?? [] },
+      { ...payload, researchSummary: mergedTrend.summary, opportunities: routerResult.data?.opportunities ?? [] },
       options
     ),
     executeStructuredAgent<DesignDirectionOutput>(
       role("design_direction"), designDirectionTool,
-      { ...payload, researchSummary: trendResult.data?.summary ?? "", opportunities: routerResult.data?.opportunities ?? [] },
+      { ...payload, researchSummary: mergedTrend.summary, opportunities: routerResult.data?.opportunities ?? [] },
       options
     )
   ]);
@@ -764,7 +810,7 @@ export async function runAutonomousAgentRuntime(
   // Step 6: Build (waits for strategy)
   const buildResult = await executeStructuredAgent<BuildOutput>(
     role("build"), buildTool,
-    { ...payload, researchSummary: trendResult.data?.summary ?? "", opportunities: routerResult.data?.opportunities ?? [], plans: strategyResult.data?.plans ?? [] },
+    { ...payload, researchSummary: mergedTrend.summary, opportunities: routerResult.data?.opportunities ?? [], plans: strategyResult.data?.plans ?? [] },
     options
   );
 
@@ -780,14 +826,14 @@ export async function runAutonomousAgentRuntime(
     role("runtime_monitor"), runtimeMonitorTool,
     {
       ...payload,
-      researchSummary: trendResult.data?.summary ?? "",
+      researchSummary: mergedTrend.summary,
       routerSummary: routerResult.data?.summary ?? "",
       validationSummary: validationResult.data?.summary ?? "",
       strategySummary: strategyResult.data?.summary ?? "",
       designSummary: designResult.data?.summary ?? "",
       buildSummary: buildResult.data?.summary ?? "",
       reviewSummary: reviewResult.data?.summary ?? "",
-      agentStatuses: [trendResult, routerResult, validationResult, strategyResult, designResult, buildResult, reviewResult].map((r) => ({
+      agentStatuses: [trendResult, jobsResult, longtailResult, metaResult, routerResult, validationResult, strategyResult, designResult, buildResult, reviewResult].map((r) => ({
         roleId: r.trace.roleId, status: r.trace.status, error: r.trace.error ?? ""
       }))
     },
@@ -805,16 +851,19 @@ export async function runAutonomousAgentRuntime(
   );
 
   return {
-    researchSummary: [trendResult.data?.summary, monitorResult.data?.summary].filter(Boolean).join(" "),
+    researchSummary: [mergedTrend.summary, monitorResult.data?.summary].filter(Boolean).join(" "),
     sourceSignalSummary: Array.from(new Set([
       ...payload.sourceSignalSummary,
-      ...(trendResult.data?.sourceSignals ?? []),
+      ...mergedTrend.sourceSignals,
       ...(monitorResult.data?.handoffNotes ?? []),
       ...(monitorResult.data?.watchouts ?? [])
     ])),
     opportunities: mergedOpportunities,
     agentRuns: [
-      traceWithSummary(trendResult.trace, trendResult.data, "Trend research completed."),
+      traceWithSummary(trendResult.trace, trendResult.data, "Market-evidence research completed."),
+      traceWithSummary(jobsResult.trace, jobsResult.data, "Job-vocabulary research completed."),
+      traceWithSummary(longtailResult.trace, longtailResult.data, "Long-tail reconnaissance completed."),
+      traceWithSummary(metaResult.trace, metaResult.data, "Meta-research completed."),
       traceWithSummary(routerResult.trace, routerResult.data, "Opportunity routing completed."),
       traceWithSummary(validationResult.trace, validationResult.data, "Validation completed."),
       traceWithSummary(strategyResult.trace, strategyResult.data, "Product strategy completed."),

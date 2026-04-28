@@ -373,6 +373,105 @@ const agentDefaults: Agent[] = [
     updatedAt: "31 minutes ago",
     queueDepth: 1,
     owner: "Umbrella Systems"
+  },
+  {
+    id: "research-jobs-09",
+    name: "Zeno",
+    role: "Vocabulary Research Agent",
+    avatar: "/agents/Zeno/idle-1.png",
+    background: "/backgrounds/Zeno.png",
+    avatarFrames: ["/agents/Zeno/idle-1.png"],
+    blinkAnimations: [
+      [
+        "/agents/Zeno/smoke-1.png",
+        "/agents/Zeno/smoke-2.png",
+        "/agents/Zeno/smoke-3.png",
+        "/agents/Zeno/smoke-4.png"
+      ],
+      [
+        "/agents/Zeno/smoke2-1.png",
+        "/agents/Zeno/smoke2-2.png",
+        "/agents/Zeno/smoke2-3.png",
+        "/agents/Zeno/smoke2-4.png"
+      ]
+    ],
+    blinkIntervalMs: { min: 3500, max: 7500 },
+    frameRate: 4,
+    loop: true,
+    status: "Idle",
+    latestOutputPreview: "Mining core job vocabulary for buyer-language patterns and identity-driven niches.",
+    latestOutput: "Surfaced role-driven niche signals with strong buyer-identity pull.",
+    updatedAt: "just now",
+    queueDepth: 0,
+    owner: "Market Intelligence Group"
+  },
+  {
+    id: "research-longtail-10",
+    name: "Commander",
+    role: "Long-Tail Reconnaissance Agent",
+    avatar: "/agents/Commander/hatchet-1.png",
+    background: "/backgrounds/commander.png",
+    avatarFrames: ["/agents/Commander/hatchet-1.png"],
+    blinkAnimations: [
+      [
+        "/agents/Commander/hatchet-2.png",
+        "/agents/Commander/hatchet-3.png",
+        "/agents/Commander/hatchet-4.png",
+        "/agents/Commander/hatchet-5.png"
+      ],
+      [
+        "/agents/Commander/attack-1.png",
+        "/agents/Commander/attack-2.png",
+        "/agents/Commander/attack-3.png",
+        "/agents/Commander/attack-4.png",
+        "/agents/Commander/attack-5.png",
+        "/agents/Commander/attack-6.png",
+        "/agents/Commander/attack-7.png",
+        "/agents/Commander/attack-8.png",
+        "/agents/Commander/attack-9.png",
+        "/agents/Commander/attack-10.png"
+      ]
+    ],
+    blinkIntervalMs: { min: 4000, max: 9000 },
+    frameRate: 6,
+    loop: true,
+    status: "Idle",
+    latestOutputPreview: "Combing the long-tail role corpus for narrow underserved buyer segments.",
+    latestOutput: "Edge-case niche reconnaissance complete; flagged candidates with predictable purchase intent.",
+    updatedAt: "just now",
+    queueDepth: 0,
+    owner: "Long-Tail Reconnaissance"
+  },
+  {
+    id: "research-meta-11",
+    name: "Gideon",
+    role: "Meta-Research Agent",
+    avatar: "/agents/Gideon/adjust-1.png",
+    background: "/backgrounds/Gideon.webp",
+    avatarFrames: ["/agents/Gideon/adjust-1.png"],
+    blinkAnimations: [
+      [
+        "/agents/Gideon/adjust-2.png",
+        "/agents/Gideon/adjust-3.png",
+        "/agents/Gideon/adjust-4.png",
+        "/agents/Gideon/adjust-5.png"
+      ],
+      [
+        "/agents/Gideon/laugh-2.png",
+        "/agents/Gideon/laugh-3.png",
+        "/agents/Gideon/laugh-4.png",
+        "/agents/Gideon/laugh-5.png"
+      ]
+    ],
+    blinkIntervalMs: { min: 3500, max: 8000 },
+    frameRate: 5,
+    loop: true,
+    status: "Idle",
+    latestOutputPreview: "Weighing dataset-quality cues and flagging methodology gaps across the research operatives.",
+    latestOutput: "Meta-research pass complete; surfaced quality signals and evidence-thinness warnings.",
+    updatedAt: "just now",
+    queueDepth: 0,
+    owner: "Research Quality Cell"
   }
 ];
 
@@ -397,7 +496,10 @@ const rawAgentPayloads: AgentPayload[] = [
   },
   agentDefaults[5],
   agentDefaults[6],
-  agentDefaults[7]
+  agentDefaults[7],
+  agentDefaults[8],
+  agentDefaults[9],
+  agentDefaults[10]
 ];
 
 const validStatuses = new Set<AgentStatus>(["Running", "Retrying", "Idle", "Completed", "Blocked", "Failed", "Error"]);
