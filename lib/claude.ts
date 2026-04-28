@@ -13,4 +13,4 @@ export const claude = new Anthropic({
 // Model to use for all agent calls. Override via CLAUDE_MODEL env var if your
 // account doesn't have access to the default (Anthropic returns 400 invalid model
 // id when an alias isn't enabled for the account/plan).
-export const CLAUDE_MODEL = process.env.CLAUDE_MODEL?.trim() || "claude-sonnet-4-5";
+export const CLAUDE_MODEL = process.env.CLAUDE_MODEL?.trim() || "claude-opus-4-1";
