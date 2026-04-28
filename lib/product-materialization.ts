@@ -174,10 +174,20 @@ async function shopifyGraphQL<T>(query: string, variables: Record<string, unknow
   });
 
   const rawBody = await response.text();
-  const parsed = rawBody ? (JSON.parse(rawBody) as { data?: T; errors?: Array<{ message: string }> }) : {};
+  const parsed: { data?: T; errors?: unknown } = rawBody ? JSON.parse(rawBody) : {};
 
-  if (!response.ok || parsed.errors?.length) {
-    const message = parsed.errors?.map((entry) => entry.message).join(" | ") || rawBody;
+  // Shopify can return errors as an array, a single object, or a string. Normalize all shapes.
+  const errors = parsed.errors;
+  const errorMessages: string[] = Array.isArray(errors)
+    ? errors.map((e) => (typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : JSON.stringify(e)))
+    : errors && typeof errors === "object"
+      ? [("message" in (errors as Record<string, unknown>) ? String((errors as { message: unknown }).message) : JSON.stringify(errors))]
+      : typeof errors === "string"
+        ? [errors]
+        : [];
+
+  if (!response.ok || errorMessages.length > 0) {
+    const message = errorMessages.length > 0 ? errorMessages.join(" | ") : rawBody;
     throw new Error(`Shopify GraphQL request failed (${response.status}): ${message}`);
   }
 
