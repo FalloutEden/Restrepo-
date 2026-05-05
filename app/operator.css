@@ -1,0 +1,236 @@
+.operator-header {
+  margin: 24px 0 12px;
+}
+
+.operator-title {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 4px 0 8px;
+}
+
+.operator-sub {
+  color: rgba(255, 255, 255, 0.65);
+  max-width: 720px;
+  line-height: 1.5;
+}
+
+.operator-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 24px;
+  margin-top: 24px;
+}
+
+@media (max-width: 1024px) {
+  .operator-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.operator-card {
+  background: rgba(20, 22, 30, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.operator-card h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.operator-chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 580px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.operator-bubble {
+  padding: 12px 14px;
+  border-radius: 12px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.operator-bubble-user {
+  background: rgba(80, 110, 200, 0.22);
+  align-self: flex-end;
+  max-width: 80%;
+  border: 1px solid rgba(120, 160, 240, 0.35);
+}
+
+.operator-bubble-assistant {
+  background: rgba(255, 255, 255, 0.05);
+  align-self: flex-start;
+  max-width: 92%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.operator-bubble-tool {
+  background: rgba(40, 50, 30, 0.4);
+  align-self: flex-start;
+  max-width: 88%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: rgba(220, 240, 200, 0.85);
+  border: 1px solid rgba(140, 200, 100, 0.18);
+}
+
+.operator-bubble-error {
+  background: rgba(120, 30, 30, 0.4);
+  border: 1px solid rgba(220, 90, 90, 0.5);
+  align-self: flex-start;
+  max-width: 88%;
+  font-size: 13px;
+}
+
+.operator-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.operator-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: white;
+  font-size: 14px;
+  font-family: inherit;
+  resize: none;
+  min-height: 60px;
+}
+
+.operator-input:focus {
+  outline: 2px solid rgba(120, 160, 240, 0.6);
+  outline-offset: 0;
+}
+
+.operator-button {
+  background: rgba(110, 150, 230, 0.85);
+  color: white;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 18px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.operator-button:hover {
+  background: rgba(130, 170, 250, 1);
+}
+
+.operator-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.operator-button-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.operator-button-secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.operator-button-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.operator-meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.operator-inbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.operator-inbox-item {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.operator-inbox-item h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.operator-inbox-item p {
+  margin: 4px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.operator-inbox-cost {
+  color: rgba(255, 200, 120, 0.95);
+  font-weight: 600;
+}
+
+.operator-activity-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.operator-activity-entry {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.operator-activity-time {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+}
+
+.operator-activity-msg {
+  color: rgba(255, 255, 255, 0.85);
+  word-wrap: break-word;
+}
+
+.operator-empty {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
+
+.operator-tick-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(40, 30, 60, 0.45);
+  border: 1px solid rgba(160, 130, 220, 0.3);
+  border-radius: 10px;
+}

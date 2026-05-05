@@ -21,8 +21,7 @@ export async function POST(request: Request) {
       model: IMAGE_MODEL,
       prompt,
       n: 1,
-      size: body.size ?? "1024x1024",
-      response_format: "b64_json"
+      size: body.size ?? "1024x1024"
     });
 
     const b64 = response.data?.[0]?.b64_json;

@@ -4,8 +4,17 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
-import { searchZendropProducts, type ZendropProduct } from "@/lib/zendrop-service";
+import {
+  searchAndDetailCjProducts,
+  findCjCategoryIds,
+  getCjProductDetail,
+  cleanCjDescription,
+  type CjProductDetail
+} from "@/lib/cj-service";
 import { generateProductImage } from "@/lib/image-generation";
+import { resolveBrand, type Brand } from "@/lib/brands";
+import { resolveShopifyCredentials, type ShopifyCredentials } from "@/lib/shopify-credentials";
+import { rewriteProductDescription } from "@/lib/copywriting";
 
 export type FulfillmentType = "printful" | "zendrop" | "digital";
 
@@ -43,6 +52,15 @@ export type MaterializationInput = {
   keywords?: string[];
   imagePrompt?: string;
   buildSummary?: string;
+  // Optional: pin a specific CJ product id (or other supplier id) instead of
+  // letting the dropship path re-search the catalog. Without this, the path
+  // searches by niche → category → first-usable-result, which means calling
+  // materializeProduct N times in a row would return the same product N times.
+  sourceProductId?: string;
+  // Brand slug from lib/brands.ts ("locklayer" | "black-vault-apparel"). Drives
+  // copywriting voice and (eventually) which Shopify storefront receives the
+  // listing. Defaults to "locklayer" when unset.
+  brand?: string;
 };
 
 type ShopifyProductResponse = {
@@ -50,7 +68,21 @@ type ShopifyProductResponse = {
     id: number;
     handle?: string;
     admin_graphql_api_id?: string;
+    variants?: Array<{
+      id: number;
+      title?: string;
+      option1?: string;
+      option2?: string;
+      option3?: string;
+      sku?: string;
+    }>;
   };
+};
+
+type PrintfulVariantSpec = {
+  variantId: number;
+  size: string;
+  color: string;
 };
 
 type ShopifyProductImageResponse = {
@@ -60,9 +92,14 @@ type ShopifyProductImageResponse = {
   };
 };
 
-const SHOPIFY_STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN?.trim() || "lock-layer.myshopify.com";
-const SHOPIFY_ADMIN_API_VERSION = process.env.SHOPIFY_ADMIN_API_VERSION?.trim() || "2024-04";
 const MATERIALIZED_OUTPUT_DIR = path.join(process.cwd(), ".openclaw", "materialized-products");
+
+// Brand → Shopify storefront routing. Apparel (Printful) ships under Black Vault
+// Apparel; everything else (CJ-dropshipped tech, digital downloads) ships under
+// LockLayer Security.
+function defaultBrandForFulfillment(fulfillment: FulfillmentType): string {
+  return fulfillment === "printful" ? "black-vault-apparel" : "locklayer";
+}
 
 function normalizeMaterializationKey(value: string) {
   return value.toLowerCase().replace(/[\s-]+/g, "_").trim();
@@ -89,38 +126,40 @@ function renderDescriptionHtml(description: string) {
   return escapeHtml(description).replace(/\r?\n/g, "<br />");
 }
 
-function ensureShopifyToken() {
-  const token = process.env.SHOPIFY_API_KEY?.trim();
-
-  if (!token) {
-    throw new Error("Missing SHOPIFY_API_KEY in server environment.");
-  }
-
-  return token;
-}
-
-function ensurePrintfulConfig() {
+function loadPrintfulConfig() {
   const token = process.env.PRINTFUL_API_KEY?.trim();
   const storeId = process.env.PRINTFUL_STORE_ID?.trim();
-  const variantId = Number(process.env.PRINTFUL_DEFAULT_VARIANT_ID?.trim() || "");
+  const variantIdRaw = process.env.PRINTFUL_DEFAULT_VARIANT_ID?.trim() || "";
+  const variantId = Number(variantIdRaw);
 
-  if (!token) {
-    throw new Error("Missing PRINTFUL_API_KEY in server environment.");
+  if (!token || !storeId || !Number.isFinite(variantId) || variantId <= 0) {
+    return null;
   }
 
-  if (!storeId) {
-    throw new Error("Missing PRINTFUL_STORE_ID in server environment.");
-  }
+  return { token, storeId, variantId };
+}
 
-  if (!Number.isFinite(variantId)) {
-    throw new Error("Missing PRINTFUL_DEFAULT_VARIANT_ID in server environment.");
-  }
+function getDefaultRetailPrice() {
+  const raw = process.env.PRINTFUL_RETAIL_PRICE?.trim() || process.env.DEFAULT_RETAIL_PRICE?.trim() || "34.99";
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed.toFixed(2) : "34.99";
+}
 
-  return {
-    token,
-    storeId,
-    variantId
-  };
+// Convert upstream design direction (often phrased as "premium product photo of a t-shirt
+// with X graphic...") into a print-artwork-only prompt. Printful prints whatever PNG we
+// hand it onto a real shirt — so the PNG must be the *design alone*, not a photo of a
+// finished product.
+function buildPrintArtworkPrompt(input: MaterializationInput): string {
+  const direction = input.imagePrompt?.trim();
+  const themeLine = direction
+    ? `Theme and style direction: ${direction}`
+    : `Theme: ${input.title}. ${input.description}`;
+  return [
+    `Print-on-demand apparel artwork. Bold, high-contrast graphic design intended to be printed directly onto a t-shirt or hoodie.`,
+    themeLine,
+    `Output requirements: flat 2D artwork only — the design itself, centered on a fully transparent background. Do NOT depict a t-shirt, hoodie, garment, mockup, hanger, mannequin, or any product photography. No shadows, no studio lighting, no fabric texture, no folds. The image must be ready to drop straight onto a blank shirt as a print file.`,
+    `Composition: design fills roughly the central 70% of the canvas, with clear empty (transparent) margins. Crisp clean lines, suitable for screen printing or DTG. Limited color palette unless the theme requires otherwise. No watermarks, no signatures, no extra text outside what the design itself calls for.`
+  ].join(" ");
 }
 
 function resolveFulfillmentType(input: MaterializationInput): FulfillmentType {
@@ -138,12 +177,11 @@ function resolveFulfillmentType(input: MaterializationInput): FulfillmentType {
   return "digital";
 }
 
-async function shopifyRest<T>(endpoint: string, init: RequestInit) {
-  const token = ensureShopifyToken();
-  const response = await fetch(`https://${SHOPIFY_STORE_DOMAIN}/admin/api/${SHOPIFY_ADMIN_API_VERSION}${endpoint}`, {
+async function shopifyRest<T>(creds: ShopifyCredentials, endpoint: string, init: RequestInit) {
+  const response = await fetch(`https://${creds.storeDomain}/admin/api/${creds.apiVersion}${endpoint}`, {
     ...init,
     headers: {
-      "X-Shopify-Access-Token": token,
+      "X-Shopify-Access-Token": creds.token,
       "Content-Type": "application/json",
       ...(init.headers ?? {})
     }
@@ -159,12 +197,11 @@ async function shopifyRest<T>(endpoint: string, init: RequestInit) {
   return data;
 }
 
-async function shopifyGraphQL<T>(query: string, variables: Record<string, unknown>) {
-  const token = ensureShopifyToken();
-  const response = await fetch(`https://${SHOPIFY_STORE_DOMAIN}/admin/api/${SHOPIFY_ADMIN_API_VERSION}/graphql.json`, {
+async function shopifyGraphQL<T>(creds: ShopifyCredentials, query: string, variables: Record<string, unknown>) {
+  const response = await fetch(`https://${creds.storeDomain}/admin/api/${creds.apiVersion}/graphql.json`, {
     method: "POST",
     headers: {
-      "X-Shopify-Access-Token": token,
+      "X-Shopify-Access-Token": creds.token,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
@@ -194,19 +231,47 @@ async function shopifyGraphQL<T>(query: string, variables: Record<string, unknow
   return parsed.data as T;
 }
 
-async function createShopifyDraftProduct(input: MaterializationInput, bodyHtml: string) {
-  const payload = await shopifyRest<ShopifyProductResponse>("/products.json", {
+async function createShopifyDraftProduct(
+  creds: ShopifyCredentials,
+  input: MaterializationInput,
+  bodyHtml: string,
+  options: {
+    retailPrice?: string;
+    extraTags?: string[];
+    sizes?: string[]; // e.g. ["S","M","L","XL","2XL"] — produces a Size option with one variant per size
+  } = {}
+) {
+  const retailPrice = options.retailPrice ?? getDefaultRetailPrice();
+  const tags = [
+    "agent-materialized",
+    `fulfillment:${input.fulfillmentType}`,
+    `brand:${creds.brandSlug}`,
+    ...(options.extraTags ?? [])
+  ];
+
+  const sizes = options.sizes && options.sizes.length > 0 ? options.sizes : null;
+  const productPayload: Record<string, unknown> = {
+    title: input.title,
+    body_html: bodyHtml,
+    vendor: creds.brandName,
+    product_type: input.productType,
+    status: "draft",
+    tags
+  };
+  if (sizes) {
+    productPayload.options = [{ name: "Size", values: sizes }];
+    productPayload.variants = sizes.map((size) => ({
+      option1: size,
+      price: retailPrice,
+      sku: `${slugify(input.title)}-${size}`.toUpperCase()
+    }));
+  } else {
+    productPayload.variants = [{ price: retailPrice }];
+  }
+
+  const payload = await shopifyRest<ShopifyProductResponse>(creds, "/products.json", {
     method: "POST",
-    body: JSON.stringify({
-      product: {
-        title: input.title,
-        body_html: bodyHtml,
-        vendor: "LockLayer Security",
-        product_type: input.productType,
-        status: "draft",
-        tags: [`agent-materialized`, `fulfillment:${input.fulfillmentType}`]
-      }
-    })
+    body: JSON.stringify({ product: productPayload })
   });
 
   if (!payload.product?.id) {
@@ -216,13 +281,8 @@ async function createShopifyDraftProduct(input: MaterializationInput, bodyHtml: 
   return payload.product;
 }
 
-async function uploadImageToShopifyFiles(title: string, imageBuffer: Buffer) {
-  const filename = `${slugify(title)}.png`;
-  return uploadBufferToShopifyFiles(filename, "image/png", imageBuffer);
-}
-
-async function attachShopifyProductImage(productId: number, title: string, imageBase64: string) {
-  const payload = await shopifyRest<ShopifyProductImageResponse>(`/products/${productId}/images.json`, {
+async function attachShopifyProductImage(creds: ShopifyCredentials, productId: number, title: string, imageBase64: string) {
+  const payload = await shopifyRest<ShopifyProductImageResponse>(creds, `/products/${productId}/images.json`, {
     method: "POST",
     body: JSON.stringify({
       image: {
@@ -236,8 +296,8 @@ async function attachShopifyProductImage(productId: number, title: string, image
   return payload.image ?? null;
 }
 
-async function attachShopifyProductImageFromUrl(productId: number, title: string, imageUrl: string) {
-  const payload = await shopifyRest<ShopifyProductImageResponse>(`/products/${productId}/images.json`, {
+async function attachShopifyProductImageFromUrl(creds: ShopifyCredentials, productId: number, title: string, imageUrl: string) {
+  const payload = await shopifyRest<ShopifyProductImageResponse>(creds, `/products/${productId}/images.json`, {
     method: "POST",
     body: JSON.stringify({
       image: {
@@ -250,7 +310,7 @@ async function attachShopifyProductImageFromUrl(productId: number, title: string
   return payload.image ?? null;
 }
 
-async function uploadBufferToShopifyFiles(filename: string, mimeType: string, buffer: Buffer) {
+async function uploadBufferToShopifyFiles(creds: ShopifyCredentials, filename: string, mimeType: string, buffer: Buffer) {
   const stagedUploadsCreate = `
     mutation stagedUploadsCreate($input: [StagedUploadInput!]!) {
       stagedUploadsCreate(input: $input) {
@@ -279,7 +339,7 @@ async function uploadBufferToShopifyFiles(filename: string, mimeType: string, bu
       }>;
       userErrors: Array<{ field?: string[]; message: string }>;
     };
-  }>(stagedUploadsCreate, {
+  }>(creds, stagedUploadsCreate, {
     input: [
       {
         filename,
@@ -345,7 +405,7 @@ async function uploadBufferToShopifyFiles(filename: string, mimeType: string, bu
       }>;
       userErrors: Array<{ field?: string[]; message: string }>;
     };
-  }>(fileCreate, {
+  }>(creds, fileCreate, {
     files: [
       {
         originalSource: target.resourceUrl,
@@ -361,15 +421,275 @@ async function uploadBufferToShopifyFiles(filename: string, mimeType: string, bu
   }
 
   const file = fileData.fileCreate.files[0];
-  if (!file?.url) {
-    throw new Error("Shopify fileCreate did not return a file URL.");
+  if (!file?.id) {
+    throw new Error("Shopify fileCreate did not return a file id.");
   }
 
-  return file;
+  // Shopify file processing is asynchronous: fileCreate returns immediately with
+  // fileStatus=UPLOADED and url=null. The url only becomes available after the
+  // file moves to READY state. Poll the file node briefly to pick up the URL.
+  if (file.url) {
+    return file;
+  }
+
+  const fileQuery = `
+    query fileNode($id: ID!) {
+      node(id: $id) {
+        ... on GenericFile { id url fileStatus }
+        ... on MediaImage { id image { url } }
+      }
+    }
+  `;
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 500 + attempt * 250));
+    try {
+      const polled = await shopifyGraphQL<{ node: { id?: string; url?: string; image?: { url?: string }; fileStatus?: string } | null }>(creds, fileQuery, { id: file.id });
+      const url = polled.node?.url ?? polled.node?.image?.url;
+      if (url) {
+        return { ...file, url };
+      }
+    } catch {
+      // ignore and retry
+    }
+  }
+
+  // Fall back to id-only — the caller will see no URL but the file exists in Shopify.
+  return { ...file, url: file.url ?? "" };
 }
 
-async function createPrintfulSyncProduct(input: MaterializationInput, imageUrl: string) {
-  const printful = ensurePrintfulConfig();
+// --- Printful catalog lookups ---------------------------------------------
+// Used to expand a single base variant (e.g. "Bella+Canvas 3001 Black M") into
+// the full sibling size run for the same product/color, and to discover the
+// catalog product ID we need for the mockup generator.
+
+type PrintfulCatalogVariant = {
+  id: number;
+  product_id: number;
+  size: string;
+  color: string;
+  in_stock?: boolean;
+  availability_status?: string;
+};
+
+async function fetchPrintfulVariantInfo(token: string, variantId: number): Promise<PrintfulCatalogVariant | null> {
+  const response = await fetch(`https://api.printful.com/products/variant/${variantId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    console.warn(`[materialize] Printful variant lookup failed (${response.status}) for variantId=${variantId}`);
+    return null;
+  }
+  const data = (await response.json()) as { result?: { variant?: PrintfulCatalogVariant } };
+  return data.result?.variant ?? null;
+}
+
+async function fetchPrintfulProductCatalog(token: string, productId: number): Promise<PrintfulCatalogVariant[]> {
+  const response = await fetch(`https://api.printful.com/products/${productId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    console.warn(`[materialize] Printful product catalog lookup failed (${response.status}) for productId=${productId}`);
+    return [];
+  }
+  const data = (await response.json()) as { result?: { variants?: PrintfulCatalogVariant[] } };
+  return data.result?.variants ?? [];
+}
+
+const TARGET_SIZE_RUN = ["S", "M", "L", "XL", "2XL"];
+
+// Given a base variant id, find sibling variants for the same product+color across the target size run.
+// Returns the base variant alone if catalog lookup fails.
+async function expandPrintfulSizeVariants(token: string, baseVariantId: number): Promise<{
+  productId: number | null;
+  variants: PrintfulVariantSpec[];
+}> {
+  const base = await fetchPrintfulVariantInfo(token, baseVariantId);
+  if (!base) {
+    return { productId: null, variants: [{ variantId: baseVariantId, size: "M", color: "Default" }] };
+  }
+  const all = await fetchPrintfulProductCatalog(token, base.product_id);
+  const sameColor = all.filter((v) =>
+    v.color === base.color &&
+    TARGET_SIZE_RUN.includes(v.size)
+  );
+  if (sameColor.length === 0) {
+    return {
+      productId: base.product_id,
+      variants: [{ variantId: base.id, size: base.size, color: base.color }]
+    };
+  }
+  // Order variants according to TARGET_SIZE_RUN so Shopify shows S → 2XL.
+  sameColor.sort((a, b) => TARGET_SIZE_RUN.indexOf(a.size) - TARGET_SIZE_RUN.indexOf(b.size));
+  return {
+    productId: base.product_id,
+    variants: sameColor.map((v) => ({ variantId: v.id, size: v.size, color: v.color }))
+  };
+}
+
+// --- Printful mockup generator --------------------------------------------
+// Submit a print file + variant ids, poll for completion, return mockup image URLs.
+// Used to replace the raw AI artwork on the Shopify listing with real product photos.
+
+// Look up the front-placement printfile dimensions for a product. Printful needs
+// these as area_width / area_height when submitting a mockup task.
+async function fetchPrintfulFrontPrintfile(
+  token: string,
+  storeId: string,
+  productId: number
+): Promise<{ width: number; height: number } | null> {
+  const response = await fetch(`https://api.printful.com/mockup-generator/printfiles/${productId}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-PF-Store-Id": storeId
+    }
+  });
+  if (!response.ok) {
+    console.warn(`[materialize] Printfile lookup failed (${response.status}) for productId=${productId}`);
+    return null;
+  }
+  const data = (await response.json()) as {
+    result?: {
+      printfiles?: Array<{ printfile_id: number; width: number; height: number }>;
+      variant_printfiles?: Array<{ variant_id: number; placements: Record<string, number> }>;
+    };
+  };
+  const variantPrintfile = data.result?.variant_printfiles?.[0];
+  const frontPrintfileId = variantPrintfile?.placements?.front;
+  if (!frontPrintfileId) {
+    return null;
+  }
+  const printfile = data.result?.printfiles?.find((p) => p.printfile_id === frontPrintfileId);
+  if (!printfile) {
+    return null;
+  }
+  return { width: printfile.width, height: printfile.height };
+}
+
+async function createPrintfulMockupTask(
+  token: string,
+  storeId: string,
+  productId: number,
+  variantIds: number[],
+  printFileUrl: string
+): Promise<string | null> {
+  // Look up print area dimensions so we can submit a properly-positioned design.
+  // Falls back to standard 1800x2400 (12"x16" at 150 DPI) if lookup fails.
+  const printfile = await fetchPrintfulFrontPrintfile(token, storeId, productId);
+  const areaWidth = printfile?.width ?? 1800;
+  const areaHeight = printfile?.height ?? 2400;
+  // Center a square design that fills the width, with ~10% top margin so it sits near the chest.
+  const designSize = areaWidth;
+  const topOffset = Math.round(areaHeight * 0.1);
+
+  const response = await fetch(`https://api.printful.com/mockup-generator/create-task/${productId}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-PF-Store-Id": storeId,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      variant_ids: variantIds,
+      format: "jpg",
+      files: [
+        {
+          placement: "front",
+          image_url: printFileUrl,
+          position: {
+            area_width: areaWidth,
+            area_height: areaHeight,
+            width: designSize,
+            height: designSize,
+            top: topOffset,
+            left: 0
+          }
+        }
+      ]
+    })
+  });
+  const rawBody = await response.text();
+  if (!response.ok) {
+    console.warn(`[materialize] Mockup task creation failed (${response.status}): ${rawBody}`);
+    return null;
+  }
+  const data = rawBody ? (JSON.parse(rawBody) as { result?: { task_key?: string } }) : {};
+  return data.result?.task_key ?? null;
+}
+
+async function pollPrintfulMockupTask(
+  token: string,
+  storeId: string,
+  taskKey: string,
+  options: { maxAttempts?: number; intervalMs?: number } = {}
+): Promise<string[]> {
+  const maxAttempts = options.maxAttempts ?? 30;
+  const intervalMs = options.intervalMs ?? 3000;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    const response = await fetch(`https://api.printful.com/mockup-generator/task?task_key=${taskKey}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-PF-Store-Id": storeId
+      }
+    });
+    if (!response.ok) {
+      continue;
+    }
+    const data = (await response.json()) as {
+      result?: {
+        status?: string;
+        mockups?: Array<{ mockup_url?: string }>;
+        error?: string;
+      };
+    };
+    const status = data.result?.status;
+    if (status === "completed") {
+      const urls = (data.result?.mockups ?? [])
+        .map((m) => m.mockup_url)
+        .filter((u): u is string => typeof u === "string" && u.length > 0);
+      // De-duplicate (some mockups repeat across variants of the same color).
+      return Array.from(new Set(urls));
+    }
+    if (status === "failed") {
+      console.warn(`[materialize] Mockup task ${taskKey} failed: ${data.result?.error ?? "unknown"}`);
+      return [];
+    }
+  }
+  console.warn(`[materialize] Mockup task ${taskKey} timed out after ${maxAttempts * intervalMs}ms`);
+  return [];
+}
+
+async function createPrintfulSyncProduct(
+  input: MaterializationInput,
+  printFileUrl: string,
+  variantSpecs: PrintfulVariantSpec[],
+  shopifyVariantIds: number[]
+) {
+  const printful = loadPrintfulConfig();
+  if (!printful) {
+    return null;
+  }
+  const retailPrice = getDefaultRetailPrice();
+
+  // Pair each Printful variant with its Shopify counterpart (same index = same size).
+  // shopifyVariantIds may be empty if Shopify draft creation hadn't yet wired multi-variant.
+  // In that case, fall back to a single variant tagged with runtimeId.
+  const syncVariants = variantSpecs.map((spec, idx) => {
+    const shopifyVariantId = shopifyVariantIds[idx];
+    return {
+      external_id: shopifyVariantId ? String(shopifyVariantId) : `${input.runtimeId}_${spec.size}`,
+      variant_id: spec.variantId,
+      retail_price: retailPrice,
+      files: [
+        {
+          type: "default",
+          url: printFileUrl
+        }
+      ]
+    };
+  });
+
   const response = await fetch("https://api.printful.com/store/products", {
     method: "POST",
     headers: {
@@ -381,21 +701,9 @@ async function createPrintfulSyncProduct(input: MaterializationInput, imageUrl: 
       sync_product: {
         external_id: input.runtimeId,
         name: input.title,
-        thumbnail: imageUrl
+        thumbnail: printFileUrl
       },
-      sync_variants: [
-        {
-          external_id: input.runtimeId,
-          variant_id: printful.variantId,
-          retail_price: process.env.PRINTFUL_RETAIL_PRICE?.trim() || "29.99",
-          files: [
-            {
-              type: "default",
-              url: imageUrl
-            }
-          ]
-        }
-      ]
+      sync_variants: syncVariants
     })
   });
 
@@ -403,12 +711,15 @@ async function createPrintfulSyncProduct(input: MaterializationInput, imageUrl: 
   const payload = rawBody ? (JSON.parse(rawBody) as { result?: { id?: number } }) : {};
 
   if (!response.ok || !payload.result?.id) {
-    throw new Error(`Printful sync product creation failed (${response.status}): ${rawBody}`);
+    // Printful failed — log and continue. We still want the Shopify draft live.
+    console.warn(`[materialize] Printful sync product creation failed (${response.status}): ${rawBody}`);
+    return null;
   }
 
   return {
     syncProductId: payload.result.id,
-    variantId: printful.variantId
+    variantId: variantSpecs[0]?.variantId ?? printful.variantId,
+    syncedSizeCount: syncVariants.length
   };
 }
 
@@ -452,6 +763,7 @@ async function writeLocalArtifact(filename: string, buffer: Buffer) {
 }
 
 async function materializeDigitalProduct(input: MaterializationInput): Promise<MaterializedProduct> {
+  const creds = resolveShopifyCredentials(input.brand);
   const slug = slugify(input.title || input.runtimeId);
   const isSpreadsheet = /spreadsheet|workbook|excel|tracker|dashboard/i.test(input.productType);
   const filename = `${slug}.${isSpreadsheet ? "xlsx" : "pdf"}`;
@@ -462,12 +774,12 @@ async function materializeDigitalProduct(input: MaterializationInput): Promise<M
     ? await createSpreadsheetBuffer(input.title, input.description)
     : await createPdfBuffer(input.title, input.description);
   const localArtifactPath = await writeLocalArtifact(filename, buffer);
-  const file = await uploadBufferToShopifyFiles(filename, mimeType, buffer);
+  const file = await uploadBufferToShopifyFiles(creds, filename, mimeType, buffer);
   const bodyHtml = [
     renderDescriptionHtml(input.description),
     `<br /><br /><strong>Digital delivery file:</strong> <a href="${file.url}">${filename}</a>`
   ].join("");
-  const product = await createShopifyDraftProduct(input, bodyHtml);
+  const product = await createShopifyDraftProduct(creds, input, bodyHtml);
 
   return {
     opportunityId: input.runtimeId,
@@ -480,28 +792,122 @@ async function materializeDigitalProduct(input: MaterializationInput): Promise<M
     shopifyFileUrl: file.url,
     shopifyProductId: product.id,
     shopifyProductHandle: product.handle,
-    shopifyProductUrl: `https://${SHOPIFY_STORE_DOMAIN}/admin/products/${product.id}`
+    shopifyProductUrl: `https://${creds.storeDomain}/admin/products/${product.id}`
   };
 }
 
 async function materializePrintfulProduct(input: MaterializationInput): Promise<MaterializedProduct> {
-  const imagePrompt =
-    input.imagePrompt?.trim() ||
-    `Create a premium ecommerce product image for ${input.title}. ${input.description}`;
-  const generatedImage = await generateProductImage(imagePrompt);
-  const placeholderImageUrl = `https://placehold.co/1024x1024/1a1a2e/ffffff?text=${encodeURIComponent(input.title.slice(0, 30))}`;
-  const imageUrl = generatedImage.buffer.length > 0
-    ? (await uploadImageToShopifyFiles(input.title, generatedImage.buffer)).url ?? placeholderImageUrl
-    : placeholderImageUrl;
-  const printfulProduct = await createPrintfulSyncProduct(input, imageUrl);
-  const bodyHtml = [
+  const creds = resolveShopifyCredentials(input.brand);
+  const printfulConfig = loadPrintfulConfig();
+  const printfulConfigured = !!printfulConfig;
+  const imagePrompt = buildPrintArtworkPrompt(input);
+
+  // Run artwork generation and Printful catalog lookup in parallel — neither depends on the other.
+  const [generatedImage, variantInfo] = await Promise.all([
+    generateProductImage(imagePrompt, { transparent: true }),
+    printfulConfig
+      ? expandPrintfulSizeVariants(printfulConfig.token, printfulConfig.variantId)
+      : Promise.resolve({ productId: null as number | null, variants: [] as PrintfulVariantSpec[] })
+  ]);
+
+  // Upload the transparent print artwork to Shopify Files. We hand the resulting CDN URL
+  // to Printful (both for mockup generation and as the print file on the sync product).
+  const printFile = await uploadBufferToShopifyFiles(
+    creds,
+    `${slugify(input.title)}-print.png`,
+    "image/png",
+    generatedImage.buffer
+  );
+  const printFileUrl = printFile.url;
+  const sizes = variantInfo.variants.map((v) => v.size);
+
+  // Kick off mockup generation in parallel with Shopify draft creation. The mockup task
+  // itself may run 30–60s; we'll await it before attaching images.
+  const mockupPromise: Promise<string[]> =
+    printfulConfig && printFileUrl && variantInfo.productId && variantInfo.variants.length > 0
+      ? (async () => {
+          const taskKey = await createPrintfulMockupTask(
+            printfulConfig.token,
+            printfulConfig.storeId,
+            variantInfo.productId as number,
+            variantInfo.variants.map((v) => v.variantId),
+            printFileUrl
+          );
+          if (!taskKey) return [];
+          return pollPrintfulMockupTask(printfulConfig.token, printfulConfig.storeId, taskKey);
+        })()
+      : Promise.resolve<string[]>([]);
+
+  const placeholderTags: string[] = [];
+  if (!printfulConfigured) placeholderTags.push("needs-printful-binding");
+  if (!printFileUrl) placeholderTags.push("needs-print-file-url");
+
+  const shopifyProduct = await createShopifyDraftProduct(
+    creds,
+    input,
     renderDescriptionHtml(input.description),
-    `<br /><br /><strong>Printful sync product:</strong> ${printfulProduct.syncProductId}`
-  ].join("");
-  const shopifyProduct = await createShopifyDraftProduct(input, bodyHtml);
-  const shopifyImage = generatedImage.imageBase64
-    ? await attachShopifyProductImage(shopifyProduct.id, input.title, generatedImage.imageBase64)
-    : await attachShopifyProductImageFromUrl(shopifyProduct.id, input.title, imageUrl);
+    {
+      extraTags: placeholderTags,
+      sizes: sizes.length > 0 ? sizes : undefined
+    }
+  );
+
+  // Wait for mockups to finish (started in parallel with the Shopify draft).
+  const mockupUrls = await mockupPromise;
+
+  // Attach images to the Shopify product. Prefer real mockups; fall back to raw
+  // artwork only if mockup generation failed — that way the listing always has an image.
+  let primaryImageUrl: string | undefined;
+  if (mockupUrls.length > 0) {
+    for (const url of mockupUrls.slice(0, 5)) {
+      try {
+        const img = await attachShopifyProductImageFromUrl(creds, shopifyProduct.id, input.title, url);
+        if (!primaryImageUrl) primaryImageUrl = img?.src ?? url;
+      } catch (error) {
+        console.warn(`[materialize] Failed to attach mockup for "${input.title}": ${error instanceof Error ? error.message : error}`);
+      }
+    }
+  }
+  if (!primaryImageUrl && generatedImage.imageBase64) {
+    const img = await attachShopifyProductImage(creds, shopifyProduct.id, input.title, generatedImage.imageBase64);
+    primaryImageUrl = img?.src;
+  }
+
+  // Map each Shopify size variant to the Printful variant of the same size, in order.
+  const shopifyVariantIds = (shopifyProduct.variants ?? []).map((v) => v.id);
+
+  let printfulSyncProductId: number | undefined;
+  let printfulVariantId: number | undefined;
+  let syncedSizeCount = 0;
+  if (printfulConfigured && printFileUrl && variantInfo.variants.length > 0) {
+    try {
+      const printfulProduct = await createPrintfulSyncProduct(
+        input,
+        printFileUrl,
+        variantInfo.variants,
+        shopifyVariantIds
+      );
+      if (printfulProduct) {
+        printfulSyncProductId = printfulProduct.syncProductId;
+        printfulVariantId = printfulProduct.variantId;
+        syncedSizeCount = printfulProduct.syncedSizeCount;
+        await shopifyRest(creds, `/products/${shopifyProduct.id}.json`, {
+          method: "PUT",
+          body: JSON.stringify({
+            product: {
+              id: shopifyProduct.id,
+              body_html: [
+                renderDescriptionHtml(input.description),
+                `<br /><br /><strong>Printful sync product:</strong> ${printfulProduct.syncProductId} (${syncedSizeCount} sizes)`
+              ].join("")
+            }
+          })
+        });
+      }
+    } catch (error) {
+      console.warn(`[materialize] Printful sync skipped for "${input.title}": ${error instanceof Error ? error.message : "unknown error"}`);
+    }
+  }
 
   return {
     opportunityId: input.runtimeId,
@@ -513,83 +919,165 @@ async function materializePrintfulProduct(input: MaterializationInput): Promise<
     imagePrompt,
     shopifyProductId: shopifyProduct.id,
     shopifyProductHandle: shopifyProduct.handle,
-    shopifyProductUrl: `https://${SHOPIFY_STORE_DOMAIN}/admin/products/${shopifyProduct.id}`,
-    shopifyImageUrl: shopifyImage?.src ?? imageUrl,
-    printfulSyncProductId: printfulProduct.syncProductId,
-    printfulVariantId: printfulProduct.variantId
+    shopifyProductUrl: `https://${creds.storeDomain}/admin/products/${shopifyProduct.id}`,
+    shopifyImageUrl: primaryImageUrl ?? printFileUrl ?? undefined,
+    printfulSyncProductId,
+    printfulVariantId
   };
 }
 
-async function materializeZendropProduct(input: MaterializationInput): Promise<MaterializedProduct> {
-  const keywords = Array.from(
-    new Set(
-      [input.title, input.productType, input.buildSummary, ...(input.keywords ?? [])]
-        .flatMap((value) => value?.split(/[,\n]/g) ?? [])
-        .map((value) => value.trim())
-        .filter(Boolean)
-    )
-  ).slice(0, 8);
-  const [sourcedProduct] = await searchZendropProducts({
-    niche: input.niche || input.title,
-    keywords,
-    limit: 5
-  });
+// Map LockLayer-relevant niches to CJ category IDs. Free-text search on CJ is too
+// noisy to use directly (matches each word independently), so we route the niche
+// to a CJ category and let agents pick from category contents instead.
+const CJ_LOCKLAYER_CATEGORY_KEYWORDS = /smart|security|surveillance|camera|lock|sensor|alarm|doorbell|spy|monitor|hidden/i;
 
-  if (!sourcedProduct) {
-    throw new Error("Zendrop search returned no usable products with title, image, and price.");
+async function pickCjCategoryForNiche(niche: string): Promise<string | null> {
+  const matches = await findCjCategoryIds(CJ_LOCKLAYER_CATEGORY_KEYWORDS);
+  if (matches.length === 0) return null;
+  // Prefer the explicit Security & Protection category (Computer & Office subtree)
+  // — it's the most on-brand for LockLayer. Fall back to Smart Electronics for IoT.
+  const security = matches.find((m) => /Security & Protection/i.test(m.path));
+  if (security) return security.id;
+  const smart = matches.find((m) => /Smart Electronics/i.test(m.path));
+  if (smart) return smart.id;
+  return matches[0].id;
+}
+
+// Markup factor applied to the CJ source price when setting the Shopify retail
+// price. 3.5× covers shipping, ad spend, and target margin for impulse-buy IoT.
+const DROPSHIP_MARKUP = Number(process.env.DROPSHIP_MARKUP ?? "3.5");
+
+function computeRetailPriceFromCost(costMin: number, costMax: number): string {
+  const cost = Number.isFinite(costMax) && costMax > 0 ? costMax : costMin;
+  if (!Number.isFinite(cost) || cost <= 0) return getDefaultRetailPrice();
+  const retail = cost * DROPSHIP_MARKUP;
+  // Round to .99 for psych pricing.
+  const dollars = Math.max(Math.floor(retail), 1);
+  return `${dollars}.99`;
+}
+
+async function materializeDropshipProduct(input: MaterializationInput): Promise<MaterializedProduct> {
+  const creds = resolveShopifyCredentials(input.brand);
+  let sourced: CjProductDetail | undefined;
+
+  if (input.sourceProductId) {
+    // Caller pinned a specific CJ pid (e.g. push-cj-listings.ts pre-picks 5).
+    // Fetch detail directly — no search/category lookup needed.
+    const detail = await getCjProductDetail(input.sourceProductId);
+    if (!detail) {
+      throw new Error(`CJ product ${input.sourceProductId} not found or has no detail.`);
+    }
+    sourced = detail;
+  } else {
+    // Fall back: search by niche → category → first usable. This path is what
+    // the autonomous agent runtime hits; it produces ONE product per call so
+    // the caller is responsible for varying niche to get variety.
+    const niche = input.niche || input.title || "smart home security";
+    const categoryId = await pickCjCategoryForNiche(niche);
+    if (!categoryId) {
+      throw new Error(`No CJ category matched the niche "${niche}".`);
+    }
+    const candidates = await searchAndDetailCjProducts({
+      categoryId,
+      pageSize: 10,
+      detailLimit: 5
+    });
+    sourced = candidates.find(
+      (c) => c.images.length > 0 && (c.priceMin > 0 || c.variants.some((v) => v.variantSellPrice > 0))
+    );
+    if (!sourced) {
+      throw new Error(`CJ category ${categoryId} returned no usable products with image and price.`);
+    }
   }
 
+  const retailPrice = computeRetailPriceFromCost(sourced.priceMin, sourced.priceMax);
+  const brand: Brand = resolveBrand(input.brand);
+
+  // Strip CJ's raw HTML / supplier-CDN <img> tags before anything else touches
+  // the description. Cleaned text is what goes to the AI rewriter (and is the
+  // fallback if the rewriter fails).
+  const cleanedRawDescription =
+    cleanCjDescription(input.description) || cleanCjDescription(sourced.description) || sourced.title;
+
+  // Hand the cleaned spec sheet to Claude to rewrite as on-brand customer copy.
+  // Fall back to the raw bullets if the rewriter fails — broken supplier copy
+  // beats no listing.
+  let bodyHtml: string;
+  let aiTitle: string | undefined;
+  try {
+    const rewritten = await rewriteProductDescription({
+      brand,
+      rawTitle: sourced.title,
+      rawDescription: cleanedRawDescription,
+      category: sourced.categoryName
+    });
+    bodyHtml = rewritten.bodyHtml;
+    aiTitle = rewritten.promotionalTitle;
+  } catch (error) {
+    console.warn(
+      `[materialize] Description rewrite failed for "${sourced.title}": ${error instanceof Error ? error.message : error}; falling back to clean bullets.`
+    );
+    const cleanedSourced: CjProductDetail = { ...sourced, description: cleanedRawDescription };
+    bodyHtml = renderDropshipBodyHtml(cleanedRawDescription, cleanedSourced);
+  }
+
+  // Prefer the AI's customer-friendly title over CJ's comma-soup title, but
+  // only if it's reasonable (non-empty, under 120 chars).
+  const finalTitle = aiTitle && aiTitle.length > 0 && aiTitle.length < 120 ? aiTitle : sourced.title;
   const sourcedInput: MaterializationInput = {
     ...input,
-    title: sourcedProduct.title,
-    productType: sourcedProduct.productType || input.productType
+    title: finalTitle,
+    productType: sourced.categoryName || input.productType
   };
-  const bodyHtml = renderZendropBodyHtml(input.description, sourcedProduct);
-  const shopifyProduct = await createShopifyDraftProduct(sourcedInput, bodyHtml);
-  const shopifyImage = sourcedProduct.images[0]
-    ? await attachShopifyProductImageFromUrl(shopifyProduct.id, sourcedProduct.title, sourcedProduct.images[0])
-    : null;
+
+  const shopifyProduct = await createShopifyDraftProduct(creds, sourcedInput, bodyHtml, {
+    retailPrice,
+    extraTags: ["cj-sourced", `cj-pid:${sourced.pid}`]
+  });
+
+  // Attach up to 5 images from CJ's gallery to the Shopify listing.
+  let primaryImageUrl: string | undefined;
+  for (const url of sourced.images.slice(0, 5)) {
+    try {
+      const img = await attachShopifyProductImageFromUrl(creds, shopifyProduct.id, sourced.title, url);
+      if (!primaryImageUrl) primaryImageUrl = img?.src ?? url;
+    } catch (error) {
+      console.warn(`[materialize] Failed to attach CJ image for "${sourced.title}": ${error instanceof Error ? error.message : error}`);
+    }
+  }
 
   return {
     opportunityId: input.runtimeId,
-    title: sourcedProduct.title,
+    title: finalTitle,
     description: input.description,
     productType: sourcedInput.productType,
     fulfillmentType: "zendrop",
     status: "created",
     shopifyProductId: shopifyProduct.id,
     shopifyProductHandle: shopifyProduct.handle,
-    shopifyProductUrl: `https://${SHOPIFY_STORE_DOMAIN}/admin/products/${shopifyProduct.id}`,
-    shopifyImageUrl: shopifyImage?.src ?? sourcedProduct.images[0],
-    zendropProductId: sourcedProduct.id,
-    zendropProductUrl: sourcedProduct.productUrl,
-    zendropImages: sourcedProduct.images,
-    zendropPrice: sourcedProduct.price,
-    zendropCurrency: sourcedProduct.currency
+    shopifyProductUrl: `https://${creds.storeDomain}/admin/products/${shopifyProduct.id}`,
+    shopifyImageUrl: primaryImageUrl ?? sourced.images[0],
+    zendropProductId: sourced.pid,
+    zendropProductUrl: sourced.productUrl,
+    zendropImages: sourced.images,
+    zendropPrice: sourced.priceMax || sourced.priceMin,
+    zendropCurrency: sourced.currency
   };
 }
 
-function renderZendropBodyHtml(description: string, sourcedProduct: ZendropProduct) {
-  const priceLabel = Number.isFinite(sourcedProduct.price)
-    ? `${sourcedProduct.currency} ${sourcedProduct.price.toFixed(2)}`
-    : sourcedProduct.currency;
-
-  return [
-    renderDescriptionHtml(description),
-    "<br /><br /><strong>Zendrop source product:</strong>",
-    `<br />${escapeHtml(sourcedProduct.title)}`,
-    `<br />Source price: ${escapeHtml(priceLabel)}`,
-    sourcedProduct.productUrl
-      ? `<br /><a href="${escapeHtml(sourcedProduct.productUrl)}">View sourced product</a>`
-      : ""
-  ].join("");
+// Customer-facing body_html. NEVER include supplier name, supplier URL, or
+// source cost — those leak to anyone viewing the storefront and let buyers
+// bypass you. Source traceability lives in the `cj-pid:<pid>` tag instead.
+function renderDropshipBodyHtml(description: string, sourced: CjProductDetail) {
+  return renderDescriptionHtml(description || sourced.description || sourced.title);
 }
 
 export async function materializeProduct(input: MaterializationInput): Promise<MaterializedProduct> {
   const resolvedFulfillmentType = resolveFulfillmentType(input);
   const normalizedInput: MaterializationInput = {
     ...input,
-    fulfillmentType: resolvedFulfillmentType
+    fulfillmentType: resolvedFulfillmentType,
+    brand: input.brand ?? defaultBrandForFulfillment(resolvedFulfillmentType)
   };
 
   try {
@@ -598,7 +1086,7 @@ export async function materializeProduct(input: MaterializationInput): Promise<M
     }
 
     if (resolvedFulfillmentType === "zendrop") {
-      return await materializeZendropProduct(normalizedInput);
+      return await materializeDropshipProduct(normalizedInput);
     }
 
     return await materializeDigitalProduct(normalizedInput);

@@ -3,6 +3,8 @@ import "server-only";
 import { createQueuedAgentRuns } from "@/lib/agent-registry";
 import { AGENT_ROLE_DEFINITIONS, runAutonomousAgentRuntime, type AgentRunTrace } from "@/lib/agent-runtime";
 import { materializeProduct } from "@/lib/product-materialization";
+import { evaluateBrandFit } from "@/lib/brand-fit-filter";
+import { withSpendKind } from "@/lib/spend-tracker";
 import { buildRuntimeStartupReport } from "@/lib/runtime-health";
 import { loadLocalTrainingData } from "@/lib/local-training-data";
 import { estimateResearchExampleTokens } from "@/lib/token-batching";
@@ -133,7 +135,14 @@ function subsetByTokenBudget(examples: ResearchExample[], budget: number): { kep
   return { kept, tokensUsed };
 }
 
-async function executeAutonomousRun(runId: string, _body: AutonomousRunRequest, goal: string, startupCheck: RuntimeStartupReport) {
+function executeAutonomousRun(runId: string, body: AutonomousRunRequest, goal: string, startupCheck: RuntimeStartupReport) {
+  // Tag every Claude/OpenAI call inside this run so the spend tracker knows
+  // the 11-agent pipeline was the source. Without the wrapper, the calls
+  // would bucket as "unknown" and pipeline cost would be invisible.
+  return withSpendKind("pipeline_agents", () => executeAutonomousRunInner(runId, body, goal, startupCheck));
+}
+
+async function executeAutonomousRunInner(runId: string, _body: AutonomousRunRequest, goal: string, startupCheck: RuntimeStartupReport) {
   // Helper: log a structured step inline so the user sees real-time progress in the SSE log.
   const log = async (
     stage: AutonomousRunLog["stage"],
@@ -225,9 +234,54 @@ async function executeAutonomousRun(runId: string, _body: AutonomousRunRequest, 
     const materializeStart = Date.now();
     const materializedProducts = await Promise.all(
       opportunitiesToMaterialize.map(async (opportunity) => {
+        // Routing rules (in priority order):
+        //   1. If the opportunity explicitly mentions zendrop/dropship AND we have a ZENDROP key → zendrop.
+        //   2. If the opportunity explicitly mentions a clearly-digital deliverable (PDF, ebook, planner,
+        //      printable, spreadsheet, template) → digital.
+        //   3. Otherwise → printful (Shopify draft + AI-generated product image). This is the safe
+        //      default because almost every other niche we surface (apparel, wall art, mugs, totes,
+        //      hoodies, posters, canvas, decor) is a Printful candidate, and the printful materialization
+        //      branch is also the one that gracefully degrades when no PRINTFUL_STORE_ID is configured —
+        //      it still creates the Shopify draft with the AI image so the listing actually goes live.
+        const deliverable = `${opportunity.deliverableType ?? ""} ${opportunity.productServiceType ?? ""}`.toLowerCase();
+        const hasZendropKey = !!process.env.ZENDROP_API_KEY?.trim();
+        const isDropship = /\b(zendrop|dropship)\b/.test(deliverable);
+        const isDigital = /\b(pdf|ebook|e-book|planner|printable|spreadsheet|template|workbook|digital download|guide|checklist|sticker pack)\b/.test(deliverable);
         const fulfillmentType: "printful" | "zendrop" | "digital" =
-          /printful|print.on.demand/i.test(opportunity.deliverableType) ? "printful" :
-          /zendrop|dropship/i.test(opportunity.deliverableType) ? "zendrop" : "digital";
+          isDropship && hasZendropKey ? "zendrop" :
+          isDigital ? "digital" :
+          "printful";
+
+        // Brand-fit gate: refuse to auto-materialize off-brand opportunities.
+        // The pipeline drifts toward occupation-specific apparel and digital
+        // tools; this is the single chokepoint where we keep that out of the
+        // storefronts.
+        const inferredBrand = fulfillmentType === "printful" ? "black-vault-apparel" : "locklayer";
+        const fit = evaluateBrandFit(
+          {
+            title: opportunity.title,
+            productServiceType: opportunity.productServiceType,
+            deliverableType: opportunity.deliverableType,
+            niche: opportunity.niche
+          },
+          fulfillmentType,
+          inferredBrand
+        );
+        if (!fit.ok) {
+          await log("build", "warning",
+            `Skipped "${opportunity.title}": ${fit.reason}`,
+            "Off-brand opportunity blocked by brand-fit filter (no draft created).");
+          return {
+            opportunityId: opportunity.runtimeId,
+            title: opportunity.title,
+            description: opportunity.buildGoal ?? opportunity.whyItMaySell,
+            productType: opportunity.productServiceType,
+            fulfillmentType,
+            status: "failed" as const,
+            error: `Skipped by brand-fit filter: ${fit.reason}`
+          };
+        }
+
         await log("build", "info",
           `Materializing "${opportunity.title}" (${fulfillmentType}, niche: ${opportunity.niche})`);
         try {

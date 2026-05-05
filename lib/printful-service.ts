@@ -90,11 +90,27 @@ async function createPrintfulSyncProduct(spec: BuildSpec, imageUrl: string, conf
 
 export async function buildPrintfulProduct(spec: BuildSpec): Promise<BuiltProduct> {
   const config = ensurePrintfulConfig();
-  const imagePrompt =
-    spec.imagePrompt?.trim() ||
-    `Create a premium print-on-demand product image for ${spec.title}. ${spec.description}`;
-  const generatedImage = await generateProductImage(imagePrompt);
-  const uploadedImage = await uploadBufferToShopifyFiles(`${slugify(spec.title)}.png`, "image/png", generatedImage.buffer);
+  const direction = spec.imagePrompt?.trim();
+  const themeLine = direction
+    ? `Theme and style direction: ${direction}`
+    : `Theme: ${spec.title}. ${spec.description}`;
+  // Print artwork only — Printful prints the PNG as-is onto the shirt, so this must
+  // be the design alone on a transparent canvas, never a photo of a finished product.
+  const imagePrompt = [
+    `Print-on-demand apparel artwork. Bold, high-contrast graphic design intended to be printed directly onto a t-shirt or hoodie.`,
+    themeLine,
+    `Output requirements: flat 2D artwork only — the design itself, centered on a fully transparent background. Do NOT depict a t-shirt, hoodie, garment, mockup, hanger, mannequin, or any product photography. No shadows, no studio lighting, no fabric texture, no folds. The image must be ready to drop straight onto a blank shirt as a print file.`,
+    `Composition: design fills roughly the central 70% of the canvas, with clear empty (transparent) margins. Crisp clean lines, suitable for screen printing or DTG. Limited color palette unless the theme requires otherwise. No watermarks, no signatures, no extra text outside what the design itself calls for.`
+  ].join(" ");
+  const generatedImage = await generateProductImage(imagePrompt, { transparent: true });
+  // Apparel hosts on Black Vault Apparel's Shopify storefront. Pin the upload to that
+  // store so the resulting CDN URL belongs to the same shop where the listing lives.
+  const uploadedImage = await uploadBufferToShopifyFiles(
+    `${slugify(spec.title)}.png`,
+    "image/png",
+    generatedImage.buffer,
+    "black-vault-apparel"
+  );
 
   if (!uploadedImage.url) {
     throw new Error(`Image hosting did not return a public URL for "${spec.title}".`);

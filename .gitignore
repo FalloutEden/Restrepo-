@@ -10,3 +10,4 @@ yarn-error.log*
 pnpm-debug.log*
 dev-*.log
 coverage
+.claude/settings.local.json

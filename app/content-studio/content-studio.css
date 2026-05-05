@@ -1,0 +1,326 @@
+.cs-header {
+  margin: 24px 0 12px;
+}
+
+.cs-title {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 4px 0 8px;
+}
+
+.cs-sub {
+  color: rgba(255, 255, 255, 0.65);
+  max-width: 720px;
+  line-height: 1.5;
+}
+
+.cs-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2.5fr);
+  gap: 24px;
+  margin-top: 24px;
+}
+
+@media (max-width: 1024px) {
+  .cs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cs-card {
+  background: rgba(20, 22, 30, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.cs-card h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.cs-drop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.cs-drop-row {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+
+.cs-drop-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cs-drop-row.cs-active {
+  border-color: rgba(110, 150, 230, 0.85);
+  background: rgba(80, 110, 200, 0.18);
+}
+
+.cs-drop-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.cs-drop-meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 2px;
+}
+
+.cs-drop-status {
+  display: inline-block;
+  font-size: 11px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-left: 8px;
+  letter-spacing: 0.05em;
+}
+
+.cs-status-draft {
+  background: rgba(180, 180, 180, 0.2);
+  color: rgba(220, 220, 220, 0.85);
+}
+
+.cs-status-generating {
+  background: rgba(220, 180, 80, 0.25);
+  color: rgba(255, 220, 130, 1);
+}
+
+.cs-status-ready {
+  background: rgba(80, 200, 130, 0.22);
+  color: rgba(170, 255, 200, 1);
+}
+
+.cs-status-posted {
+  background: rgba(120, 100, 220, 0.22);
+  color: rgba(200, 180, 255, 1);
+}
+
+.cs-button {
+  background: rgba(110, 150, 230, 0.85);
+  color: white;
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.cs-button:hover {
+  background: rgba(130, 170, 250, 1);
+}
+
+.cs-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cs-button-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.cs-button-secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.cs-button-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.cs-input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: white;
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+}
+
+.cs-select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: white;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.cs-form-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.cs-form-row > * {
+  flex: 1;
+  min-width: 180px;
+}
+
+.cs-upload-zone {
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  margin: 16px 0;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.cs-upload-zone.cs-drag-over {
+  border-color: rgba(110, 150, 230, 0.85);
+  background: rgba(80, 110, 200, 0.12);
+}
+
+.cs-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cs-asset-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cs-asset-thumb-video {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: black;
+}
+
+.cs-asset-tile {
+  position: relative;
+}
+
+.cs-asset-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 4px;
+  text-align: center;
+}
+
+.cs-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 24px 0 8px;
+}
+
+.cs-post {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.cs-post-platform {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(180, 220, 255, 0.9);
+  margin-bottom: 6px;
+}
+
+.cs-post-caption {
+  font-size: 13px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  padding: 10px;
+  margin: 6px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.cs-post-hashtags {
+  font-size: 12px;
+  color: rgba(150, 200, 255, 0.85);
+  margin: 6px 0;
+}
+
+.cs-post-notes {
+  font-size: 12px;
+  color: rgba(255, 220, 130, 0.8);
+  font-style: italic;
+  margin: 4px 0;
+}
+
+.cs-post-assets {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin: 4px 0;
+}
+
+.cs-empty {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
+
+.cs-log {
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 8px;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.cs-log-line {
+  margin-bottom: 2px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.cs-log-warn {
+  color: rgba(255, 220, 130, 1);
+}
+
+.cs-log-error {
+  color: rgba(255, 130, 130, 1);
+}
+
+.cs-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 8px 0 16px;
+}
