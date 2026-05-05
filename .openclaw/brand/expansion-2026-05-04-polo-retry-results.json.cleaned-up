@@ -1,0 +1,20 @@
+[
+  {
+    "slug": "the-performance-polo-black",
+    "name": "The Performance Polo",
+    "color": "Black",
+    "shopifyProductId": 7625752215650,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625752215650",
+    "printfulSyncProductId": 430994266,
+    "status": "created"
+  },
+  {
+    "slug": "the-performance-polo-white",
+    "name": "The Performance Polo in White",
+    "color": "White",
+    "shopifyProductId": 7625752313954,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625752313954",
+    "printfulSyncProductId": 430994316,
+    "status": "created"
+  }
+]

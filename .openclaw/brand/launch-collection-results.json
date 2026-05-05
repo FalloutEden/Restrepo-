@@ -1,0 +1,42 @@
+[
+  {
+    "slug": "the-monogram-tee",
+    "name": "The Monogram Tee",
+    "shopifyProductId": 7623581532258,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7623581532258",
+    "printfulSyncProductId": 430513612,
+    "status": "created"
+  },
+  {
+    "slug": "the-vault-tee",
+    "name": "The Vault Tee",
+    "shopifyProductId": 7623581597794,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7623581597794",
+    "printfulSyncProductId": 430513709,
+    "status": "created"
+  },
+  {
+    "slug": "the-heavyweight-hoodie",
+    "name": "The Heavyweight Hoodie",
+    "shopifyProductId": 7623581728866,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7623581728866",
+    "printfulSyncProductId": 430513822,
+    "status": "created"
+  },
+  {
+    "slug": "the-crewneck",
+    "name": "The Crewneck",
+    "shopifyProductId": 7623582023778,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7623582023778",
+    "printfulSyncProductId": 430513982,
+    "status": "created"
+  },
+  {
+    "slug": "the-long-sleeve",
+    "name": "The Long Sleeve",
+    "shopifyProductId": 7623582089314,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7623582089314",
+    "printfulSyncProductId": 430514134,
+    "status": "created"
+  }
+]

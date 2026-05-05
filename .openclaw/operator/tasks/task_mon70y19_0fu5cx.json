@@ -1,0 +1,13 @@
+{
+  "id": "task_mon70y19_0fu5cx",
+  "title": "Add `write_legal_policies` scope to Shopify custom apps",
+  "detail": "Both LockLayer and Black Vault Apparel rejected publish_policies with \"Access denied for shopPolicyUpdate field. Required access: `write_legal_policies` access scope.\" \n\nSteps for each store:\n1. Shopify admin → Settings → Apps and sales channels → Develop apps\n2. Open the Restrepo custom app\n3. Configuration → Admin API access scopes → enable `write_legal_policies` (and `read_legal_policies` if shown)\n4. Save → reinstall the app when prompted (this issues a new access token)\n5. If a new token is generated, update it in Restrepo's env config\n\nDo this on both the locklayer and black-vault-apparel stores. Once done, ping me and I'll re-run publish_policies for both.",
+  "why": "Scope changes on Shopify custom apps require a logged-in store admin — I can't toggle API permissions or rotate tokens.",
+  "source": {
+    "kind": "chat",
+    "conversationId": "conv_mon46dlk_k3qvk0"
+  },
+  "status": "done",
+  "createdAt": "2026-05-01T17:35:09.651Z",
+  "resolvedAt": "2026-05-04T13:47:16.236Z"
+}

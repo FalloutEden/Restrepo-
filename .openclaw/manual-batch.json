@@ -1,0 +1,40 @@
+{
+  "products": [
+    {
+      "title": "Pediatric PT Milestone Canvas - Thank You for Helping Me Move Mountains",
+      "description": "Premium gallery-wrapped canvas honoring pediatric physical therapists. Hand-lettered phrase 'Thank you for helping me move mountains' set against a soft watercolor mountain range. The gift parents reach for when their child finally walks, runs, or climbs the stairs. Arrives ready to hang.",
+      "productType": "Wall Art",
+      "fulfillmentType": "printful",
+      "niche": "Healthcare appreciation gifts",
+      "keywords": ["pediatric pt gift", "physical therapist gift", "milestone canvas"],
+      "imagePrompt": "Premium product photo of a 16x20 inch gallery-wrapped canvas hanging on a soft warm-grey wall. Hand-lettered phrase 'Thank you for helping me move mountains' in dark slate, layered watercolor mountain range below in dusty blue and sage. Studio lighting, sharp focus, no extra text outside the canvas, no logos."
+    },
+    {
+      "title": "Foster Dog Parent - Saving Lives One Paw at a Time Tee",
+      "description": "Heavyweight cotton tee for foster dog parents. Quiet, confident chest print: 'Saving lives one paw at a time.' Designed by foster volunteers, for foster volunteers. Side seamed, pre-shrunk, made to survive a thousand walks.",
+      "productType": "Apparel",
+      "fulfillmentType": "printful",
+      "niche": "Pet foster care identity",
+      "keywords": ["foster dog parent", "rescue tee", "dog rescue volunteer"],
+      "imagePrompt": "Premium product photo of a heather forest green heavyweight cotton t-shirt laid flat on natural oak wood. Subtle chest graphic of a dog paw print with the line 'Saving lives one paw at a time' below in clean modern sans-serif. Studio lighting, sharp focus, no extra text or logos."
+    },
+    {
+      "title": "Radiation Therapy Tech Pride - Precision Saves Lives Hoodie",
+      "description": "Embroidered hoodie built for radiation therapists. Crest reads 'Precision saves lives' — the unspoken creed of every RT tech who has ever calibrated a beam to the millimeter. Soft brushed fleece, ribbed cuffs, kangaroo pocket.",
+      "productType": "Apparel",
+      "fulfillmentType": "printful",
+      "niche": "Medical specialist identity",
+      "keywords": ["radiation therapist hoodie", "rt tech gift", "medical specialist apparel"],
+      "imagePrompt": "Premium product photo of a navy blue heavyweight pullover hoodie laid flat on light grey concrete. Embroidered left-chest crest with crosshair-and-shield motif and the line 'Precision saves lives' in tonal navy thread. Studio lighting, sharp focus, no extra text or logos."
+    },
+    {
+      "title": "Night Shift ICU - Vampire Shift Warrior Insulated Tumbler",
+      "description": "20oz double-wall vacuum-insulated tumbler for the ones who keep the ICU breathing through the dark hours. Wrap-around design with 'Vampire Shift Warrior' badge and a pulse-line motif. Keeps coffee hot for 12 hours — long enough for any night shift.",
+      "productType": "Drinkware",
+      "fulfillmentType": "printful",
+      "niche": "Healthcare shift solidarity",
+      "keywords": ["icu nurse tumbler", "night shift nurse gift", "vampire shift"],
+      "imagePrompt": "Premium product photo of a matte black 20oz stainless steel insulated tumbler standing upright on slate background. Wrap-around design featuring a deep crimson pulse line and a small badge reading 'Vampire Shift Warrior' in white. Studio lighting, sharp focus, no extra text or logos."
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+[init] brand=black-vault-apparel store=tnbgmr-2d.myshopify.com
+[init] uploading BV monogram for production + mockup gen…
+[init] design URL: https://cdn.shopify.com/s/files/1/0674/3991/9202/files/blackvault-monogram-v2-1777903990391.png?v=1777903977
+
+=== PHASE 1: Printful sync products + Shopify drafts ===
+  [the-monogram-tee-white] product=508 color=White sizes=S,M,L,XL,2XL,3XL
+  [the-monogram-tee-white] printful sync 430996312
+  [the-monogram-tee-white] shopify draft 7625765191778
+  [the-vault-tee-white] product=586 color=White sizes=S,M,L,XL,2XL,3XL
+  [the-vault-tee-white] printful sync 430996321
+  [the-vault-tee-white] shopify draft 7625765224546
+  [the-heavyweight-hoodie-white] product=831 color=White sizes=S,M,L,XL,2XL
+  [the-heavyweight-hoodie-white] printful sync 430996329
+  [the-heavyweight-hoodie-white] shopify draft 7625765257314
+  [the-crewneck-white] product=845 color=White sizes=S,M,L,XL,2XL,3XL
+  [the-crewneck-white] printful sync 430996334
+  [the-crewneck-white] shopify draft 7625765290082
+  [the-polo-white] product=340 color=White sizes=S,M,L,XL,2XL,3XL
+  [the-polo-white] printful sync 430996340
+  [the-polo-white] shopify draft 7625765322850
+  [the-cropped-tee-black] product=636 color=Black sizes=XS,S,M,L,XL
+  [the-cropped-tee-black] printful sync 430996346
+  [the-cropped-tee-black] shopify draft 7625765355618
+  [the-cropped-tee-white] product=636 color=White sizes=XS,S,M,L,XL
+  [the-cropped-tee-white] printful sync 430996350
+  [the-cropped-tee-white] shopify draft 7625765388386
+  [the-relaxed-tee-black] product=360 color=Black sizes=S,M,L,XL,2XL,3XL
+  [the-relaxed-tee-black] printful sync 430996355
+  [the-relaxed-tee-black] shopify draft 7625765421154
+  [the-relaxed-tee-white] product=360 color=White sizes=S,M,L,XL,2XL,3XL
+  [the-relaxed-tee-white] printful sync 430996359
+  [the-relaxed-tee-white] shopify draft 7625765453922
+  [the-womens-hoodie-black] product=832 color=Black sizes=S,M,L,XL,2XL
+  [the-womens-hoodie-black] printful sync 430996365
+  [the-womens-hoodie-black] shopify draft 7625765486690
+  [the-womens-hoodie-white] product=832 color=White sizes=S,M,L,XL,2XL
+  [the-womens-hoodie-white] FAILED phase 1: Printful POST /store/products (429): {"code":429,"result":"You've recently sent too many requests. Please try again after 57 seconds.","error":{"reason":"TooManyRequests","message":"You've recently sent too many requests. Please try again after 57 seconds."}}
+Phase 1 done: 10/11 sync+drafts created
+
+=== PHASE 2: positioned mockups + image attach ===
+  [the-monogram-tee-white] mockup task=gt-916496325
+  [the-monogram-tee-white] 6 mockups returned
+  [the-monogram-tee-white] ✓ wiped 0 old, attached 5 mockups
+  [the-vault-tee-white] waiting 65s for Printful mockup-gen rate limit…
+  [the-vault-tee-white] mockup task=gt-916496717
+  [the-vault-tee-white] 4 mockups returned
+  [the-vault-tee-white] ✓ wiped 0 old, attached 4 mockups
+  [the-heavyweight-hoodie-white] waiting 65s for Printful mockup-gen rate limit…
+  [the-heavyweight-hoodie-white] mockup task=gt-916497155
+  [the-heavyweight-hoodie-white] 6 mockups returned
+  [the-heavyweight-hoodie-white] ✓ wiped 0 old, attached 5 mockups
+  [the-crewneck-white] waiting 65s for Printful mockup-gen rate limit…
+  [the-crewneck-white] mockup task=gt-916497572
+  [the-crewneck-white] 4 mockups returned
+  [the-crewneck-white] ✓ wiped 0 old, attached 4 mockups
+  [the-polo-white] waiting 65s for Printful mockup-gen rate limit…
+  [the-polo-white] mockup task=gt-916498002
+  [the-polo-white] 4 mockups returned
+  [the-polo-white] ✓ wiped 0 old, attached 4 mockups
+  [the-cropped-tee-black] waiting 65s for Printful mockup-gen rate limit…
+  [the-cropped-tee-black] mockup task=gt-916498425
+  [the-cropped-tee-black] 6 mockups returned
+  [the-cropped-tee-black] ✓ wiped 0 old, attached 5 mockups
+  [the-cropped-tee-white] waiting 65s for Printful mockup-gen rate limit…
+  [the-cropped-tee-white] mockup task=gt-916498820
+  [the-cropped-tee-white] 6 mockups returned
+  [the-cropped-tee-white] ✓ wiped 0 old, attached 5 mockups
+  [the-relaxed-tee-black] waiting 65s for Printful mockup-gen rate limit…
+  [the-relaxed-tee-black] mockup task=gt-916499230
+  [the-relaxed-tee-black] 4 mockups returned
+  [the-relaxed-tee-black] ✓ wiped 0 old, attached 4 mockups
+  [the-relaxed-tee-white] waiting 65s for Printful mockup-gen rate limit…
+  [the-relaxed-tee-white] mockup task=gt-916499582
+  [the-relaxed-tee-white] 4 mockups returned
+  [the-relaxed-tee-white] ✓ wiped 0 old, attached 4 mockups
+  [the-womens-hoodie-black] waiting 65s for Printful mockup-gen rate limit…
+  [the-womens-hoodie-black] mockup task=gt-916499955
+  [the-womens-hoodie-black] 6 mockups returned
+  [the-womens-hoodie-black] ✓ wiped 0 old, attached 5 mockups
+
+=== SUMMARY ===
+Phase 1 (sync+draft): 10/11
+Phase 2 (mockups):    10/10
+✓ The Monogram Tee in White [White]  shopify=7625765191778  printful=430996312
+  https://tnbgmr-2d.myshopify.com/admin/products/7625765191778
+✓ The Vault Tee in White [White]  shopify=7625765224546  printful=430996321
+  https://tnbgmr-2d.myshopify.com/admin/products/7625765224546
+✓ The Heavyweight Hoodie in White [White]  shopify=7625765257314  printful=430996329
+  https://tnbgmr-2d.myshopify.com/admin/products/7625765257314
+✓ The Crewneck in White [White]  shopify=7625765290082  printful=430996334
+  https://tnbgmr-2d.myshopify.com/admin/products/7625765290082
+✓ The Polo in White [White]  shopify=7625765322850  printful=430996340
+  https://tnbgmr-2d.myshopify.com/admin/products/7625765322850
+✓ The Cropped Tee [Black]  shopify=7625765355618  printful=430996346
+  https://tnbgmr-2d.myshopify.com/admin/products/7625765355618
+✓ The Cropped Tee in White [White]  shopify=7625765388386  printful=430996350
+  https://tnbgmr-2d.myshopify.com/admin/products/7625765388386
+✓ The Relaxed Tee [Black]  shopify=7625765421154  printful=430996355
+  https://tnbgmr-2d.myshopify.com/admin/products/7625765421154
+✓ The Relaxed Tee in White [White]  shopify=7625765453922  printful=430996359
+  https://tnbgmr-2d.myshopify.com/admin/products/7625765453922
+✓ The Hoodie [Black]  shopify=7625765486690  printful=430996365
+  https://tnbgmr-2d.myshopify.com/admin/products/7625765486690
+
+Results saved to C:\Agents\Restrepo-\.openclaw\brand\expansion-v2-results.json

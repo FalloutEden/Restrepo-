@@ -1,0 +1,173 @@
+[
+  {
+    "slug": "the-monogram-tee-white",
+    "name": "The Monogram Tee in White",
+    "color": "White",
+    "printfulProductId": 508,
+    "shopifyProductId": 7625765191778,
+    "printfulSyncProductId": 430996312,
+    "variantIds": [
+      12761,
+      12762,
+      12763,
+      12764,
+      12765,
+      12767
+    ]
+  },
+  {
+    "slug": "the-vault-tee-white",
+    "name": "The Vault Tee in White",
+    "color": "White",
+    "printfulProductId": 586,
+    "shopifyProductId": 7625765224546,
+    "printfulSyncProductId": 430996321,
+    "variantIds": [
+      15124,
+      15125,
+      15126,
+      15127,
+      15128,
+      16335
+    ]
+  },
+  {
+    "slug": "the-heavyweight-hoodie-white",
+    "name": "The Heavyweight Hoodie in White",
+    "color": "White",
+    "printfulProductId": 831,
+    "shopifyProductId": 7625765257314,
+    "printfulSyncProductId": 430996329,
+    "variantIds": [
+      21152,
+      21156,
+      21160,
+      21164,
+      21168
+    ]
+  },
+  {
+    "slug": "the-crewneck-white",
+    "name": "The Crewneck in White",
+    "color": "White",
+    "printfulProductId": 845,
+    "shopifyProductId": 7625765290082,
+    "printfulSyncProductId": 430996334,
+    "variantIds": [
+      22460,
+      22465,
+      22470,
+      22475,
+      22480,
+      22485
+    ]
+  },
+  {
+    "slug": "the-polo-white",
+    "name": "The Polo in White",
+    "color": "White",
+    "printfulProductId": 340,
+    "shopifyProductId": 7625765322850,
+    "printfulSyncProductId": 430996340,
+    "variantIds": [
+      9903,
+      9904,
+      9905,
+      9906,
+      9907,
+      15431
+    ]
+  },
+  {
+    "slug": "the-cropped-tee-black",
+    "name": "The Cropped Tee",
+    "color": "Black",
+    "printfulProductId": 636,
+    "shopifyProductId": 7625765355618,
+    "printfulSyncProductId": 430996346,
+    "variantIds": [
+      16094,
+      16095,
+      16096,
+      16097,
+      16098
+    ]
+  },
+  {
+    "slug": "the-cropped-tee-white",
+    "name": "The Cropped Tee in White",
+    "color": "White",
+    "printfulProductId": 636,
+    "shopifyProductId": 7625765388386,
+    "printfulSyncProductId": 430996350,
+    "variantIds": [
+      16119,
+      16120,
+      16121,
+      16122,
+      16123
+    ]
+  },
+  {
+    "slug": "the-relaxed-tee-black",
+    "name": "The Relaxed Tee",
+    "color": "Black",
+    "printfulProductId": 360,
+    "shopifyProductId": 7625765421154,
+    "printfulSyncProductId": 430996355,
+    "variantIds": [
+      10187,
+      10188,
+      10189,
+      10190,
+      10191,
+      10192
+    ]
+  },
+  {
+    "slug": "the-relaxed-tee-white",
+    "name": "The Relaxed Tee in White",
+    "color": "White",
+    "printfulProductId": 360,
+    "shopifyProductId": 7625765453922,
+    "printfulSyncProductId": 430996359,
+    "variantIds": [
+      10252,
+      10253,
+      10254,
+      10255,
+      10256,
+      10257
+    ]
+  },
+  {
+    "slug": "the-womens-hoodie-black",
+    "name": "The Hoodie",
+    "color": "Black",
+    "printfulProductId": 832,
+    "shopifyProductId": 7625765486690,
+    "printfulSyncProductId": 430996365,
+    "variantIds": [
+      21121,
+      21124,
+      21127,
+      21130,
+      21133
+    ]
+  },
+  {
+    "slug": "the-womens-hoodie-white",
+    "name": "The Hoodie in White",
+    "color": "White",
+    "printfulProductId": 832,
+    "shopifyProductId": 7625766699106,
+    "printfulSyncProductId": 430998096,
+    "variantIds": [
+      21120,
+      21123,
+      21126,
+      21129,
+      21132
+    ]
+  }
+]

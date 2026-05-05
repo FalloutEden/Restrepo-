@@ -1,0 +1,115 @@
+[
+  {
+    "slug": "the-monogram-tee-white",
+    "name": "The Monogram Tee in White",
+    "color": "White",
+    "shopifyProductId": 7625750937698,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625750937698",
+    "printfulSyncProductId": 430993382,
+    "status": "created"
+  },
+  {
+    "slug": "the-vault-tee-white",
+    "name": "The Vault Tee in White",
+    "color": "White",
+    "shopifyProductId": 7625751003234,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625751003234",
+    "printfulSyncProductId": 430993441,
+    "status": "created"
+  },
+  {
+    "slug": "the-heavyweight-hoodie-white",
+    "name": "The Heavyweight Hoodie in White",
+    "color": "White",
+    "shopifyProductId": 7625751036002,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625751036002",
+    "printfulSyncProductId": 430993482,
+    "status": "created"
+  },
+  {
+    "slug": "the-crewneck-white",
+    "name": "The Crewneck in White",
+    "color": "White",
+    "shopifyProductId": 7625751101538,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625751101538",
+    "printfulSyncProductId": 430993545,
+    "status": "created"
+  },
+  {
+    "slug": "the-polo-white",
+    "name": "The Polo in White",
+    "color": "White",
+    "shopifyProductId": 7625751167074,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625751167074",
+    "printfulSyncProductId": 430993608,
+    "status": "created"
+  },
+  {
+    "slug": "the-performance-polo-black",
+    "name": "The Performance Polo",
+    "color": "Black",
+    "status": "failed",
+    "error": "Printful GET /products/767 failed (404): {\"code\":404,\"result\":\"Not Found\",\"error\":{\"reason\":\"NotFound\",\"message\":\"Not Found\"}}"
+  },
+  {
+    "slug": "the-performance-polo-white",
+    "name": "The Performance Polo in White",
+    "color": "White",
+    "status": "failed",
+    "error": "Printful GET /products/767 failed (404): {\"code\":404,\"result\":\"Not Found\",\"error\":{\"reason\":\"NotFound\",\"message\":\"Not Found\"}}"
+  },
+  {
+    "slug": "the-cropped-tee-black",
+    "name": "The Cropped Tee",
+    "color": "Black",
+    "shopifyProductId": 7625751298146,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625751298146",
+    "printfulSyncProductId": 430993685,
+    "status": "created"
+  },
+  {
+    "slug": "the-cropped-tee-white",
+    "name": "The Cropped Tee in White",
+    "color": "White",
+    "shopifyProductId": 7625751756898,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625751756898",
+    "printfulSyncProductId": 430993754,
+    "status": "created"
+  },
+  {
+    "slug": "the-relaxed-tee-black",
+    "name": "The Relaxed Tee",
+    "color": "Black",
+    "shopifyProductId": 7625751822434,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625751822434",
+    "printfulSyncProductId": 430993822,
+    "status": "created"
+  },
+  {
+    "slug": "the-relaxed-tee-white",
+    "name": "The Relaxed Tee in White",
+    "color": "White",
+    "shopifyProductId": 7625751920738,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625751920738",
+    "printfulSyncProductId": 430993894,
+    "status": "created"
+  },
+  {
+    "slug": "the-womens-hoodie-black",
+    "name": "The Hoodie",
+    "color": "Black",
+    "shopifyProductId": 7625751986274,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625751986274",
+    "printfulSyncProductId": 430993975,
+    "status": "created"
+  },
+  {
+    "slug": "the-womens-hoodie-white",
+    "name": "The Hoodie in White",
+    "color": "White",
+    "shopifyProductId": 7625752019042,
+    "shopifyAdminUrl": "https://tnbgmr-2d.myshopify.com/admin/products/7625752019042",
+    "printfulSyncProductId": 430994024,
+    "status": "created"
+  }
+]

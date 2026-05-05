@@ -1,0 +1,21 @@
+{
+  "id": "prop_mon7aoxo_os9occ",
+  "title": "Publish Black Vault Apparel capsule (11 SKUs) live",
+  "summary": "Black Vault has 11 internally-coherent draft SKUs forming a complete elevated-essentials capsule (Vault Tee, Monogram Tee, Comfort Colors heavyweight tee, Long Sleeve, Crewneck, Heavyweight Hoodie, Polo, Sweatpants, Crew Sock, two Cap colorways). Printful = zero inventory risk; we only pay COGS when an order comes in. Right now the store is at $0 revenue because nothing is published — publishing is the unlock. I'm proposing all 11 go live together so the storefront looks like a complete brand on day one rather than a thin set of one-offs. No ad spend in this proposal — just the publish action. Numbers below are conservative organic baseline; real volume depends entirely on traffic strategy, which is a separate decision.",
+  "action": "Publish all 11 Black Vault Apparel drafts to active/customer-facing on the Shopify storefront. Drafts to publish: The Vault Tee, The Monogram Tee, The Cap (×2), The Sweatpants, The Crew Sock, The Polo, The Long Sleeve, The Crewneck, The Heavyweight Hoodie, plus the Comfort Colors 1717 tee draft. Keep current Printful sync, pricing, and embroidery placement as-is.",
+  "estimatedCostUsd": 0,
+  "estimatedMonthlyRevenueUsd": {
+    "low": 0,
+    "mid": 294,
+    "high": 883
+  },
+  "source": {
+    "kind": "tick",
+    "conversationId": "tick_2026-05-01"
+  },
+  "briefPath": "C:\\Agents\\Restrepo-\\.openclaw\\operator\\proposals\\prop_mon7aoxo_os9occ\\brief.md",
+  "roiCsvPath": "C:\\Agents\\Restrepo-\\.openclaw\\operator\\proposals\\prop_mon7aoxo_os9occ\\roi.csv",
+  "status": "approved",
+  "createdAt": "2026-05-01T17:42:44.419Z",
+  "decidedAt": "2026-05-04T13:47:33.679Z"
+}

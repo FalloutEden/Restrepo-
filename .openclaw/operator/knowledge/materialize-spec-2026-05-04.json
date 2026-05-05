@@ -1,0 +1,137 @@
+{
+  "_comment": "Ready-to-fire materialization spec for the BV white expansion + women's launch + performance polo. Each entry is a MaterializationInput minus runtimeId (operator generates one). Operator can read this and pass each item to materialize_product. All Printful IDs verified against .openclaw/printful-catalog-v2.json on 2026-05-04.",
+  "men_white_expansion": [
+    {
+      "title": "The Vault Tee in White",
+      "description": "100% combed ring-spun cotton, 6.5oz/yd² (220 GSM) heavyweight tee in white. Old Gold (#A67843) BV monogram embroidered at left chest. Side-seamed, single-needle edge stitch, 1×1 rib collar. Built to be Kept.",
+      "productType": "Tee",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium men's essentials — white",
+      "imagePrompt": "Premium minimalist tee in pure white. Old Gold (#A67843) monogram embroidery at left chest. Garment laid flat, soft natural light, no shadows."
+    },
+    {
+      "title": "The Heavyweight Tee in White",
+      "description": "Comfort Colors 1717 garment-dyed heavyweight cotton in white. 6.1oz/yd² ring-spun cotton, double-needle stitched neckline and sleeves, taped neck and shoulders. Old Gold BV monogram embroidered at left chest.",
+      "productType": "Tee",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium men's essentials — white",
+      "imagePrompt": "Garment-dyed white heavyweight tee, soft hand-feel visible. Old Gold (#A67843) chest embroidery."
+    },
+    {
+      "title": "The Heavyweight Hoodie in White",
+      "description": "Stanley/Stella SASU024 Organic Relaxed Slammer 2.0 — 10.3oz GOTS-certified organic cotton fleece in white. Drop shoulder, kangaroo pocket, ribbed cuffs and hem. Old Gold BV monogram embroidered at left chest. Built to be Kept.",
+      "productType": "Hoodie",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium men's essentials — white",
+      "imagePrompt": "Heavyweight organic cotton hoodie in pure white, relaxed fit. Old Gold (#A67843) monogram chest embroidery."
+    },
+    {
+      "title": "The Crewneck in White",
+      "description": "Lane Seven LS14004 Premium Crew Neck Sweatshirt in white. Heavyweight cotton/poly fleece, ribbed collar, cuffs, and waistband. Old Gold BV monogram embroidered at left chest.",
+      "productType": "Sweatshirt",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium men's essentials — white",
+      "imagePrompt": "Premium heavyweight crew neck sweatshirt in pure white. Old Gold (#A67843) chest embroidery."
+    },
+    {
+      "title": "The Polo in White",
+      "description": "Port Authority K500 Premium Polo in white. Soft pique knit, three-button placket, side vents, double-needle hem. Old Gold BV monogram embroidered at left chest.",
+      "productType": "Polo",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium men's essentials — white",
+      "imagePrompt": "Premium pique knit polo in white. Old Gold (#A67843) chest embroidery."
+    }
+  ],
+  "men_white_optional_long_sleeve": {
+    "title": "The Garment-Dyed Long Sleeve in White",
+    "description": "Comfort Colors 6014 Garment-Dyed Heavyweight Long Sleeve in white. 6.1oz ring-spun cotton, garment-dyed for vintage hand-feel, double-needle stitched cuffs and hem. Old Gold BV monogram embroidered at left chest.",
+    "productType": "Long Sleeve T-Shirt",
+    "fulfillmentType": "printful",
+    "brand": "black-vault-apparel",
+    "niche": "premium men's essentials — white",
+    "imagePrompt": "Garment-dyed white heavyweight long sleeve, soft worn-in feel. Old Gold (#A67843) chest embroidery."
+  },
+  "womens_launch_black": [
+    {
+      "title": "The Cropped Tee",
+      "description": "AS Colour 4062 Women's Crop Top in black. Soft hand-feel ring-spun cotton, relaxed cropped silhouette, ribbed neckline. Old Gold (#A67843) BV monogram embroidered at left chest. The same brand mark, sized for women.",
+      "productType": "Women's Tee",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium women's essentials",
+      "imagePrompt": "Premium minimalist women's cropped tee in black, relaxed fit. Old Gold (#A67843) monogram embroidery at left chest. Soft natural light, considered styling."
+    },
+    {
+      "title": "The Relaxed Tee",
+      "description": "Bella+Canvas 6400 Women's Relaxed Tee in black. 4.2oz combed ring-spun cotton, relaxed boyfriend-style silhouette, side-seamed construction. Old Gold BV monogram embroidered at left chest.",
+      "productType": "Women's Tee",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium women's essentials",
+      "imagePrompt": "Premium women's relaxed boyfriend tee in black. Old Gold (#A67843) chest embroidery."
+    },
+    {
+      "title": "The Hoodie",
+      "description": "Stanley/Stella SASW035 Stella Nora Hoodie — GOTS-certified organic cotton in black. Soft brushed fleece interior, kangaroo pocket, ribbed cuffs. Old Gold BV monogram embroidered at left chest. Built to be Kept.",
+      "productType": "Women's Hoodie",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium women's essentials",
+      "imagePrompt": "Premium organic cotton women's pullover hoodie in black, relaxed fit. Old Gold (#A67843) chest embroidery."
+    }
+  ],
+  "womens_launch_white": [
+    {
+      "title": "The Cropped Tee in White",
+      "description": "AS Colour 4062 Women's Crop Top in white. Soft hand-feel ring-spun cotton, relaxed cropped silhouette, ribbed neckline. Old Gold (#A67843) BV monogram embroidered at left chest.",
+      "productType": "Women's Tee",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium women's essentials — white",
+      "imagePrompt": "Premium minimalist women's cropped tee in pure white, relaxed fit. Old Gold (#A67843) chest embroidery."
+    },
+    {
+      "title": "The Relaxed Tee in White",
+      "description": "Bella+Canvas 6400 Women's Relaxed Tee in white. 4.2oz combed ring-spun cotton, boyfriend-style silhouette, side-seamed construction. Old Gold BV monogram embroidered at left chest.",
+      "productType": "Women's Tee",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium women's essentials — white",
+      "imagePrompt": "Premium women's relaxed boyfriend tee in white. Old Gold (#A67843) chest embroidery."
+    },
+    {
+      "title": "The Hoodie in White",
+      "description": "Stanley/Stella SASW035 Stella Nora Hoodie — GOTS-certified organic cotton in white. Soft brushed fleece interior, kangaroo pocket, ribbed cuffs. Old Gold BV monogram embroidered at left chest.",
+      "productType": "Women's Hoodie",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium women's essentials — white",
+      "imagePrompt": "Premium organic cotton women's pullover hoodie in pure white. Old Gold (#A67843) chest embroidery."
+    }
+  ],
+  "performance_polo": [
+    {
+      "title": "The Performance Polo",
+      "description": "Adidas A430 Sport Polo in black. Performance polyester knit with stretch, moisture-wicking, 3-button placket, embroidery-friendly chest panel. Old Gold (#A67843) BV monogram embroidered at left chest. Engineered for movement, finished for the office.",
+      "productType": "Polo",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium men's essentials — performance polo",
+      "imagePrompt": "Premium performance polo in black, technical fabric texture visible. Old Gold (#A67843) chest embroidery."
+    },
+    {
+      "title": "The Performance Polo in White",
+      "description": "Adidas A430 Sport Polo in white. Performance polyester knit with stretch, moisture-wicking, 3-button placket. Old Gold BV monogram embroidered at left chest.",
+      "productType": "Polo",
+      "fulfillmentType": "printful",
+      "brand": "black-vault-apparel",
+      "niche": "premium men's essentials — performance polo",
+      "imagePrompt": "Premium performance polo in pure white, technical fabric texture. Old Gold (#A67843) chest embroidery."
+    }
+  ]
+}
