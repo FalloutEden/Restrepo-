@@ -58,15 +58,29 @@ function loadPrintfulConfig(): PrintfulConfig {
 }
 
 // Validate the Shopify HMAC header on a webhook payload. Shopify signs the raw
-// request body (not JSON-parsed) with the webhook's shared secret.
+// request body (not JSON-parsed) with the custom app's API secret key, which
+// is set per-store. We support multiple stores by trying each configured
+// brand's secret in turn — the first match wins.
+//
+// Env var precedence:
+//   SHOPIFY_BLACKVAULT_WEBHOOK_SECRET — Black Vault custom app's API secret
+//   SHOPIFY_WEBHOOK_SECRET            — LockLayer (or single-store default)
 export function verifyShopifyHmac(rawBody: string, headerValue: string | null): boolean {
-  const secret = process.env.SHOPIFY_WEBHOOK_SECRET?.trim();
-  if (!secret || !headerValue) return false;
-  const computed = createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
-  const a = Buffer.from(computed);
-  const b = Buffer.from(headerValue);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  if (!headerValue) return false;
+  const candidates = [
+    process.env.SHOPIFY_BLACKVAULT_WEBHOOK_SECRET?.trim(),
+    process.env.SHOPIFY_WEBHOOK_SECRET?.trim()
+  ].filter((s): s is string => Boolean(s));
+  if (candidates.length === 0) return false;
+
+  const headerBuf = Buffer.from(headerValue);
+  for (const secret of candidates) {
+    const computed = createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
+    const computedBuf = Buffer.from(computed);
+    if (computedBuf.length !== headerBuf.length) continue;
+    if (timingSafeEqual(computedBuf, headerBuf)) return true;
+  }
+  return false;
 }
 
 function pickRecipient(payload: ShopifyOrderPayload) {
