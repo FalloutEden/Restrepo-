@@ -35,6 +35,18 @@ function newId(prefix: string): string {
   return `${prefix}_${ts}_${rand}`;
 }
 
+// Strict allow-list for ids that flow into filesystem paths. Rejects anything
+// with separators, dots, or whitespace so route params can't escape ROOT via
+// traversal sequences like `..` or `drop_../etc`. Format intentionally matches
+// what newId() produces.
+const ID_PATTERN = /^(drop|asset|post)_[a-z0-9]+_[a-z0-9]+$/;
+export function assertValidId(id: string, kind: "drop" | "asset" | "post"): string {
+  if (!id || typeof id !== "string" || !ID_PATTERN.test(id) || !id.startsWith(`${kind}_`)) {
+    throw new Error(`Invalid ${kind} id`);
+  }
+  return id;
+}
+
 export function newDropId(): string {
   return newId("drop");
 }

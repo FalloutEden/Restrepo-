@@ -1,0 +1,30 @@
+[
+  {
+    "slug": "the-aop-polo-mens",
+    "error": "Printful POST /store/products/431309250 (404): {\"code\":404,\"result\":\"Not found\",\"error\":{\"reason\":\"NotFound\",\"message\":\"Not found\"}}"
+  },
+  {
+    "slug": "the-aop-bomber",
+    "error": "Printful POST /store/products/431309271 (404): {\"code\":404,\"result\":\"Not found\",\"error\":{\"reason\":\"NotFound\",\"message\":\"Not found\"}}"
+  },
+  {
+    "slug": "the-aop-hoodie",
+    "error": "Printful POST /store/products/431309286 (404): {\"code\":404,\"result\":\"Not found\",\"error\":{\"reason\":\"NotFound\",\"message\":\"Not found\"}}"
+  },
+  {
+    "slug": "the-aop-sweatshirt",
+    "error": "Printful POST /store/products/431309303 (404): {\"code\":404,\"result\":\"Not found\",\"error\":{\"reason\":\"NotFound\",\"message\":\"Not found\"}}"
+  },
+  {
+    "slug": "the-aop-jersey",
+    "error": "Printful POST /store/products/431309310 (404): {\"code\":404,\"result\":\"Not found\",\"error\":{\"reason\":\"NotFound\",\"message\":\"Not found\"}}"
+  },
+  {
+    "slug": "the-aop-tee-mens",
+    "error": "Printful POST /store/products/431309315 (404): {\"code\":404,\"result\":\"Not found\",\"error\":{\"reason\":\"NotFound\",\"message\":\"Not found\"}}"
+  },
+  {
+    "slug": "the-aop-tee-womens",
+    "error": "Printful POST /store/products/431309334 (404): {\"code\":404,\"result\":\"Not found\",\"error\":{\"reason\":\"NotFound\",\"message\":\"Not found\"}}"
+  }
+]

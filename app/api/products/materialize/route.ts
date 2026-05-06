@@ -20,6 +20,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Provide a non-empty `products` array." }, { status: 400 });
     }
 
+    // Hard cap to prevent budget-bomb attacks. Each materialization is a
+    // gpt-image-1 call (~$0.04–$0.19), Shopify draft creation, and Printful
+    // sync — so a single request with 1000 items would burn $40–$190 in
+    // image gen alone before any auth check tripped. 10 covers any realistic
+    // batch the merchant runs by hand.
+    const MAX_BATCH = 10;
+    if (products.length > MAX_BATCH) {
+      return NextResponse.json(
+        { error: `Batch too large: ${products.length} > ${MAX_BATCH}. Split into smaller requests.` },
+        { status: 400 }
+      );
+    }
+
     const results = await Promise.all(
       products.map((p, idx) => {
         const runtimeId = `manual_${Date.now()}_${idx}`;

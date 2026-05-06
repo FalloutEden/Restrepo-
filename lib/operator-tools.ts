@@ -3,7 +3,12 @@ import "server-only";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { listShopifyDrafts, deleteShopifyProduct } from "@/lib/shopify-service";
+import {
+  listShopifyDrafts,
+  deleteShopifyProduct,
+  listShopifyCleanupQueue,
+  publishShopifyProduct
+} from "@/lib/shopify-service";
 import { listConfiguredShopifyCredentials, resolveShopifyCredentials } from "@/lib/shopify-credentials";
 import { searchCjProducts, findCjCategoryIds } from "@/lib/cj-service";
 import { materializeProduct, type MaterializationInput, type FulfillmentType } from "@/lib/product-materialization";
@@ -31,6 +36,10 @@ import {
   type Proposal
 } from "@/lib/operator-state";
 import { buildRoiBrief } from "@/lib/operator-roi";
+import { bootstrapStore } from "@/lib/store-bootstrap";
+import { relinkPrintfulVariants } from "@/lib/printful-link";
+import { attachAllToOnlineStore, transparentizeBrandImages } from "@/lib/bulk-store-ops";
+import { addMenuItem, listMenus, removeMenuItem } from "@/lib/shopify-menus";
 
 // Each tool the operator can call is declared once here:
 //   - schema: JSONSchema Anthropic uses to constrain tool_use
@@ -310,6 +319,239 @@ const delete_listing: OperatorTool = {
       data: { reason, source: ctx.source }
     });
     return { ...result, reason };
+  }
+};
+
+const list_cleanup_queue: OperatorTool = {
+  name: "list_cleanup_queue",
+  description:
+    "List products that need merchant review — drafts, plus active products that aren't yet published to the Online Store sales channel. The user uses this to decide which ones to publish vs delete. Aggregates across every configured brand by default.",
+  input_schema: {
+    type: "object",
+    properties: {
+      brand: { type: "string", enum: Object.keys(BRANDS), description: "Limit to one brand. Omit for all brands." },
+      includePublished: { type: "boolean", description: "Also include products already live on the Online Store. Default false." },
+      limit: { type: "integer", minimum: 1, maximum: 250 }
+    }
+  },
+  async run(args) {
+    const items = await listShopifyCleanupQueue({
+      brand: typeof args.brand === "string" ? args.brand : undefined,
+      includePublished: args.includePublished === true,
+      limit: typeof args.limit === "number" ? args.limit : 250
+    });
+    return {
+      count: items.length,
+      byReason: items.reduce<Record<string, number>>((acc, item) => {
+        acc[item.reason] = (acc[item.reason] ?? 0) + 1;
+        return acc;
+      }, {}),
+      items
+    };
+  }
+};
+
+const publish_listing: OperatorTool = {
+  name: "publish_listing",
+  description:
+    "Publish a single Shopify product to the Online Store sales channel (sets status=active and adds it to the Online Store publication, both of which are needed for the storefront to show it). Customer-facing — only call after the user has approved the specific product.",
+  input_schema: {
+    type: "object",
+    properties: {
+      productId: { type: "integer" },
+      brand: { type: "string", enum: Object.keys(BRANDS) }
+    },
+    required: ["productId", "brand"]
+  },
+  async run(args, ctx) {
+    const productId = Number(args.productId);
+    const brand = String(args.brand);
+    const result = await publishShopifyProduct(productId, brand);
+    await logActivity({
+      kind: "tool_call",
+      message: `publish_listing → ${productId} (${brand}) onlineStore=${result.onlineStorePublished}`,
+      data: { source: ctx.source }
+    });
+    return result;
+  }
+};
+
+const bootstrap_store: OperatorTool = {
+  name: "bootstrap_store",
+  description:
+    "One-shot SaaS-resale onboarding: verify the Shopify access token, register the orders/paid webhook, push customer-facing policies, and confirm the Online Store sales channel exists. Run after a new store's env vars are configured. Idempotent — safe to re-run on partially-bootstrapped stores. Use webhookCallbackUrl matching this app's deployment (e.g. https://restrepo.vercel.app/api/webhooks/shopify/order-paid).",
+  input_schema: {
+    type: "object",
+    properties: {
+      brand: { type: "string", enum: Object.keys(BRANDS) },
+      webhookCallbackUrl: { type: "string", description: "Public HTTPS URL of /api/webhooks/shopify/order-paid for this deployment." },
+      skipPolicies: { type: "boolean" }
+    },
+    required: ["brand", "webhookCallbackUrl"]
+  },
+  async run(args, ctx) {
+    const brand = String(args.brand);
+    const webhookCallbackUrl = String(args.webhookCallbackUrl);
+    const skipPolicies = args.skipPolicies === true;
+    const result = await bootstrapStore(brand, { webhookCallbackUrl, skipPolicies });
+    const okSteps = result.steps.filter((s) => s.ok).length;
+    await logActivity({
+      kind: "tool_call",
+      message: `bootstrap_store → ${brand} (${okSteps}/${result.steps.length} ok)`,
+      data: { source: ctx.source, webhookCallbackUrl }
+    });
+    return result;
+  }
+};
+
+const relink_printful_variants: OperatorTool = {
+  name: "relink_printful_variants",
+  description:
+    "Sweep every product on a brand's Shopify store and ensure each Printful sync_variant's external_id matches the corresponding Shopify variant id. Run after creating new product drafts (the order-paid webhook can't auto-fulfill without this). Idempotent — re-runs only patch what's wrong.",
+  input_schema: {
+    type: "object",
+    properties: {
+      brand: { type: "string", enum: Object.keys(BRANDS) }
+    },
+    required: ["brand"]
+  },
+  async run(args, ctx) {
+    const brand = String(args.brand);
+    const summary = await relinkPrintfulVariants(brand);
+    await logActivity({
+      kind: "tool_call",
+      message: `relink_printful_variants → ${brand} (${summary.updated} updated, ${summary.alreadyLinked} ok)`,
+      data: { source: ctx.source }
+    });
+    return summary;
+  }
+};
+
+const attach_all_to_online_store: OperatorTool = {
+  name: "attach_all_to_online_store",
+  description:
+    "Bulk-attach every product on a brand's Shopify store to the Online Store sales channel. Run once after a new store is bootstrapped, or after a batch of products is created where the user wants them all eligible for the storefront. Idempotent. Note: this only ensures the Online Store membership flag — products with status=draft remain hidden from customers.",
+  input_schema: {
+    type: "object",
+    properties: {
+      brand: { type: "string", enum: Object.keys(BRANDS) }
+    },
+    required: ["brand"]
+  },
+  async run(args, ctx) {
+    const brand = String(args.brand);
+    const result = await attachAllToOnlineStore(brand);
+    await logActivity({
+      kind: "tool_call",
+      message: `attach_all_to_online_store → ${brand} (${result.attached}/${result.total})`,
+      data: { source: ctx.source }
+    });
+    return result;
+  }
+};
+
+const list_menus: OperatorTool = {
+  name: "list_menus",
+  description:
+    "List the storefront navigation menus for a brand (main-menu, footer, etc.) with their current items. Use to know what's already linked before adding/removing entries.",
+  input_schema: {
+    type: "object",
+    properties: {
+      brand: { type: "string", enum: Object.keys(BRANDS) }
+    },
+    required: ["brand"]
+  },
+  async run(args) {
+    return await listMenus(String(args.brand));
+  }
+};
+
+const add_menu_item: OperatorTool = {
+  name: "add_menu_item",
+  description:
+    "Add an item to a storefront navigation menu. Provide ONE of: page (Shopify page id), product (Shopify product id), collection (id), or url (raw external/internal URL). Idempotent — duplicates by title are skipped. Common menuHandle values: 'main-menu', 'footer'. Customer-facing change but reversible — call remove_menu_item if it looks wrong.",
+  input_schema: {
+    type: "object",
+    properties: {
+      brand: { type: "string", enum: Object.keys(BRANDS) },
+      menuHandle: { type: "string", description: "Typically 'main-menu' or 'footer'." },
+      title: { type: "string", description: "Visible menu label." },
+      pageId: { type: "integer", description: "Shopify page numeric id (preferred for the brand-story / about page)." },
+      productId: { type: "integer" },
+      collectionId: { type: "integer" },
+      url: { type: "string", description: "Raw URL — for external links or fallback." },
+      position: { type: "integer", description: "0-indexed insertion position. Default = end." }
+    },
+    required: ["brand", "menuHandle", "title"]
+  },
+  async run(args, ctx) {
+    const result = await addMenuItem({
+      brand: String(args.brand),
+      menuHandle: String(args.menuHandle),
+      title: String(args.title),
+      page: typeof args.pageId === "number" ? { id: args.pageId } : undefined,
+      product: typeof args.productId === "number" ? { id: args.productId } : undefined,
+      collection: typeof args.collectionId === "number" ? { id: args.collectionId } : undefined,
+      url: typeof args.url === "string" ? args.url : undefined,
+      position: typeof args.position === "number" ? args.position : undefined
+    });
+    await logActivity({
+      kind: "tool_call",
+      message: `add_menu_item → ${args.brand} ${args.menuHandle} += ${args.title}`,
+      data: { source: ctx.source }
+    });
+    return result;
+  }
+};
+
+const remove_menu_item: OperatorTool = {
+  name: "remove_menu_item",
+  description: "Remove an item from a storefront navigation menu by its visible title. Customer-facing change.",
+  input_schema: {
+    type: "object",
+    properties: {
+      brand: { type: "string", enum: Object.keys(BRANDS) },
+      menuHandle: { type: "string" },
+      title: { type: "string" }
+    },
+    required: ["brand", "menuHandle", "title"]
+  },
+  async run(args, ctx) {
+    const result = await removeMenuItem(String(args.brand), String(args.menuHandle), String(args.title));
+    await logActivity({
+      kind: "tool_call",
+      message: `remove_menu_item → ${args.brand} ${args.menuHandle} -= ${args.title}`,
+      data: { source: ctx.source }
+    });
+    return result;
+  }
+};
+
+const transparentize_brand_images: OperatorTool = {
+  name: "transparentize_brand_images",
+  description:
+    "Replace each product's primary image with a version that has the white background removed (alpha-cut). Useful when products on a dark theme show distracting white squares. Skips images that already have meaningful transparency. edgeOnly mode preserves white interior regions (logos, text) and only removes white that's reachable from the image edge — slower but safer for printed designs.",
+  input_schema: {
+    type: "object",
+    properties: {
+      brand: { type: "string", enum: Object.keys(BRANDS) },
+      productId: { type: "integer", description: "Limit to one product. Omit to process every product on the brand." },
+      edgeOnly: { type: "boolean", description: "Preserve interior white. Default false." }
+    },
+    required: ["brand"]
+  },
+  async run(args, ctx) {
+    const brand = String(args.brand);
+    const result = await transparentizeBrandImages(brand, {
+      edgeOnly: args.edgeOnly === true,
+      productId: typeof args.productId === "number" ? args.productId : undefined
+    });
+    await logActivity({
+      kind: "tool_call",
+      message: `transparentize_brand_images → ${brand} (${result.processed}/${result.total})`,
+      data: { source: ctx.source }
+    });
+    return result;
   }
 };
 
@@ -772,6 +1014,15 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
   search_cj_products,
   materialize_product,
   delete_listing,
+  list_cleanup_queue,
+  publish_listing,
+  bootstrap_store,
+  relink_printful_variants,
+  attach_all_to_online_store,
+  transparentize_brand_images,
+  list_menus,
+  add_menu_item,
+  remove_menu_item,
   propose_action,
   request_human_input,
   record_note,

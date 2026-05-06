@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 
-import { resolveAssetPath } from "@/lib/content-studio/storage";
+import { assertValidId, resolveAssetPath } from "@/lib/content-studio/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,13 +19,16 @@ const MIME_BY_EXT: Record<string, string> = {
 };
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string; path: string[] }> }) {
-  const { id, path: pathSegments } = await params;
+  const { id: rawId, path: pathSegments } = await params;
+  let id: string;
+  try { id = assertValidId(rawId, "drop"); }
+  catch { return NextResponse.json({ error: "Invalid drop id" }, { status: 400 }); }
   if (!pathSegments || pathSegments.length === 0) {
     return NextResponse.json({ error: "Missing asset path" }, { status: 400 });
   }
-  // Sanitize — refuse traversal.
+  // Sanitize — refuse traversal AND back-slashes (NTFS) AND null bytes.
   const joined = pathSegments.join("/");
-  if (joined.includes("..")) {
+  if (joined.includes("..") || joined.includes("\\") || joined.includes("\0")) {
     return NextResponse.json({ error: "Invalid path" }, { status: 400 });
   }
   const absolute = resolveAssetPath(id, joined);

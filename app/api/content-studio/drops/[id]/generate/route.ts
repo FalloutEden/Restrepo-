@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { generateContentDrop } from "@/lib/content-studio/orchestrator";
-import { readDrop } from "@/lib/content-studio/storage";
+import { assertValidId, readDrop } from "@/lib/content-studio/storage";
 import type { Platform } from "@/lib/content-studio/types";
 
 export const runtime = "nodejs";
@@ -12,7 +12,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const { id: rawId } = await params;
+  let id: string;
+  try { id = assertValidId(rawId, "drop"); }
+  catch { return NextResponse.json({ error: "Invalid drop id" }, { status: 400 }); }
   const drop = await readDrop(id);
   if (!drop) return NextResponse.json({ error: "Drop not found" }, { status: 404 });
   if (drop.assets.filter((a) => a.kind === "source_photo").length === 0) {

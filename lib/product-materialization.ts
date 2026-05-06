@@ -15,6 +15,7 @@ import { generateProductImage } from "@/lib/image-generation";
 import { resolveBrand, type Brand } from "@/lib/brands";
 import { resolveShopifyCredentials, type ShopifyCredentials } from "@/lib/shopify-credentials";
 import { rewriteProductDescription } from "@/lib/copywriting";
+import { attachProductToOnlineStore } from "@/lib/shopify-service";
 
 export type FulfillmentType = "printful" | "zendrop" | "digital";
 
@@ -276,6 +277,16 @@ async function createShopifyDraftProduct(
 
   if (!payload.product?.id) {
     throw new Error(`Shopify did not return a product id for "${input.title}".`);
+  }
+
+  // Pre-attach to Online Store publication while still a draft. With the
+  // write_publications scope, drafts can be attached via GraphQL — meaning
+  // flipping the draft to active later (via admin or our publish path)
+  // lands it on the storefront with no extra step.
+  try {
+    await attachProductToOnlineStore(payload.product.id, creds.brandSlug);
+  } catch (e) {
+    console.warn(`[materialize] attachProductToOnlineStore failed for ${payload.product.id}: ${e instanceof Error ? e.message : e}`);
   }
 
   return payload.product;

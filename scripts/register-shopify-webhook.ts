@@ -16,10 +16,38 @@
 // your app → API credentials → API secret key). That's the value Shopify
 // uses to HMAC-sign webhook payloads.
 
-import { resolveShopifyCredentials } from "@/lib/shopify-credentials";
+// Inlined credential lookup so this script can run as a plain tsx script
+// without needing the server-only stub. lib/shopify-credentials.ts imports
+// "server-only" which throws outside the Next.js bundler.
+type Brand = "locklayer" | "black-vault-apparel";
+const BRAND_ENV_PREFIX: Record<Brand, string | null> = {
+  locklayer: null,
+  "black-vault-apparel": "BLACKVAULT"
+};
+const BRAND_DISPLAY: Record<Brand, string> = {
+  locklayer: "LockLayer",
+  "black-vault-apparel": "Black Vault Apparel"
+};
+
+function resolveCredsInline(brand: Brand) {
+  const prefix = BRAND_ENV_PREFIX[brand];
+  const tokenKey = prefix ? `SHOPIFY_${prefix}_API_KEY` : "SHOPIFY_API_KEY";
+  const domainKey = prefix ? `SHOPIFY_${prefix}_STORE_DOMAIN` : "SHOPIFY_STORE_DOMAIN";
+  const token = process.env[tokenKey]?.trim();
+  const storeDomain = process.env[domainKey]?.trim();
+  if (!token) throw new Error(`Missing ${tokenKey} for brand ${brand}.`);
+  if (!storeDomain) throw new Error(`Missing ${domainKey} for brand ${brand}.`);
+  return {
+    brandSlug: brand,
+    brandName: BRAND_DISPLAY[brand],
+    token,
+    storeDomain,
+    apiVersion: process.env.SHOPIFY_ADMIN_API_VERSION?.trim() || "2024-04"
+  };
+}
 
 const callbackUrl = process.argv[2];
-const brandArg = process.argv[3] ?? "locklayer";
+const brandArg = (process.argv[3] ?? "locklayer") as Brand;
 
 if (!callbackUrl || !callbackUrl.startsWith("https://")) {
   console.error("Usage: register-shopify-webhook.ts <https-callback-url> [brand]");
@@ -28,9 +56,14 @@ if (!callbackUrl || !callbackUrl.startsWith("https://")) {
   process.exit(1);
 }
 
+if (!(brandArg in BRAND_ENV_PREFIX)) {
+  console.error(`Unknown brand "${brandArg}". Valid: locklayer, black-vault-apparel`);
+  process.exit(1);
+}
+
 const creds = (() => {
   try {
-    return resolveShopifyCredentials(brandArg);
+    return resolveCredsInline(brandArg);
   } catch (e) {
     console.error(`Could not load Shopify credentials for brand "${brandArg}":`, e instanceof Error ? e.message : e);
     process.exit(1);
