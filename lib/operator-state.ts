@@ -3,11 +3,26 @@ import "server-only";
 import { mkdir, readFile, writeFile, readdir, appendFile, access } from "node:fs/promises";
 import path from "node:path";
 
-const ROOT = path.join(process.cwd(), ".openclaw", "operator");
+// On Vercel the project filesystem is read-only outside /tmp. We write all
+// operator state under /tmp/openclaw/operator when running there. /tmp is
+// scoped to each serverless function instance and persists for the lifetime
+// of that hot instance (~15 min on Hobby), which is enough for in-flight
+// chat turns. For durable history a real KV/Postgres backend would be
+// needed, but for a SaaS-resale demo this is good enough.
+//
+// Curated knowledge files (read-only) are different — they ship with the
+// repo, so they live at the repo path even on Vercel and we read them via
+// the original cwd path.
+const IS_VERCEL = process.env.VERCEL === "1";
+const ROOT = IS_VERCEL
+  ? path.join("/tmp", "openclaw", "operator")
+  : path.join(process.cwd(), ".openclaw", "operator");
 const CONV_DIR = path.join(ROOT, "conversations");
 const PROPOSAL_DIR = path.join(ROOT, "proposals");
 const TASK_DIR = path.join(ROOT, "tasks");
-const KNOWLEDGE_DIR = path.join(ROOT, "knowledge");
+// Knowledge files are read-only — they're committed to the repo and ship
+// with the deployment bundle.
+const KNOWLEDGE_DIR = path.join(process.cwd(), ".openclaw", "operator", "knowledge");
 const ACTIVITY_LOG = path.join(ROOT, "activity.jsonl");
 const STATE_FILE = path.join(ROOT, "state.json");
 const MEMORY_FILE = path.join(ROOT, "memory.md");
@@ -71,10 +86,19 @@ export async function patchOperatorState(patch: Partial<OperatorState>): Promise
   return next;
 }
 
+// On Vercel the read-only repo bundle ships with the original memory.md.
+// We treat that as the seed: reads check /tmp first (post-write), fall back
+// to the bundle path so the agent still sees its accumulated notes from
+// development.
+const BUNDLED_MEMORY_FILE = path.join(process.cwd(), ".openclaw", "operator", "memory.md");
+
 export async function readOperatorMemory(): Promise<string> {
   await ensureDirs();
-  if (!(await fileExists(MEMORY_FILE))) return "";
-  return readFile(MEMORY_FILE, "utf8");
+  if (await fileExists(MEMORY_FILE)) return readFile(MEMORY_FILE, "utf8");
+  if (IS_VERCEL && (await fileExists(BUNDLED_MEMORY_FILE))) {
+    return readFile(BUNDLED_MEMORY_FILE, "utf8");
+  }
+  return "";
 }
 
 // Curated knowledge — markdown files under .openclaw/operator/knowledge/.
