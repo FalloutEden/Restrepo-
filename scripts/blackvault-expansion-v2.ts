@@ -79,7 +79,7 @@ const COLLECTION: ExpansionItem[] = [
     color: "White",
     retailPrice: "168.00",
     productType: "Hoodie",
-    description: "<p>A 10.3 oz / 350 GSM organic cotton hoodie from Stanley/Stella in pure white, with the BV monogram embroidered in Old Gold thread at the left chest.</p><p>GOTS-certified organic cotton. Drop-shoulder oversized cut. Double-stitched seams. The kind of weight you reach for when nothing else feels substantial enough.</p><p>Built to be Kept.</p>"
+    description: "<p>A 10.3 oz / 350 GSM heavyweight organic cotton hoodie in pure white. The BV monogram embroidered in Old Gold thread at the left chest.</p><p>GOTS-certified organic cotton. Drop-shoulder oversized cut. Double-stitched seams. The kind of weight you reach for when nothing else feels substantial enough.</p><p>Built to be Kept.</p>"
   },
   {
     slug: "the-crewneck-white",

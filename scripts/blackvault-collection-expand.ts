@@ -109,9 +109,9 @@ const COLLECTION: CollectionItem[] = [
     retailPrice: "48.00",
     productType: "Hat",
     description: [
-      "<p>A premium structured 6-panel cap by Flexfit — the same blank used by",
-      "every premium streetwear and lifestyle brand for a reason. Wool-blend",
-      "front, mid-profile crown, slightly curved bill.</p>",
+      "<p>A premium structured 6-panel cap. Wool-blend front, mid-profile",
+      "crown, slightly curved bill — the cut every refined streetwear shop",
+      "reaches for.</p>",
       "<p>The BV monogram is embroidered prominently in Old Gold thread at the",
       "front center — the brand mark is the entire point of a cap.</p>",
       "<p>Stretch-fit band, no closure on the back — so it sits like it was",

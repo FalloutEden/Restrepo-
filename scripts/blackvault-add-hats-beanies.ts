@@ -41,18 +41,23 @@ type HeadwearItem = {
 };
 
 const ITEMS: HeadwearItem[] = [
+  // NOTE on copy: descriptions intentionally omit the supplier brand and
+  // model number (Yupoong 6089M, Yupoong 1501KC). Private-label brands
+  // never reveal upstream blanks in customer-facing copy. The brandModel
+  // field below is internal-only — used for tags + supplier records, not
+  // for customer-visible content.
   {
     slug: "the-snapback",
     name: "The Snapback",
-    brandModel: "Yupoong 6089M",
+    brandModel: "Yupoong 6089M", // internal — NEVER surface in description
     catalogId: 99,
     blackVariantId: 4792,
     retailPrice: "52.00",
     productType: "Hat",
     description: [
-      "<p>A classic 6-panel structured snapback. Yupoong 6089M — wool-blend",
-      "front panels, mesh-feel back, flat brim, plastic snap closure.",
-      "The BV monogram embroidered in Old Gold thread at the front center.</p>",
+      "<p>A classic 6-panel structured snapback. Wool-blend front panels,",
+      "mesh-feel back, flat brim, plastic snap closure. The BV monogram",
+      "embroidered in Old Gold thread at the front center.</p>",
       "<p>One size, adjustable. Built for daily wear, not for a single season.</p>",
       "<p>Built to be Kept.</p>"
     ].join(" "),
@@ -62,15 +67,15 @@ const ITEMS: HeadwearItem[] = [
   {
     slug: "the-beanie",
     name: "The Beanie",
-    brandModel: "Yupoong 1501KC",
+    brandModel: "Yupoong 1501KC", // internal — NEVER surface in description
     catalogId: 266,
     blackVariantId: 8936,
     retailPrice: "42.00",
     productType: "Beanie",
     description: [
-      "<p>A cuffed knit beanie. Yupoong 1501KC — fine-gauge acrylic, ribbed",
-      "fold-up cuff, structured crown that holds shape after wash. The BV",
-      "monogram embroidered in Old Gold thread at the cuff front.</p>",
+      "<p>A cuffed knit beanie in fine-gauge acrylic. Ribbed fold-up cuff.",
+      "Structured crown that holds shape after wash. The BV monogram",
+      "embroidered in Old Gold thread at the cuff front.</p>",
       "<p>One size, stretches. Soft enough to layer under a hood, structured",
       "enough to wear alone.</p>",
       "<p>Built to be Kept.</p>"
