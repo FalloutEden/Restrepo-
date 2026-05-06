@@ -1,0 +1,12 @@
+[
+  {
+    "slug": "the-snapback",
+    "status": "failed",
+    "error": "Printful GET /store/products/431433789 (400): {\"code\":400,\"result\":\"This endpoint requires `store_id`!\",\"error\":{\"reason\":\"BadRequest\",\"message\":\"This endpoint requires `store_id`!\"}}"
+  },
+  {
+    "slug": "the-beanie",
+    "status": "failed",
+    "error": "Printful GET /store/products/431433821 (400): {\"code\":400,\"result\":\"This endpoint requires `store_id`!\",\"error\":{\"reason\":\"BadRequest\",\"message\":\"This endpoint requires `store_id`!\"}}"
+  }
+]

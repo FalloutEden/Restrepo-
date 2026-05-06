@@ -33,3 +33,4 @@ coverage
 
 # Local debug / test images
 .openclaw/brand/debug-*.png
+.openclaw/brand/.aop-linear-high-dpi-url.txt
