@@ -49,7 +49,13 @@ function brandsBlock() {
     .join("\n\n");
 }
 
-async function buildSystemPrompt(): Promise<string> {
+// System prompt is split into a static portion (brands registry, playbooks,
+// guardrails — ~5k tokens) and a dynamic portion (current state). The static
+// portion gets a `cache_control: ephemeral` breakpoint so subsequent turns
+// within the 5-minute cache window only pay full tokens for the dynamic
+// state + new user message. Cuts per-turn cost ~80% on cache hits and
+// substantially reduces rate-limit pressure.
+async function buildSystem(): Promise<{ staticPart: string; dynamicPart: string }> {
   const [state, memory, knowledge, pendingProposals, openTasks] = await Promise.all([
     readOperatorState(),
     readOperatorMemory(),
@@ -82,7 +88,13 @@ async function buildSystemPrompt(): Promise<string> {
           .join("\n")
       : "_(no open tasks)_";
 
-  return `You are the Black Vault Umbrella Operator — the managing director of Restrepo, a multi-brand commerce automation pipeline. You speak directly with the user (the founder, Karling). Your job: grow real revenue across the brands listed below, autonomously when you can, with the user's approval when money or customer-facing state changes.
+  // ── Static portion (cacheable) ────────────────────────────────────────
+  // Knowledge files and brand registry are big-but-stable — perfect cache
+  // candidates. Memory is included here too because it changes only when
+  // record_note is called, which is rare (a few times per day max). If a
+  // memory write happens between turns, the cache breaks and the next turn
+  // pays full price; that's fine.
+  const staticPart = `You are the Black Vault Umbrella Operator — the managing director of Restrepo, a multi-brand commerce automation pipeline. You speak directly with the user (the founder, Karling). Your job: grow real revenue across the brands listed below, autonomously when you can, with the user's approval when money or customer-facing state changes.
 
 ## Brands
 ${brandsBlock()}
@@ -193,7 +205,18 @@ If a check can't be verified with web_search or web_fetch, say so explicitly and
 
 When the user asks about sourcing, your default should be: "let me web_search the sizing and quality reviews first" — not a recommendation off the top.
 
-## Current state (rebuilt every turn)
+## Curated knowledge (brand fit, suppliers, anti-patterns)
+
+${knowledge || "_(no knowledge files yet — see .openclaw/operator/knowledge/ to add)_"}
+
+## Operator memory (long-lived notes)
+
+${memory || "_(empty — write your first note when you learn something worth keeping)_"}
+`;
+
+  // ── Dynamic portion (changes every turn, NOT cached) ─────────────────
+  // Just the state pointers. Kept short so cache misses are cheap.
+  const dynamicPart = `## Current state (rebuilt every turn)
 
 **Last autonomous tick:** ${state.lastTickAt ?? "_never run_"}
 **Last chat:** ${state.lastChatAt ?? "_never_"}
@@ -206,15 +229,9 @@ ${tasksBlock}
 
 **Recent rejections — do NOT re-propose without a materially different angle:**
 ${recentRejections}
-
-## Operator memory (long-lived notes)
-
-${memory || "_(empty — write your first note when you learn something worth keeping)_"}
-
-## Curated knowledge (brand fit, suppliers, anti-patterns)
-
-${knowledge || "_(no knowledge files yet — see .openclaw/operator/knowledge/ to add)_"}
 `;
+
+  return { staticPart, dynamicPart };
 }
 
 // ── Anthropic message shape helpers ────────────────────────────────────────
@@ -296,7 +313,15 @@ async function runOperatorInner(options: AgentRunOptions): Promise<{ finalText: 
     });
   }
 
-  const system = await buildSystemPrompt();
+  const { staticPart, dynamicPart } = await buildSystem();
+  // Anthropic prompt-caching: mark the static portion (brands, playbooks,
+  // guardrails, knowledge, memory) with cache_control. Within 5 minutes the
+  // static portion is served from cache for ~10% of the input cost. Dynamic
+  // state stays fresh on every turn.
+  const systemBlocks: Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }> = [
+    { type: "text", text: staticPart, cache_control: { type: "ephemeral" } },
+    { type: "text", text: dynamicPart }
+  ];
   let finalText = "";
   const toolCallTrace: Array<{ name: string; input: Record<string, unknown>; result: unknown }> = [];
 
@@ -319,7 +344,7 @@ async function runOperatorInner(options: AgentRunOptions): Promise<{ finalText: 
         claude.messages.create({
           model: OPERATOR_MODEL,
           max_tokens: MAX_TOKENS,
-          system,
+          system: systemBlocks as import("@anthropic-ai/sdk/resources").TextBlockParam[],
           tools: allTools,
           messages: messages as import("@anthropic-ai/sdk/resources").MessageParam[]
         }),
