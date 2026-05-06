@@ -33,6 +33,11 @@ type HeadwearItem = {
   retailPrice: string;
   productType: string;
   description: string;
+  // Placement varies per catalog (snapback = embroidery_front_large for the
+  // main panel; beanie = embroidery_front for the cuff). The thread-color
+  // option key is also placement-specific.
+  filePlacement: string;
+  threadColorOptionId: string;
 };
 
 const ITEMS: HeadwearItem[] = [
@@ -50,7 +55,9 @@ const ITEMS: HeadwearItem[] = [
       "The BV monogram embroidered in Old Gold thread at the front center.</p>",
       "<p>One size, adjustable. Built for daily wear, not for a single season.</p>",
       "<p>Built to be Kept.</p>"
-    ].join(" ")
+    ].join(" "),
+    filePlacement: "embroidery_front_large",
+    threadColorOptionId: "thread_colors_front_large"
   },
   {
     slug: "the-beanie",
@@ -67,7 +74,9 @@ const ITEMS: HeadwearItem[] = [
       "<p>One size, stretches. Soft enough to layer under a hood, structured",
       "enough to wear alone.</p>",
       "<p>Built to be Kept.</p>"
-    ].join(" ")
+    ].join(" "),
+    filePlacement: "embroidery_front",
+    threadColorOptionId: "thread_colors"
   }
 ];
 
@@ -206,10 +215,9 @@ async function materializeItem(item: HeadwearItem, embroideryUrl: string, shopif
           external_id: `bv-${item.slug}-onesize`,
           variant_id: item.blackVariantId,
           retail_price: item.retailPrice,
-          files: [{ type: "embroidery_front", url: embroideryUrl }],
+          files: [{ type: item.filePlacement, url: embroideryUrl }],
           options: [
-            { id: "thread_colors_front", value: [THREAD_COLOR_OLD_GOLD] },
-            { id: "lifelike", value: true }
+            { id: item.threadColorOptionId, value: [THREAD_COLOR_OLD_GOLD] }
           ]
         }
       ]
