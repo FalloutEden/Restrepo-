@@ -33,7 +33,8 @@ test("getLaunchStatus returns ok when Shopify works and 5+ products are active",
   const restore = installMockFetch([
     { url: "/shop.json", status: 200, body: { shop: { name: "BV" } } },
     { url: "/products/count.json", status: 200, body: { count: 7 } },
-    { url: "/products.json", status: 200, body: { products: [] } }
+    { url: "/products.json", status: 200, body: { products: [] } },
+    { url: "restrepo.vercel.app/api/operator/state", status: 401, body: {} }
   ]);
   try {
     const r = await getLaunchStatus("black-vault-apparel");
@@ -52,7 +53,8 @@ test("getLaunchStatus warns when active count is between 1 and 4", async () => {
   const restore = installMockFetch([
     { url: "/shop.json", status: 200, body: { shop: { name: "BV" } } },
     { url: "/products/count.json", status: 200, body: { count: 2 } },
-    { url: "/products.json", status: 200, body: { products: [] } }
+    { url: "/products.json", status: 200, body: { products: [] } },
+    { url: "restrepo.vercel.app/api/operator/state", status: 401, body: {} }
   ]);
   try {
     const r = await getLaunchStatus("black-vault-apparel");
@@ -68,7 +70,8 @@ test("getLaunchStatus fails when Shopify returns 401", async () => {
   const restore = installMockFetch([
     { url: "/shop.json", status: 401, body: { errors: "Invalid API key or access token" } },
     { url: "/products/count.json", status: 401, body: {} },
-    { url: "/products.json", status: 401, body: {} }
+    { url: "/products.json", status: 401, body: {} },
+    { url: "restrepo.vercel.app/api/operator/state", status: 401, body: {} }
   ]);
   try {
     const r = await getLaunchStatus("black-vault-apparel");
@@ -87,7 +90,8 @@ test("getLaunchStatus reports webhook secret as ok when env is set", async () =>
   const restore = installMockFetch([
     { url: "/shop.json", status: 200, body: { shop: {} } },
     { url: "/products/count.json", status: 200, body: { count: 6 } },
-    { url: "/products.json", status: 200, body: { products: [] } }
+    { url: "/products.json", status: 200, body: { products: [] } },
+    { url: "restrepo.vercel.app/api/operator/state", status: 401, body: {} }
   ]);
   try {
     const r = await getLaunchStatus("black-vault-apparel");
@@ -108,7 +112,8 @@ test("operator_auth_secret check is fail on Vercel without secret", async () => 
   const restore = installMockFetch([
     { url: "/shop.json", status: 200, body: { shop: {} } },
     { url: "/products/count.json", status: 200, body: { count: 6 } },
-    { url: "/products.json", status: 200, body: { products: [] } }
+    { url: "/products.json", status: 200, body: { products: [] } },
+    { url: "restrepo.vercel.app/api/operator/state", status: 401, body: {} }
   ]);
   try {
     const r = await getLaunchStatus("black-vault-apparel");
@@ -129,7 +134,8 @@ test("required_env check fails when an expected key is missing", async () => {
   const restore = installMockFetch([
     { url: "/shop.json", status: 200, body: { shop: {} } },
     { url: "/products/count.json", status: 200, body: { count: 6 } },
-    { url: "/products.json", status: 200, body: { products: [] } }
+    { url: "/products.json", status: 200, body: { products: [] } },
+    { url: "restrepo.vercel.app/api/operator/state", status: 401, body: {} }
   ]);
   try {
     const r = await getLaunchStatus("black-vault-apparel");

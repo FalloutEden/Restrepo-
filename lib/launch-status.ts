@@ -198,29 +198,63 @@ function checkWebhookSecret(): LaunchCheck {
   };
 }
 
-function checkOperatorAuthSecret(): LaunchCheck {
+async function checkOperatorAuthSecret(): Promise<LaunchCheck> {
   const onVercel = Boolean(process.env.VERCEL);
-  const has = Boolean(process.env.OPERATOR_AUTH_SECRET?.trim());
-  if (!onVercel) {
+  const localHas = Boolean(process.env.OPERATOR_AUTH_SECRET?.trim());
+
+  // When running on Vercel itself, just read the local env (which is the
+  // Vercel runtime env).
+  if (onVercel) {
     return {
       id: "operator_auth_secret",
       name: "Operator API auth secret",
-      status: has ? "ok" : "warn",
-      detail: has ? "Set in local env" : "Unset (local dev — this is fine, but set it in Vercel env before launch)",
-      fix: has
+      status: localHas ? "ok" : "fail",
+      detail: localHas ? "Set in Vercel env" : "Unset on Vercel — operator API will return 503.",
+      fix: localHas
         ? undefined
-        : "Generate with `openssl rand -hex 32` and set as OPERATOR_AUTH_SECRET in Vercel project env."
+        : "Set OPERATOR_AUTH_SECRET in Vercel project env (use `openssl rand -hex 32`) and redeploy."
     };
   }
-  return {
-    id: "operator_auth_secret",
-    name: "Operator API auth secret",
-    status: has ? "ok" : "fail",
-    detail: has ? "Set in Vercel env" : "Unset on Vercel — operator API will return 503 to the deployed UI.",
-    fix: has
-      ? undefined
-      : "Set OPERATOR_AUTH_SECRET in Vercel project env (use `openssl rand -hex 32`) and redeploy."
-  };
+
+  // Running locally — the local env-var presence doesn't reflect production.
+  // Probe the deployed surface to determine the real state. /api/operator/state
+  // returns 401 when the secret is set, 503 when unset (per middleware.ts).
+  try {
+    const r = await fetch("https://restrepo.vercel.app/api/operator/state", {
+      method: "GET",
+      signal: AbortSignal.timeout(5000)
+    });
+    if (r.status === 401) {
+      return {
+        id: "operator_auth_secret",
+        name: "Operator API auth secret (Vercel)",
+        status: "ok",
+        detail: "Set on Vercel — production API requires bearer token (401 to unauth)."
+      };
+    }
+    if (r.status === 503) {
+      return {
+        id: "operator_auth_secret",
+        name: "Operator API auth secret (Vercel)",
+        status: "fail",
+        detail: "Vercel deployment is fail-closed — OPERATOR_AUTH_SECRET is unset.",
+        fix: "Set OPERATOR_AUTH_SECRET in Vercel project env and redeploy."
+      };
+    }
+    return {
+      id: "operator_auth_secret",
+      name: "Operator API auth secret (Vercel)",
+      status: "warn",
+      detail: `Vercel /api/operator/state returned ${r.status} — unexpected; investigate.`
+    };
+  } catch (e) {
+    return {
+      id: "operator_auth_secret",
+      name: "Operator API auth secret (Vercel)",
+      status: "warn",
+      detail: `Could not probe Vercel deployment: ${e instanceof Error ? e.message : "unknown error"}`
+    };
+  }
 }
 
 function checkRequiredEnvVars(): LaunchCheck {
@@ -271,10 +305,11 @@ export async function getLaunchStatus(brand: string): Promise<LaunchStatusReport
     checkShopifyConnection(brand),
     checkPasswordProtection(brand),
     checkProductsActive(brand),
-    checkUnreviewedDrafts(brand)
+    checkUnreviewedDrafts(brand),
+    checkOperatorAuthSecret()
   ]);
   // Sync checks
-  checks.push(checkWebhookSecret(), checkOperatorAuthSecret(), checkRequiredEnvVars(), checkPrintfulAutoConfirm());
+  checks.push(checkWebhookSecret(), checkRequiredEnvVars(), checkPrintfulAutoConfirm());
   return {
     brand,
     generatedAt: new Date().toISOString(),
