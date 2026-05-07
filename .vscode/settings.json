@@ -1,0 +1,57 @@
+{
+  "chat.tools.autoApprove": true,
+  "chat.tools.terminal.autoApproveWorkspaceScripts": true,
+  "chat.tools.terminal.ignoreDefaultAutoApproveRules": true,
+
+  "chat.tools.terminal.autoApprove": {
+    // Node / npm
+    "npm run": true,
+    "npm install": true,
+    "node": true,
+    "npx": true,
+
+    // Networking / APIs
+    "curl": true,
+    "wget": true,
+
+    // File + env handling
+    "grep": true,
+    "cat": true,
+    "echo": true,
+    "env": true,
+    "set": true,
+    "source": true,
+    ".": true,
+
+    // Process / port checks (YOUR CURRENT PROMPTS)
+    "netstat": true,
+    "tasklist": true,
+    "findstr": true,
+    "head": true,
+
+    // Shells (Windows + bash hybrid)
+    "powershell": true,
+    "pwsh": true,
+    "bash": true,
+    "sh": true,
+
+    // File system navigation
+    "ls": true,
+    "dir": true,
+    "cd": true,
+
+    // Git (safe read ops)
+    "git status": true,
+    "git diff": true,
+    "git log": true,
+    "git show": true,
+
+    // Dev tooling
+    "where": true,
+    "which": true
+  },
+
+  "chat.tools.edits.autoApprove": {
+    "**/*": true
+  }
+}

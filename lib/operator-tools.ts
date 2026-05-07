@@ -38,8 +38,13 @@ import {
 import { buildRoiBrief } from "@/lib/operator-roi";
 import { bootstrapStore } from "@/lib/store-bootstrap";
 import { relinkPrintfulVariants } from "@/lib/printful-link";
-import { attachAllToOnlineStore, transparentizeBrandImages } from "@/lib/bulk-store-ops";
+import { attachAllToOnlineStore, transparentizeBrandImages, compositeBrandImagesOnBvBg, type BgCompositeMode } from "@/lib/bulk-store-ops";
+import { evaluateBrandFit } from "@/lib/brand-fit-filter";
 import { addMenuItem, listMenus, removeMenuItem } from "@/lib/shopify-menus";
+import { aiBackgroundReplace, cutoutComposite, sharpFlatWhiteCutout, BV_MOCK_BG_PATH } from "@/lib/bg-composite";
+import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { getLaunchStatus, getLaunchStatusForAllBrands } from "@/lib/launch-status";
 
 // Each tool the operator can call is declared once here:
 //   - schema: JSONSchema Anthropic uses to constrain tool_use
@@ -1006,6 +1011,214 @@ const set_spend_budget: OperatorTool = {
   }
 };
 
+// ── Brand-background compositor (model-on-BV-mock) ────────────────────────
+
+const composite_on_bv_background: OperatorTool = {
+  name: "composite_on_bv_background",
+  description:
+    "Place a model/product photo onto the official Black Vault Apparel mock background (.openclaw/brand/Mock Up BG/BG BV Mock.png — dark luxury gradient with BV monogram). Two modes: 'ai' uses gpt-image-1 image edit and matches lighting to the dark mood (best for editorial fashion shots, ~$0.04 per image); 'cutout' uses gpt-image-1 to remove the source background then deterministically composites onto the BG (predictable, model stays pixel-identical); 'sharp' is the cheapest path and only works if the input is on a near-white seamless background. Reads inputPath from disk and writes the composited PNG to outputPath. Both must be absolute or repo-relative paths.",
+  input_schema: {
+    type: "object",
+    properties: {
+      inputPath: { type: "string", description: "Path to the source photo (jpg/png). Can be repo-relative." },
+      outputPath: { type: "string", description: "Where to write the composited PNG. Defaults to .openclaw/brand/composited/<basename>-on-bg.png" },
+      mode: { type: "string", enum: ["ai", "cutout", "sharp"] },
+      subjectHeightFrac: { type: "number", minimum: 0.1, maximum: 1, description: "cutout/sharp modes: fraction of canvas the subject occupies vertically. Default 0.85." },
+      subjectCenterXFrac: { type: "number", minimum: 0, maximum: 1, description: "cutout/sharp modes: horizontal center 0-1. Default 0.55 (slight right so BV mark stays visible)." },
+      subjectBottomYFrac: { type: "number", minimum: 0, maximum: 1, description: "cutout/sharp modes: bottom edge of subject 0-1. Default 0.98." },
+      dropShadow: { type: "boolean", description: "cutout/sharp modes: add a soft drop shadow under the subject. Default false." }
+    },
+    required: ["inputPath"]
+  },
+  async run(args, ctx) {
+    const inputPath = String(args.inputPath);
+    const mode = (typeof args.mode === "string" ? args.mode : "ai") as "ai" | "cutout" | "sharp";
+    const absoluteIn = path.isAbsolute(inputPath) ? inputPath : path.join(process.cwd(), inputPath);
+    if (!existsSync(absoluteIn)) {
+      return { error: `Input not found: ${absoluteIn}` };
+    }
+    if (!existsSync(BV_MOCK_BG_PATH)) {
+      return { error: `BV mock BG missing at ${BV_MOCK_BG_PATH}` };
+    }
+    const sourceBuffer = await readFile(absoluteIn);
+
+    let result: Buffer;
+    if (mode === "ai") {
+      result = await aiBackgroundReplace(sourceBuffer);
+    } else if (mode === "cutout") {
+      result = await cutoutComposite(sourceBuffer, {
+        subjectHeightFrac: typeof args.subjectHeightFrac === "number" ? args.subjectHeightFrac : undefined,
+        subjectCenterXFrac: typeof args.subjectCenterXFrac === "number" ? args.subjectCenterXFrac : undefined,
+        subjectBottomYFrac: typeof args.subjectBottomYFrac === "number" ? args.subjectBottomYFrac : undefined,
+        dropShadow: args.dropShadow === true
+      });
+    } else {
+      const cutout = await sharpFlatWhiteCutout(sourceBuffer);
+      result = await cutoutComposite(cutout, {
+        subjectHeightFrac: typeof args.subjectHeightFrac === "number" ? args.subjectHeightFrac : undefined,
+        subjectCenterXFrac: typeof args.subjectCenterXFrac === "number" ? args.subjectCenterXFrac : undefined,
+        subjectBottomYFrac: typeof args.subjectBottomYFrac === "number" ? args.subjectBottomYFrac : undefined,
+        dropShadow: args.dropShadow === true,
+        alreadyTransparent: true
+      });
+    }
+
+    const baseName = path.basename(absoluteIn, path.extname(absoluteIn));
+    const defaultOut = path.join(process.cwd(), ".openclaw", "brand", "composited", `${baseName}-on-bg.png`);
+    const outPath = typeof args.outputPath === "string"
+      ? (path.isAbsolute(args.outputPath) ? args.outputPath : path.join(process.cwd(), args.outputPath))
+      : defaultOut;
+    await mkdir(path.dirname(outPath), { recursive: true });
+    await writeFile(outPath, result);
+
+    await logActivity({
+      kind: "tool_call",
+      message: `composite_on_bv_background → ${mode} ${path.basename(absoluteIn)} → ${path.basename(outPath)}`,
+      data: { mode, inputPath: absoluteIn, outputPath: outPath, source: ctx.source }
+    });
+
+    return {
+      ok: true,
+      mode,
+      inputPath: absoluteIn,
+      outputPath: outPath,
+      sizeBytes: result.length
+    };
+  }
+};
+
+const summarize_drafts: OperatorTool = {
+  name: "summarize_drafts",
+  description:
+    "Categorize every draft product across configured brands into delete/decide/publish buckets via the existing brand-fit filter. Use to surface pre-launch hygiene work — what should be deleted as off-brand, what needs merchant decision, what's safe to publish. Returns per-brand bucketed lists with admin URLs and rationale. Read-only; no state changes.",
+  input_schema: {
+    type: "object",
+    properties: {
+      brand: { type: "string", enum: Object.keys(BRANDS), description: "Brand slug. Omit for all configured brands." }
+    }
+  },
+  async run(args) {
+    const brands = typeof args.brand === "string"
+      ? listConfiguredShopifyCredentials().filter((c) => c.brandSlug === args.brand)
+      : listConfiguredShopifyCredentials();
+    type Bucket = "publish_candidate" | "off_brand_delete" | "wrong_brand_for_apparel" | "needs_decision";
+    type Item = { id: number; title: string; productType?: string; tags: string[]; bucket: Bucket; reason: string; adminUrl: string };
+    const results = await Promise.all(brands.map(async (c) => {
+      const drafts = await listShopifyDrafts(250, c.brandSlug);
+      const buckets: Record<Bucket, Item[]> = {
+        publish_candidate: [],
+        off_brand_delete: [],
+        wrong_brand_for_apparel: [],
+        needs_decision: []
+      };
+      for (const d of drafts) {
+        const tags = d.tags ?? [];
+        const fulfillment = tags.some((t) => t.toLowerCase().includes("zendrop") || t.toLowerCase().includes("cj-"))
+          ? "zendrop"
+          : "printful";
+        const fit = evaluateBrandFit(
+          { title: d.title, productServiceType: d.productType ?? "" },
+          fulfillment as "printful" | "zendrop" | "digital",
+          c.brandSlug
+        );
+        let bucket: Bucket = "publish_candidate";
+        let reason = "on-brand, safe to publish";
+        if (!fit.ok) {
+          bucket = "off_brand_delete";
+          reason = fit.reason ?? "fails brand-fit filter";
+        } else if (c.brandSlug === "locklayer") {
+          const t = (d.productType ?? "").toLowerCase();
+          if (/apparel|t-shirt|hoodie|tumbler|drinkware|wall art|canvas|jersey|sweatshirt|hat|polo/.test(t)) {
+            bucket = "wrong_brand_for_apparel";
+            reason = `${d.productType} listed under LockLayer (hardware-only brand)`;
+          } else if (tags.some((tag) => tag.startsWith("cj-pid:"))) {
+            bucket = "needs_decision";
+            reason = "CJ-sourced — verify margin + image quality before publish";
+          }
+        }
+        buckets[bucket].push({
+          id: d.id,
+          title: d.title,
+          productType: d.productType,
+          tags,
+          bucket,
+          reason,
+          adminUrl: d.adminUrl
+        });
+      }
+      return {
+        brand: c.brandSlug,
+        totals: {
+          off_brand_delete: buckets.off_brand_delete.length,
+          wrong_brand_for_apparel: buckets.wrong_brand_for_apparel.length,
+          needs_decision: buckets.needs_decision.length,
+          publish_candidate: buckets.publish_candidate.length,
+          total: drafts.length
+        },
+        buckets
+      };
+    }));
+    return { brands: results };
+  }
+};
+
+const composite_all_brand_images: OperatorTool = {
+  name: "composite_all_brand_images",
+  description:
+    "Bulk-replace every active product's primary image with a version composited onto the BV mock background. Idempotent — products tagged `bv-bg-composited` are skipped on re-runs unless force=true. Customer-facing: the new composited image becomes primary; the original is kept as backup at position 2 unless deleteOriginal=true.\n\n" +
+      "Mode picking — DEFAULT to 'editorial' for product page imagery: AI re-renders the subject as a premium editorial shot on TRANSPARENT BG, then sharp-composites onto the real BV mock BG. Wordmark in upper-left stays pixel-perfect (never hallucinated). Auto-derives gender + garment hint from product title (cropped tee → female, hat/sock → no model, men's default → male). Cost ~$0.04/image.\n\n" +
+      "'ai' mode is legacy — AI generates the whole scene including BG, which often hallucinates the wordmark ('BLACA VAULT', etc.) and gets gender wrong. Use only for one-off creative experiments.\n\n" +
+      "'cutout' preserves the original mockup pixel-identical on BV BG. 'sharp' is free but only works when sources are already on white seamless.",
+  input_schema: {
+    type: "object",
+    properties: {
+      brand: { type: "string", enum: Object.keys(BRANDS) },
+      mode: { type: "string", enum: ["editorial", "ai", "cutout", "sharp"], description: "Default: editorial." },
+      productId: { type: "integer", description: "Process one product instead of all." },
+      force: { type: "boolean", description: "Re-process products that already have the bv-bg-composited tag." },
+      deleteOriginal: { type: "boolean", description: "Delete the original primary image after compositing. Default: false (kept as backup)." },
+      dryRun: { type: "boolean", description: "List what would happen without making changes or spending money." }
+    },
+    required: ["brand"]
+  },
+  async run(args, ctx) {
+    const brand = String(args.brand);
+    const mode = (typeof args.mode === "string" ? args.mode : "editorial") as BgCompositeMode;
+    const result = await compositeBrandImagesOnBvBg(brand, {
+      mode,
+      productId: typeof args.productId === "number" ? args.productId : undefined,
+      force: args.force === true,
+      keepOriginal: args.deleteOriginal !== true,
+      dryRun: args.dryRun === true
+    });
+    await logActivity({
+      kind: "tool_call",
+      message: `composite_all_brand_images → ${brand} mode=${mode} ${result.processed}/${result.total} processed${args.dryRun ? " (dry-run)" : ""}`,
+      data: { brand, mode, source: ctx.source }
+    });
+    return result;
+  }
+};
+
+const launch_status: OperatorTool = {
+  name: "launch_status",
+  description:
+    "Read-only readiness check. Returns a list of named checks (Shopify connection, active product count, unreviewed drafts, env vars, webhook secret, OPERATOR_AUTH_SECRET on Vercel, Printful auto-confirm posture) each with status (ok/warn/fail) and a fix hint. Use this to answer 'are we ready to launch?' with concrete data instead of guessing. Brand slug optional — omit to check every configured brand.",
+  input_schema: {
+    type: "object",
+    properties: {
+      brand: { type: "string", enum: Object.keys(BRANDS), description: "Brand slug. Omit for all configured brands." }
+    }
+  },
+  async run(args) {
+    if (typeof args.brand === "string") {
+      return await getLaunchStatus(args.brand);
+    }
+    const reports = await getLaunchStatusForAllBrands();
+    return { reports };
+  }
+};
+
 // ── Registry ──────────────────────────────────────────────────────────────
 
 export const OPERATOR_TOOLS: OperatorTool[] = [
@@ -1035,7 +1248,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
   generate_content_drop_run,
   mark_content_post_posted,
   get_spend_summary,
-  set_spend_budget
+  set_spend_budget,
+  composite_on_bv_background,
+  composite_all_brand_images,
+  summarize_drafts,
+  launch_status
 ];
 
 export function getToolByName(name: string): OperatorTool | undefined {

@@ -17,6 +17,18 @@ export default function HomePage() {
         }}
       >
         <Link
+          href="/launch"
+          style={{
+            color: "rgba(255, 255, 255, 0.6)",
+            textDecoration: "none",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            padding: "6px 12px",
+            borderRadius: 8
+          }}
+        >
+          Launch readiness →
+        </Link>
+        <Link
           href="/content-studio"
           style={{
             color: "rgba(255, 255, 255, 0.6)",

@@ -37,7 +37,25 @@ export function middleware(request: NextRequest) {
   }
 
   const expected = process.env.OPERATOR_AUTH_SECRET?.trim();
-  if (!expected) return NextResponse.next();
+  const onVercel = Boolean(process.env.VERCEL);
+
+  // Fail closed on production: if we're deployed to Vercel without
+  // OPERATOR_AUTH_SECRET, lock the operator/content-studio/pipeline routes
+  // entirely. Webhooks still work because of the PUBLIC_PREFIXES check above.
+  // The merchant must set the env var to enable API-side admin access from
+  // the deployed UI. Local dev without the secret stays open as before.
+  if (!expected) {
+    if (onVercel) {
+      return NextResponse.json(
+        {
+          error:
+            "Operator API disabled. Set OPERATOR_AUTH_SECRET in Vercel project env (use `openssl rand -hex 32`) to enable."
+        },
+        { status: 503 }
+      );
+    }
+    return NextResponse.next();
+  }
 
   const header = request.headers.get("authorization") ?? "";
   const bearer = header.toLowerCase().startsWith("bearer ")

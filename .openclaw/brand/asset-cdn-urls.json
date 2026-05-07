@@ -1,0 +1,42 @@
+{
+  "bv_logo_gold": {
+    "filename": "BV Gold.png",
+    "url": "https://cdn.shopify.com/s/files/1/0674/3991/9202/files/BV_Gold.png?v=1778179677",
+    "uploadedAt": "2026-05-07T18:47:59.700Z"
+  },
+  "bv_monogram": {
+    "filename": "BV Monogram.png",
+    "url": "https://cdn.shopify.com/s/files/1/0674/3991/9202/files/BV_Monogram.png?v=1778179680",
+    "uploadedAt": "2026-05-07T18:48:02.755Z"
+  },
+  "bv_logo_transparent": {
+    "filename": "BV Transparent.png",
+    "url": "https://cdn.shopify.com/s/files/1/0674/3991/9202/files/BV_Transparent.png?v=1778179683",
+    "uploadedAt": "2026-05-07T18:48:05.616Z"
+  },
+  "bv_wordmark": {
+    "filename": "BV apparel.png",
+    "url": "https://cdn.shopify.com/s/files/1/0674/3991/9202/files/BV_apparel_181f0f3f-6e9e-40b7-9c2c-f80bfef24978.png?v=1778179686",
+    "uploadedAt": "2026-05-07T18:48:08.702Z"
+  },
+  "bv_bg_liquid": {
+    "filename": "BV Liquid Background.png",
+    "url": "https://cdn.shopify.com/s/files/1/0674/3991/9202/files/BV_Liquid_Background.png?v=1778179689",
+    "uploadedAt": "2026-05-07T18:48:11.942Z"
+  },
+  "bv_mock_bg": {
+    "filename": "BG BV Mock.png",
+    "url": "https://cdn.shopify.com/s/files/1/0674/3991/9202/files/BG_BV_Mock.png?v=1778179692",
+    "uploadedAt": "2026-05-07T18:48:15.174Z"
+  },
+  "hero": {
+    "filename": "hero.png",
+    "url": "https://cdn.shopify.com/s/files/1/0674/3991/9202/files/hero.png?v=1778179696",
+    "uploadedAt": "2026-05-07T18:48:19.015Z"
+  },
+  "hero_final": {
+    "filename": "hero-final.png",
+    "url": "https://cdn.shopify.com/s/files/1/0674/3991/9202/files/hero-final.png?v=1778179700",
+    "uploadedAt": "2026-05-07T18:48:22.539Z"
+  }
+}
