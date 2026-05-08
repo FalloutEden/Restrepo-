@@ -45,6 +45,13 @@ import { aiBackgroundReplace, cutoutComposite, sharpFlatWhiteCutout, BV_MOCK_BG_
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { getLaunchStatus, getLaunchStatusForAllBrands } from "@/lib/launch-status";
+import {
+  klaviyoHealthCheck,
+  klaviyoListLists,
+  klaviyoUpsertProfile,
+  klaviyoSubscribeProfileToList,
+  klaviyoListCampaigns
+} from "@/lib/klaviyo";
 
 // Each tool the operator can call is declared once here:
 //   - schema: JSONSchema Anthropic uses to constrain tool_use
@@ -1219,6 +1226,74 @@ const launch_status: OperatorTool = {
   }
 };
 
+// ── Klaviyo (email marketing platform) ────────────────────────────────────
+
+const klaviyo_status: OperatorTool = {
+  name: "klaviyo_status",
+  description:
+    "Read-only health check on the Klaviyo integration. Verifies the KLAVIYO_API_KEY is live, returns the connected account name, lists configured, and recent campaigns. Use to confirm Klaviyo is wired before recommending any flows or sends.",
+  input_schema: { type: "object", properties: {} },
+  async run() {
+    const health = await klaviyoHealthCheck();
+    if (!health.ok) return { ok: false, detail: health.detail };
+    const lists = await klaviyoListLists().catch(() => []);
+    const campaigns = await klaviyoListCampaigns().catch(() => []);
+    return {
+      ok: true,
+      account: { id: health.accountId, organization: health.organizationName },
+      lists: lists.map((l) => ({ id: l.id, name: l.name })),
+      campaignCount: campaigns.length,
+      recentCampaigns: campaigns.slice(0, 5).map((c) => ({
+        id: c.id,
+        name: c.name,
+        status: c.status,
+        sentAt: c.sentAt
+      }))
+    };
+  }
+};
+
+const klaviyo_push_test_contact: OperatorTool = {
+  name: "klaviyo_push_test_contact",
+  description:
+    "Push a test profile to a Klaviyo list — useful for verifying flows are firing correctly without real customer data. Requires email + listId. Use list id from klaviyo_status. Returns the new (or existing) profile id.",
+  input_schema: {
+    type: "object",
+    properties: {
+      email: { type: "string", description: "Test email — use a real inbox you control so you can verify the email lands." },
+      listId: { type: "string", description: "Klaviyo list id (from klaviyo_status output)." },
+      firstName: { type: "string" },
+      lastName: { type: "string" }
+    },
+    required: ["email", "listId"]
+  },
+  async run(args, ctx) {
+    const email = String(args.email);
+    const listId = String(args.listId);
+    const upsert = await klaviyoUpsertProfile({
+      email,
+      firstName: typeof args.firstName === "string" ? args.firstName : undefined,
+      lastName: typeof args.lastName === "string" ? args.lastName : undefined,
+      properties: { source: "operator-test", testedAt: new Date().toISOString() }
+    });
+    if (!upsert.ok || !upsert.profileId) {
+      return { ok: false, step: "profile_upsert", detail: upsert.detail };
+    }
+    const sub = await klaviyoSubscribeProfileToList(upsert.profileId, listId);
+    await logActivity({
+      kind: "tool_call",
+      message: `klaviyo_push_test_contact → ${email} → list ${listId} (profile ${upsert.profileId})`,
+      data: { source: ctx.source }
+    });
+    return {
+      ok: sub.ok,
+      profileId: upsert.profileId,
+      profileDetail: upsert.detail,
+      subscribeDetail: sub.detail
+    };
+  }
+};
+
 // ── Registry ──────────────────────────────────────────────────────────────
 
 export const OPERATOR_TOOLS: OperatorTool[] = [
@@ -1252,7 +1327,9 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
   composite_on_bv_background,
   composite_all_brand_images,
   summarize_drafts,
-  launch_status
+  launch_status,
+  klaviyo_status,
+  klaviyo_push_test_contact
 ];
 
 export function getToolByName(name: string): OperatorTool | undefined {
