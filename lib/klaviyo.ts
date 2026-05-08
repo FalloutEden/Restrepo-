@@ -151,6 +151,59 @@ export async function klaviyoSubscribeProfileToList(
   return { ok: false, detail: `Subscribe failed (${r.status}): ${r.error.slice(0, 200)}` };
 }
 
+// ── Templates (push HTML email templates to Klaviyo's library) ─────────────
+
+export type KlaviyoTemplate = {
+  id: string;
+  name: string;
+};
+
+export async function klaviyoCreateTemplate(input: {
+  name: string;
+  html: string;
+  subject?: string;
+}): Promise<{ ok: boolean; templateId?: string; status: number; detail: string }> {
+  const r = await klaviyo<{ data: { id: string } }>("/templates/", {
+    method: "POST",
+    body: JSON.stringify({
+      data: {
+        type: "template",
+        attributes: {
+          name: input.name,
+          editor_type: "CODE",
+          html: input.html,
+          text: input.subject ? `Subject: ${input.subject}` : ""
+        }
+      }
+    })
+  });
+  if (r.ok) {
+    return { ok: true, templateId: r.data.data.id, status: 201, detail: "Template created." };
+  }
+  return { ok: false, status: r.status, detail: r.error.slice(0, 300) };
+}
+
+export async function klaviyoListTemplates(): Promise<KlaviyoTemplate[]> {
+  // Klaviyo's templates endpoint maxes page size at 10 — paginate via cursor.
+  const out: KlaviyoTemplate[] = [];
+  let next: string | null = "/templates/?page[size]=10";
+  while (next) {
+    const r = await klaviyo<{
+      data: Array<{ id: string; attributes: { name: string } }>;
+      links?: { next?: string };
+    }>(next);
+    if (!r.ok) throw new Error(`Klaviyo templates fetch failed (${r.status}): ${r.error.slice(0, 200)}`);
+    for (const t of r.data.data) out.push({ id: t.id, name: t.attributes.name });
+    // links.next is an absolute URL or null. Convert to relative for our base.
+    if (r.data.links?.next) {
+      next = r.data.links.next.replace(/^https?:\/\/[^/]+\/api/, "");
+    } else {
+      next = null;
+    }
+  }
+  return out;
+}
+
 // ── Metrics + Campaigns ────────────────────────────────────────────────────
 
 export type KlaviyoMetric = { id: string; name: string; integration: string };
