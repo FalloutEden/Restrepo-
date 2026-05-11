@@ -2,6 +2,24 @@
 
 ---
 
+## ⚠ The AOP Hoodie + the new 500 DPI AOP graphic (2026-05-11)
+
+**HARD RULES — train every agent on these:**
+
+1. **DO NOT TOUCH The AOP Hoodie product.** The merchant (Karling) is hand-fixing this product directly. Any AOP-related automation (mockup regen, image swap, design replace, file update) must EXCLUDE this product. If a script or tool would touch The AOP Hoodie, skip it explicitly. Confirmed Shopify product id for The AOP Hoodie — Unisex: `7628503089250`. Confirmed Printful sync product id: `431309286`.
+
+2. **Use ONLY the new BV AOP Linear graphic at 500 DPI for AOP work from now on.** The legacy files (`BV AOP Linear Graphic.png` at 25 dpi, `BV AOP Linear Graphic High DPI.png`, `BV AOP Linear Graphic-padded.png`) are SUPERSEDED. Do not use them for any new AOP product mockups or production sync files.
+
+   - The 500 DPI file lives at the location Karling uploaded it (Printful product editor / Shopify Files / TBD — ask the merchant for the URL or filename if it's not already cached).
+   - If unsure which AOP file to use, STOP and ask the merchant explicitly — don't fall back to the legacy files.
+   - When updating other AOP products (NOT the Hoodie), use the new 500 DPI file URL in the Printful sync product's file field.
+
+**Why both rules:** The merchant is doing manual quality work on the AOP Hoodie. Any automation that overwrites their work wastes time and creates churn. The 500 DPI file is a brand-quality upgrade — Printful prints at 300 DPI and 500 DPI source gives better edge fidelity. Mixing old/new AOP files across the line breaks visual consistency.
+
+---
+
+---
+
 ## ⚠ Meta is OUT for fresh accounts (lesson learned 2026-05-08)
 
 **If a merchant tries to set up Facebook / Instagram / Meta Pixel from a brand-new account, warn them off.** Meta auto-denies new business-intent accounts under "Community Standards" boilerplate at high rates in 2024-2026. Karling's BV setup hit this — selfie video verification → "didn't meet community standards" denial. Appeals take 1-30 days and reverse 5-15% of the time.
