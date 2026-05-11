@@ -1,0 +1,37 @@
+[init] AOP redo with 500 DPI Printful file_id 987169507
+[init] 6 products in scope (Polo skipped per merchant)
+
+=== PHASE 1: production sync files ===
+[aop-bomber] ✓ swapped to file_id 987169507
+[aop-hoodie] ✓ swapped to file_id 987169507 + added pocket+hood
+[aop-sweatshirt] ✓ swapped to file_id 987169507
+[aop-jersey] ✓ swapped to file_id 987169507
+[aop-tee-mens] ✓ swapped to file_id 987169507
+[aop-tee-womens] ✓ swapped to file_id 987169507
+
+=== PHASE 2: regenerate mockups (60s rate limit between products) ===
+
+[aop-bomber] (1/6) regenerating mockups…
+  ✗ Printful POST /mockup-generator/create-task/390 (400): {"code":400,"result":"File type default is not allowed for this product","error":{"reason":"BadRequest","message":"File type default is not allowed for this product","api_error_code":"MG-4","error_url":"https://developers.printful.com/docs/#sect
+
+[aop-hoodie] (2/6) regenerating mockups…
+  sleeping 65s for Printful mockup-gen rate limit…
+  ✗ Printful POST /mockup-generator/create-task/388 (400): {"code":400,"result":"File type default is not allowed for this product","error":{"reason":"BadRequest","message":"File type default is not allowed for this product","api_error_code":"MG-4","error_url":"https://developers.printful.com/docs/#sect
+
+[aop-sweatshirt] (3/6) regenerating mockups…
+  sleeping 65s for Printful mockup-gen rate limit…
+  ✗ Printful POST /mockup-generator/create-task/320 (400): {"code":400,"result":"File type default is not allowed for this product","error":{"reason":"BadRequest","message":"File type default is not allowed for this product","api_error_code":"MG-4","error_url":"https://developers.printful.com/docs/#sect
+
+[aop-jersey] (4/6) regenerating mockups…
+  sleeping 65s for Printful mockup-gen rate limit…
+  ✗ Printful POST /mockup-generator/create-task/835 (400): {"code":400,"result":"File type default is not allowed for this product","error":{"reason":"BadRequest","message":"File type default is not allowed for this product","api_error_code":"MG-4","error_url":"https://developers.printful.com/docs/#sect
+
+[aop-tee-mens] (5/6) regenerating mockups…
+  sleeping 65s for Printful mockup-gen rate limit…
+  ✗ Printful POST /mockup-generator/create-task/257 (400): {"code":400,"result":"Position field is missing","error":{"reason":"BadRequest","message":"Position field is missing","api_error_code":"MG-4","error_url":"https://developers.printful.com/docs/#section/API-Errors/Mockup-Generator-API"}}
+
+[aop-tee-womens] (6/6) regenerating mockups…
+  sleeping 65s for Printful mockup-gen rate limit…
+  ✗ Printful POST /mockup-generator/create-task/261 (400): {"code":400,"result":"Position field is missing","error":{"reason":"BadRequest","message":"Position field is missing","api_error_code":"MG-4","error_url":"https://developers.printful.com/docs/#section/API-Errors/Mockup-Generator-API"}}
+
+Done.
