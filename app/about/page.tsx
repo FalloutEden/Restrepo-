@@ -72,13 +72,17 @@ export default function AboutPage() {
         </h1>
 
         <p style={baseText}>
-          My service dog Elsa died on September 26, 2025.
+          After losing my service dog Elsa, I decided to break from the 9-to-5 path I&apos;d been on
+          and build something different.
         </p>
         <p style={baseText}>
-          I was working when she went. Back turned to her, focused on a screen. By the time I noticed, it was already over.
+          The Operator is what came out of that decision — an engine that lets indie founders run
+          real businesses without giving up the time and attention that actually matters. It carries
+          her name because it carries the principles she lived by: loyal, useful, present.
         </p>
         <p style={baseText}>
-          I have spent every day since trying to make sure that's never the cost of running a business again — for me, or for anyone else.
+          I built it because I wanted to choose how I spent my hours. I&apos;m sharing it so other
+          people can too.
         </p>
 
         <h2 style={{ fontSize: 28, fontWeight: 800, marginTop: 64, marginBottom: 16, letterSpacing: "-0.01em" }}>

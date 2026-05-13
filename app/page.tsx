@@ -408,7 +408,7 @@ export default function LandingPage() {
             },
             {
               q: "What is Project ELSA?",
-              a: "ELSA stands for Evolved Loyal Service Agent. It's the mission name behind The Operator. The founder lost his service dog, Elsa, while working with his back turned to her. The project exists so that's never the cost of doing business again — for him, or for anyone running on this engine."
+              a: "ELSA stands for Evolved Loyal Service Agent. It's the mission name behind The Operator — built in memory of the founder's service dog. After losing her, he decided to break from the 9-to-5 path and build something that lets indie founders do the same. The system carries the principles she lived by: loyal, useful, present."
             },
             {
               q: "How is this different from Shopify + a freelancer?",

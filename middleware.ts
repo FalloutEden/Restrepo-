@@ -16,7 +16,8 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC_PREFIXES = [
   "/api/webhooks/", // HMAC-protected, must remain reachable
   "/api/stripe/webhook", // Stripe signs payloads; verified inline
-  "/api/onboard/start" // Public signup endpoint — no auth required to start
+  "/api/onboard/start", // Public signup endpoint — no auth required to start
+  "/api/admin/login" // Owner's login endpoint — verifies secret inline
 ];
 
 export const config = {
