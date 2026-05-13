@@ -1,23 +1,68 @@
-.operator-header {
-  margin: 24px 0 12px;
+/* The Operator dashboard — Project Elsa light SaaS theme.
+ *
+ * When this stylesheet is loaded by /dashboard, the page-shell is wrapped
+ * in a .dashboard-light element. Body picks up `.has-dashboard-light` via
+ * a small useEffect — that hides globals.css's UmbrellaBackground and gives
+ * us a clean white canvas to render the operator UI on. Pipeline / admin
+ * surfaces still use the dark globals (intentional — your internal cockpit).
+ */
+
+/* ── Body-level reset when the dashboard is open ────────────────────────── */
+body.has-dashboard-light {
+  background: #fafafa !important;
+  color: #0F0E0C;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+    Helvetica, Arial, sans-serif !important;
 }
 
-.operator-title {
-  font-size: 28px;
-  font-weight: 600;
-  margin: 4px 0 8px;
+body.has-dashboard-light .app-background,
+body.has-dashboard-light .app-shell::before {
+  display: none !important;
 }
 
-.operator-sub {
-  color: rgba(255, 255, 255, 0.65);
+body.has-dashboard-light .app-shell {
+  background: #fafafa;
+  min-height: 100vh;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+body.has-dashboard-light .operator-header {
+  margin: 32px 0 24px;
+}
+
+body.has-dashboard-light .operator-header .eyebrow {
+  display: inline-block;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: #A67843;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+body.has-dashboard-light .operator-title {
+  font-size: 32px;
+  font-weight: 800;
+  margin: 8px 0 12px;
+  color: #0F0E0C;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+body.has-dashboard-light .operator-sub {
+  color: #555;
   max-width: 720px;
-  line-height: 1.5;
+  line-height: 1.6;
+  font-size: 15px;
 }
 
+/* ── Grid ──────────────────────────────────────────────────────────────── */
 .operator-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  gap: 24px;
+  gap: 20px;
   margin-top: 24px;
 }
 
@@ -27,26 +72,29 @@
   }
 }
 
+/* ── Cards ─────────────────────────────────────────────────────────────── */
 .operator-card {
-  background: rgba(20, 22, 30, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(15, 14, 12, 0.04);
 }
 
 .operator-card h2 {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0 0 12px;
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0 0 14px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.7);
+  color: #666;
 }
 
+/* ── Chat log ──────────────────────────────────────────────────────────── */
 .operator-chat-log {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   max-height: 580px;
   overflow-y: auto;
   padding: 4px;
@@ -54,58 +102,61 @@
 
 .operator-bubble {
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: 10px;
   white-space: pre-wrap;
   word-wrap: break-word;
-  line-height: 1.5;
+  line-height: 1.55;
   font-size: 14px;
 }
 
 .operator-bubble-user {
-  background: rgba(80, 110, 200, 0.22);
+  background: #0F0E0C;
+  color: #ffffff;
   align-self: flex-end;
   max-width: 80%;
-  border: 1px solid rgba(120, 160, 240, 0.35);
 }
 
 .operator-bubble-assistant {
-  background: rgba(255, 255, 255, 0.05);
+  background: #f4f4f5;
+  color: #0F0E0C;
   align-self: flex-start;
   max-width: 92%;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid #ebebeb;
 }
 
 .operator-bubble-tool {
-  background: rgba(40, 50, 30, 0.4);
+  background: #FAF7F0;
+  color: #6B4F2A;
   align-self: flex-start;
   max-width: 88%;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 12px;
-  color: rgba(220, 240, 200, 0.85);
-  border: 1px solid rgba(140, 200, 100, 0.18);
+  border: 1px solid #ECDFC4;
 }
 
 .operator-bubble-error {
-  background: rgba(120, 30, 30, 0.4);
-  border: 1px solid rgba(220, 90, 90, 0.5);
+  background: #FFF5F5;
+  color: #8B2020;
+  border: 1px solid #FFD0D0;
   align-self: flex-start;
   max-width: 88%;
   font-size: 13px;
 }
 
+/* ── Inputs ────────────────────────────────────────────────────────────── */
 .operator-input-row {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .operator-input {
   flex: 1;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #ffffff;
+  border: 1px solid #d8d8d8;
   border-radius: 10px;
   padding: 12px 14px;
-  color: white;
+  color: #0F0E0C;
   font-size: 14px;
   font-family: inherit;
   resize: none;
@@ -113,124 +164,164 @@
 }
 
 .operator-input:focus {
-  outline: 2px solid rgba(120, 160, 240, 0.6);
+  outline: 2px solid #A67843;
   outline-offset: 0;
+  border-color: transparent;
 }
 
+.operator-input::placeholder {
+  color: #999;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
 .operator-button {
-  background: rgba(110, 150, 230, 0.85);
-  color: white;
+  background: #0F0E0C;
+  color: #ffffff;
   border: 0;
   border-radius: 10px;
   padding: 0 18px;
   font-weight: 600;
   cursor: pointer;
   font-size: 14px;
+  min-height: 40px;
+  font-family: inherit;
+  transition: background 120ms ease;
 }
 
-.operator-button:hover {
-  background: rgba(130, 170, 250, 1);
+.operator-button:hover:not(:disabled) {
+  background: #2a2825;
 }
 
 .operator-button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .operator-button-secondary {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #ffffff;
+  color: #0F0E0C;
+  border: 1px solid #d8d8d8;
 }
 
-.operator-button-secondary:hover {
-  background: rgba(255, 255, 255, 0.14);
+.operator-button-secondary:hover:not(:disabled) {
+  background: #f4f4f5;
 }
 
 .operator-button-row {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .operator-meta {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
+  color: #888;
 }
 
+/* ── Inbox ─────────────────────────────────────────────────────────────── */
 .operator-inbox-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  max-height: 320px;
+  gap: 10px;
+  max-height: 360px;
   overflow-y: auto;
 }
 
 .operator-inbox-item {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid #ebebeb;
   border-radius: 10px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 14px;
+  background: #ffffff;
 }
 
 .operator-inbox-item h3 {
   margin: 0 0 6px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
+  color: #0F0E0C;
 }
 
 .operator-inbox-item p {
   margin: 4px 0;
   font-size: 13px;
-  line-height: 1.45;
-  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.5;
+  color: #555;
 }
 
 .operator-inbox-cost {
-  color: rgba(255, 200, 120, 0.95);
-  font-weight: 600;
+  color: #A67843;
+  font-weight: 700;
 }
 
+/* ── Activity feed ─────────────────────────────────────────────────────── */
 .operator-activity-feed {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 320px;
+  gap: 4px;
+  max-height: 360px;
   overflow-y: auto;
   font-size: 12px;
 }
 
 .operator-activity-entry {
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
 .operator-activity-time {
-  color: rgba(255, 255, 255, 0.4);
+  color: #999;
   font-size: 11px;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
 }
 
 .operator-activity-msg {
-  color: rgba(255, 255, 255, 0.85);
+  color: #333;
   word-wrap: break-word;
 }
 
 .operator-empty {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.4);
+  color: #999;
   font-style: italic;
+  padding: 12px;
+  text-align: center;
 }
 
+/* ── Tick bar ──────────────────────────────────────────────────────────── */
 .operator-tick-bar {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
-  padding: 12px;
-  background: rgba(40, 30, 60, 0.45);
-  border: 1px solid rgba(160, 130, 220, 0.3);
+  padding: 12px 16px;
+  background: linear-gradient(180deg, #F8F4EC, #FFFFFF);
+  border: 1px solid #ECDFC4;
   border-radius: 10px;
+  color: #6B4F2A;
+  font-size: 13px;
+}
+
+/* ── Scrollbar polish ──────────────────────────────────────────────────── */
+body.has-dashboard-light *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+body.has-dashboard-light *::-webkit-scrollbar-track {
+  background: transparent;
+}
+body.has-dashboard-light *::-webkit-scrollbar-thumb {
+  background: #d8d8d8;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+body.has-dashboard-light *::-webkit-scrollbar-thumb:hover {
+  background: #b0b0b0;
+  background-clip: padding-box;
+  border: 2px solid transparent;
 }

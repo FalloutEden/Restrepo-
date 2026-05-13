@@ -44,11 +44,15 @@ export function SpendCard() {
   const refresh = useCallback(async () => {
     try {
       const r = await fetch("/api/operator/spend", { cache: "no-store" });
+      // Bail on auth failures + any non-2xx — keeps the loading state, never
+      // crashes trying to read .budget from an error envelope
+      if (!r.ok) return;
       const d = (await r.json()) as Response;
+      if (!d?.budgetStatus?.budget) return;
       setData(d);
       setCapInput(String(d.budgetStatus.budget.monthlyCapUsd));
     } catch {
-      // ignore
+      // ignore network/parse errors
     }
   }, []);
 

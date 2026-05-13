@@ -26,7 +26,12 @@ export function OperatorPanel() {
   const refresh = useCallback(async () => {
     try {
       const response = await fetch("/api/operator/state", { cache: "no-store" });
+      // 401 = unauthenticated dashboard view in production. Don't crash —
+      // leave data null so the UI renders empty rather than reading
+      // properties off an error envelope.
+      if (!response.ok) return;
       const payload = (await response.json()) as StateResponse;
+      if (!payload?.state) return;
       setData(payload);
     } catch (error) {
       console.error("Failed to load operator state", error);

@@ -22,14 +22,21 @@ import { makeBackgroundTransparent } from "@/lib/image-transparency";
 //
 // The fixed brand background lives at .openclaw/brand/Mock Up BG/BG BV Mock.png.
 
-// Wordmark-free BG. The original "BG BV Mock.png" had the BV monogram +
-// "BLACK VAULT APPAREL" wordmark baked into the upper-left, but gpt-image-1
-// reliably hallucinated it ("BLACA VAULT", "BLACK VHULT MOGRAW", duplicates,
-// etc.) when re-rendering or when the AI subject's edges spilled into that
-// region. We switched to a pure dark gradient (no text) so the wordmark can
-// never be corrupted. The chest BV monogram on the garment is the only brand
-// mark in the composite. Generate via `scripts/bv-make-clean-bg.ts`.
+// Flat #0F0E0C panel — the storefront's --color-background-rgb is 15 14 12,
+// so the composite blends seamlessly into the dark theme product grid. The
+// earlier "Clean" gradient (rgb 30,26,23 → rgb 15,13,11) created a visible
+// patch on the page because the top of every tile was lighter than the
+// surrounding page background. Flat removes the seam.
 export const BV_MOCK_BG_PATH = path.join(
+  process.cwd(),
+  ".openclaw",
+  "brand",
+  "Mock Up BG",
+  "BG BV Mock Flat.png"
+);
+
+// Gradient BG kept for archival; not used by the compositor any more.
+export const BV_MOCK_BG_GRADIENT_PATH = path.join(
   process.cwd(),
   ".openclaw",
   "brand",
@@ -280,11 +287,17 @@ export async function compositeOntoBvMockBackground(
  * Sharp-only flat-white background remover for cases where the input is a
  * studio shot on near-white seamless. Re-uses lib/image-transparency. Cheaper
  * than gpt-image-1 cutout when the source is already clean.
+ *
+ * Thresholds calibrated against Printful AOP mockups: their seamless BG is
+ * pure #FFFFFF (255), white-fabric garments top out around #F0F0F0 (240).
+ * Cutting at hard=253/soft=248 with edgeOnly flood-fill removes the pure-white
+ * BG and a couple steps of anti-alias halo while leaving white-fabric subjects
+ * fully intact. Earlier 240/215 thresholds ate the dress fabric.
  */
 export async function sharpFlatWhiteCutout(modelPhoto: Buffer): Promise<Buffer> {
   return makeBackgroundTransparent(modelPhoto, {
-    hardThreshold: 240,
-    softThreshold: 215,
+    hardThreshold: 253,
+    softThreshold: 248,
     edgeOnly: true
   });
 }

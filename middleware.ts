@@ -1,28 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-// Edge middleware — gates the API surface with optional bearer auth.
+// Edge middleware — gates the API surface.
 //
-// Behavior:
-//   - If OPERATOR_AUTH_SECRET env var is unset, requests pass through (so
-//     local dev and the existing in-app UI keep working). The deployment
-//     remains as open as it was before.
-//   - If OPERATOR_AUTH_SECRET is set in production env, /api/* requests
-//     must carry `Authorization: Bearer <secret>` OR a matching
-//     `x-operator-auth` cookie. Anything else returns 401.
-//   - The Shopify webhook handler is ALWAYS exempt — Shopify can't carry
-//     our bearer header, and the route already verifies HMAC inline.
+// Two auth modes (route handlers can be either or both):
+//   1. ADMIN — OPERATOR_AUTH_SECRET bearer (or x-operator-auth cookie).
+//      This is YOU, the SaaS operator. Full access.
+//   2. TENANT — btk_<...> bearer per-merchant. Resolved fully inside
+//      route handlers via lib/auth.ts (middleware runs in edge runtime
+//      and can't read tenant files). Middleware just lets the prefix
+//      through; the handler does the real check.
 //
-// To enable: set OPERATOR_AUTH_SECRET in Vercel project env vars (use
-// `openssl rand -hex 32` to generate). Then the in-app UI can either:
-//   - Be served behind a one-time login that sets the cookie, OR
-//   - Have its fetch calls include the bearer header from a server-component
-//     context (so the secret never reaches client JS).
-//
-// Deferring full session/user auth until SaaS multi-tenancy is wired —
-// for now this closes the open API surface that the security audit flagged.
+// Webhooks are ALWAYS exempt — Shopify + Stripe can't carry our bearer
+// header, and those routes verify HMAC inline.
 
 const PUBLIC_PREFIXES = [
-  "/api/webhooks/" // HMAC-protected, must remain reachable from Shopify
+  "/api/webhooks/", // HMAC-protected, must remain reachable
+  "/api/stripe/webhook", // Stripe signs payloads; verified inline
+  "/api/onboard/start" // Public signup endpoint — no auth required to start
 ];
 
 export const config = {
@@ -39,11 +33,6 @@ export function middleware(request: NextRequest) {
   const expected = process.env.OPERATOR_AUTH_SECRET?.trim();
   const onVercel = Boolean(process.env.VERCEL);
 
-  // Fail closed on production: if we're deployed to Vercel without
-  // OPERATOR_AUTH_SECRET, lock the operator/content-studio/pipeline routes
-  // entirely. Webhooks still work because of the PUBLIC_PREFIXES check above.
-  // The merchant must set the env var to enable API-side admin access from
-  // the deployed UI. Local dev without the secret stays open as before.
   if (!expected) {
     if (onVercel) {
       return NextResponse.json(
@@ -63,10 +52,18 @@ export function middleware(request: NextRequest) {
     : "";
   const cookie = request.cookies.get("x-operator-auth")?.value?.trim() ?? "";
 
+  // 1. Admin bearer match — full access
   if (bearer === expected || cookie === expected) return NextResponse.next();
 
+  // 2. Tenant bearer prefix — let through, route handler validates
+  //    against tenancy.ts. Edge runtime can't do the file lookup itself.
+  if (bearer.startsWith("btk_")) return NextResponse.next();
+
   return NextResponse.json(
-    { error: "Unauthorized. Set Authorization: Bearer <OPERATOR_AUTH_SECRET> or x-operator-auth cookie." },
+    {
+      error:
+        "Unauthorized. Provide Authorization: Bearer <admin secret> OR a tenant bearer (btk_…)."
+    },
     { status: 401 }
   );
 }

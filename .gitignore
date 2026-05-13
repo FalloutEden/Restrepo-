@@ -35,3 +35,38 @@ coverage
 .openclaw/brand/debug-*.png
 .openclaw/brand/.aop-linear-high-dpi-url.txt
 .openclaw/brand/.aop-linear-padded-url.txt
+
+# CEREBRO / Graphify generated artifacts — regenerable from code
+graphify-out/
+.openclaw/cerebro-usage.jsonl
+.openclaw/cerebro-scrape-results.json
+
+# Scraped external corpus — regenerable via scripts/cerebro-scrape-competitors.ts
+raw/
+
+# Local script outputs / test artifacts
+.openclaw/bv-gold-file-id.txt
+.openclaw/chest-left-targets.json
+.openclaw/chest-mark-swap-results.json
+.openclaw/dress-sample.jpg
+.openclaw/dress-composite-v2.png
+.openclaw/elsa-share-asset-source.jpg
+.openclaw/fanny-composite.png
+.openclaw/graphify-home.html
+.openclaw/monogram-tee-gold-mark.jpg
+.openclaw/monogram-tee-new-mark.jpg
+.openclaw/monogram-tee-new-mark.json
+.openclaw/theme-recon/spot-check/
+
+# Graphify skill installs (per-machine, regenerable via graphify install)
+skills/
+skills-lock.json
+.claude/skills/
+.agents/
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
+
+# Tenant data — never commit (encrypted but still tenant-private)
+.openclaw/tenants/
+.openclaw/audit.jsonl

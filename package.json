@@ -11,6 +11,7 @@
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.91.0",
+        "@vercel/postgres": "^0.10.0",
         "docx": "^9.6.1",
         "dompurify": "^3.4.0",
         "exceljs": "^4.4.0",
@@ -20,13 +21,16 @@
         "openai": "^6.34.0",
         "react": "19.0.0",
         "react-dom": "19.0.0",
+        "resend": "^6.12.3",
         "server-only": "^0.0.1",
-        "sharp": "^0.34.5"
+        "sharp": "^0.34.5",
+        "stripe": "^22.1.1"
     },
     "devDependencies": {
         "@types/node": "22.14.1",
         "@types/react": "19.1.2",
         "@types/react-dom": "19.1.2",
+        "playwright": "^1.60.0",
         "tsx": "^4.20.6",
         "typescript": "5.8.3"
     },

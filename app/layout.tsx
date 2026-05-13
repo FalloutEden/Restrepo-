@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Black Vault Umbrella Operator",
-  description: "Managing-director agent for the Restrepo commerce pipeline. Chat-driven. Autonomous between visits."
+  title: "The Operator — by Black Vault",
+  description: "Hire your Operator. An AI agent that builds and runs a premium apparel brand on Shopify + Printful in 48 hours."
 };
 
 type RootLayoutProps = {

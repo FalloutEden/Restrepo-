@@ -1294,6 +1294,117 @@ const klaviyo_push_test_contact: OperatorTool = {
   }
 };
 
+// ── CEREBRO query (Graphify knowledge graph) ──────────────────────────────
+// Lets the operator pull context from the project's knowledge graph before
+// answering. Also logs every call to .openclaw/cerebro-usage.jsonl so we
+// can build edge-weighting (STDP) on top later.
+
+const cerebro_query: OperatorTool = {
+  name: "cerebro_query",
+  description:
+    "Query CEREBRO — the project's local Graphify knowledge graph (codebase + docs + conversation history + memory). Three modes: 'query' (BFS traversal for a question), 'explain' (a single node and its neighbors), 'path' (shortest path between two concepts). Use this BEFORE searching files when you need cross-cutting context about decisions, conventions, or how parts of the system relate. Stays local; no API spend.",
+  input_schema: {
+    type: "object",
+    properties: {
+      mode: {
+        type: "string",
+        enum: ["query", "explain", "path"],
+        description: "query=BFS for question; explain=node+neighbors; path=A to B"
+      },
+      question: { type: "string", description: "For mode=query, the question text" },
+      node: { type: "string", description: "For mode=explain, the concept/file/function name" },
+      from: { type: "string", description: "For mode=path, the source concept" },
+      to: { type: "string", description: "For mode=path, the destination concept" },
+      budget: { type: "integer", minimum: 200, maximum: 5000, description: "Token budget cap for query mode (default 2000)" }
+    },
+    required: ["mode"]
+  },
+  async run(args, ctx) {
+    const { spawnSync } = await import("node:child_process");
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+
+    const mode = args.mode as "query" | "explain" | "path";
+    const budget = typeof args.budget === "number" ? args.budget : 2000;
+
+    let cliArgs: string[];
+    let inputLabel: string;
+    if (mode === "query") {
+      const q = String(args.question ?? "").trim();
+      if (!q) return { ok: false, error: "mode=query requires a 'question' arg" };
+      cliArgs = ["query", q, "--budget", String(budget)];
+      inputLabel = q;
+    } else if (mode === "explain") {
+      const n = String(args.node ?? "").trim();
+      if (!n) return { ok: false, error: "mode=explain requires a 'node' arg" };
+      cliArgs = ["explain", n];
+      inputLabel = n;
+    } else if (mode === "path") {
+      const a = String(args.from ?? "").trim();
+      const b = String(args.to ?? "").trim();
+      if (!a || !b) return { ok: false, error: "mode=path requires both 'from' and 'to'" };
+      cliArgs = ["path", a, b];
+      inputLabel = `${a} -> ${b}`;
+    } else {
+      return { ok: false, error: `unknown mode: ${mode}` };
+    }
+
+    // Run graphify
+    const result = spawnSync("graphify", cliArgs, {
+      encoding: "utf8",
+      timeout: 60_000,
+      cwd: process.cwd()
+    });
+
+    if (result.error) {
+      return { ok: false, error: `CEREBRO unavailable: ${result.error.message}` };
+    }
+    const stdout = (result.stdout || "").trim();
+    const stderr = (result.stderr || "").trim();
+
+    // Parse node names from stdout (lines starting with "NODE ")
+    const nodeMatches = [...stdout.matchAll(/^NODE\s+([^\s\[]+)/gm)].map((m) => m[1]);
+    // Cap returned text to fit a sensible context envelope
+    const truncated = stdout.length > 8000 ? stdout.slice(0, 8000) + "\n...[truncated]" : stdout;
+
+    // Append to usage log for STDP/hot-nodes analysis
+    try {
+      const logDir = path.join(".openclaw");
+      if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+      const entry = {
+        ts: new Date().toISOString(),
+        mode,
+        input: inputLabel,
+        budget: mode === "query" ? budget : undefined,
+        returnedNodes: nodeMatches,
+        nodeCount: nodeMatches.length,
+        source: ctx.source,
+        conversationId: ctx.conversationId,
+        exitStatus: result.status
+      };
+      fs.appendFileSync(path.join(logDir, "cerebro-usage.jsonl"), JSON.stringify(entry) + "\n");
+    } catch (e) {
+      // Don't fail the tool call because logging broke
+    }
+
+    await logActivity({
+      kind: "tool_call",
+      message: `cerebro_query (${mode}) "${inputLabel.slice(0, 80)}" -> ${nodeMatches.length} nodes`,
+      data: { source: ctx.source, mode, returnedNodes: nodeMatches.slice(0, 10) }
+    });
+
+    return {
+      ok: true,
+      mode,
+      input: inputLabel,
+      returnedNodeCount: nodeMatches.length,
+      topNodes: nodeMatches.slice(0, 15),
+      raw: truncated,
+      stderr: stderr || undefined
+    };
+  }
+};
+
 // ── Registry ──────────────────────────────────────────────────────────────
 
 export const OPERATOR_TOOLS: OperatorTool[] = [
@@ -1329,7 +1440,8 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
   summarize_drafts,
   launch_status,
   klaviyo_status,
-  klaviyo_push_test_contact
+  klaviyo_push_test_contact,
+  cerebro_query
 ];
 
 export function getToolByName(name: string): OperatorTool | undefined {

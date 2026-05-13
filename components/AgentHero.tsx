@@ -154,7 +154,7 @@ export function AgentHero() {
   const startRun = useCallback(async () => {
     if (runState === "running" || runState === "starting") return;
     setRunState("starting");
-    setStatusLine("Initializing Umbrella command pipeline...");
+    setStatusLine("Initializing the Operator pipeline...");
     setActiveStages({});
     setRunError(null);
     setEvents([]);
@@ -221,7 +221,7 @@ export function AgentHero() {
         <div className="agent-hero-title-row">
           <span className="eyebrow">
             <span className="agent-hero-pulse" aria-hidden="true" />
-            Umbrella Commerce Division
+            Black Vault Commerce Division
           </span>
           <div className="agent-hero-system-status">
             <span
