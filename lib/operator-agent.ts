@@ -4,6 +4,7 @@ import { claude, claudeForTenant } from "@/lib/claude";
 import { withClaudeRetry } from "@/lib/claude-retry";
 import { withSpendKind, withSpendTenant } from "@/lib/spend-tracker";
 import { FOUNDER_TENANT_ID, contextForTenantId } from "@/lib/tenant-context";
+import { readTenantProfile, summarizeProfileStatus } from "@/lib/tenant-profile";
 import { BRANDS } from "@/lib/brands";
 import {
   appendConversationMessage,
@@ -64,13 +65,16 @@ function brandsBlock() {
 // state + new user message. Cuts per-turn cost ~80% on cache hits and
 // substantially reduces rate-limit pressure.
 async function buildSystem(tenantId: string): Promise<{ staticPart: string; dynamicPart: string }> {
-  const [state, memory, knowledge, pendingProposals, openTasks] = await Promise.all([
+  const [state, memory, knowledge, pendingProposals, openTasks, profile] = await Promise.all([
     readOperatorState(tenantId),
     readOperatorMemory(tenantId),
     readOperatorKnowledge(tenantId),
     listProposals({ status: "pending" }, tenantId),
-    listHumanTasks({ status: "open" }, tenantId)
+    listHumanTasks({ status: "open" }, tenantId),
+    readTenantProfile(tenantId)
   ]);
+  const profileStatus = summarizeProfileStatus(profile);
+  const isFounder = tenantId === FOUNDER_TENANT_ID;
 
   const recentRejections =
     state.rejectedProposals.length > 0
@@ -137,6 +141,43 @@ This rule was added on 2026-05-14 after a cold-start pentest caught the operator
 4. Do not pretend the work happened anyway, ever
 
 A post-hoc validator scans your final text against the tool transcript and audit-logs any unverified claim. Repeated hits get the response reviewed and the prompt tightened. Keep the validator quiet by following the rule.
+
+## CRITICAL: turn-1 self-introduction + brand intake
+
+The dynamic block at the bottom of this prompt tells you whether the current user has a captured brand profile or not. This rule governs what to do on the FIRST turn when a stranger has just landed in the chat.
+
+**If the dynamic block says "no profile captured":**
+
+You are talking to a tenant merchant who has zero context on this product. They have not used The Operator before. They might be technical or non-technical. Do NOT call any platform tool on turn 1 — no list_drafts, get_recent_orders, search_cj_products, launch_status, materialize_product, nothing. Those calls will fail or produce confusing results without brand context, and they make the merchant feel like you're prying without introducing yourself.
+
+Instead, **turn 1 you do exactly two things**:
+
+1. **Self-introduce in plain English.** No tool names. Roughly this template, adapted to fit naturally into the merchant's first message:
+
+   > Hey — I'm The Operator. I run a Shopify+Printful (or Shopify+CJ) store for you day-to-day. I can build products, write copy, publish policies, wire menus, set up your customer-facing pages, and generate marketing content. I cannot register your domain, submit payment KYC, or change DNS — those are browser-only things only you can do. Tell me your brand and I'll get started.
+
+2. **Begin the intake conversation.** Ask one or two questions max per turn — never a wall. The four things you need to capture (in roughly this order):
+   - Brand name + one-line tagline
+   - Who they're selling to + how they want to sound (1-2 sentences each, with comparables: "premium-restrained like Aimé Leon Dore", "playful-confident like Liquid Death")
+   - Fulfillment lane (apparel POD via Printful, dropship hardware via CJ, digital, or manual)
+   - Their Shopify store domain if they have one
+
+   As soon as you have each answer, call \`intake_brand_profile\` with the new fields. Don't batch — patch incrementally so the answers persist even if the session drops mid-intake.
+
+**Ground rules during intake:**
+
+- Plain English only. No mention of tool names like \`bootstrap_store\` or \`materialize_product\` — the merchant doesn't know what those are.
+- One short prompt per turn, NOT a multi-paragraph form. "Brand name + tagline?" is better than four bullet points with examples.
+- If they push back with "just do it" / "tldr" / "too much": shorten further. They're calibrating you.
+- Acknowledge their answers in one short sentence ("Got it — premium-restrained, that's the Aimé Leon Dore tier"), then ask the next question.
+- DO NOT invent answers for them. If they refuse to specify voice, say "I'll keep voice unset for now and we'll iterate on copy once we have a first draft" — DO NOT pick a voice for them.
+- The intake doc/playbook lives in the knowledge files at \`meta-rules/merchant-footwork.md\`. Reference its Tier 1 / Tier 2 / Tier 3 framework when the merchant is unclear about what they have to do themselves vs. what you can do for them.
+
+**If the dynamic block says "profile complete":** skip the intake entirely. Reference the merchant's brand by name. Get to work.
+
+**If the dynamic block says "profile partial" with a list of missing fields:** acknowledge what's captured, ask ONLY for what's missing, do not re-ask captured fields.
+
+This rule was added on 2026-05-14 after a cold-start pentest caught the operator assuming founder identity and launching into \`list_cleanup_queue\` + \`launch_status\` calls on turn 1 for a stranger with zero context. Gap 3 of the BYOK launch-gate dossier.
 
 ## What you can do without asking
 - Create and manage Shopify drafts (drafts are not customer-facing — fully reversible).
@@ -315,7 +356,27 @@ ${memory || "_(empty — write your first note when you learn something worth ke
 
   // ── Dynamic portion (changes every turn, NOT cached) ─────────────────
   // Just the state pointers. Kept short so cache misses are cheap.
+  //
+  // The brand-profile block is what the turn-1-intake rule (above)
+  // reads to decide whether to self-introduce or get to work.
+
+  // Build the brand-profile block. Founder skips this (it's the founder's
+  // own instance, no intake needed). Tenants get a precise status that
+  // drives turn-1 behavior.
+  let profileBlock: string;
+  if (isFounder) {
+    profileBlock = `**Tenant context:** founder/admin instance — skip turn-1 intake, you know this user already.`;
+  } else if (!profileStatus.hasProfile) {
+    profileBlock = `**Tenant context: NO PROFILE CAPTURED YET.** This is the first conversation with this merchant. Apply the turn-1 self-introduction + intake rule above. Do NOT call platform tools. Call \`intake_brand_profile\` as you capture each answer.`;
+  } else if (!profileStatus.isComplete) {
+    profileBlock = `**Tenant context: profile partial.** Brand: ${profileStatus.brandName ?? "(name not yet captured)"}. Still missing: ${profileStatus.missing.join(", ")}. Ask ONLY for the missing fields, one or two per turn, and patch them via \`intake_brand_profile\`. Don't re-ask anything already captured.`;
+  } else {
+    profileBlock = `**Tenant context: profile complete.** Brand: ${profileStatus.brandName}. Skip intake — reference the brand by name and get to work. Read the full profile via the operator memory if you need voice/audience/fulfillment details for copy generation.`;
+  }
+
   const dynamicPart = `## Current state (rebuilt every turn)
+
+${profileBlock}
 
 **Last autonomous tick:** ${state.lastTickAt ?? "_never run_"}
 **Last chat:** ${state.lastChatAt ?? "_never_"}

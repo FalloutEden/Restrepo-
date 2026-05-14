@@ -53,6 +53,7 @@ import {
   klaviyoListCampaigns
 } from "@/lib/klaviyo";
 import { FOUNDER_TENANT_ID } from "@/lib/tenant-context";
+import { patchTenantProfile, type FulfillmentLane } from "@/lib/tenant-profile";
 
 // Each tool the operator can call is declared once here:
 //   - schema: JSONSchema Anthropic uses to constrain tool_use
@@ -807,6 +808,94 @@ const record_note: OperatorTool = {
   }
 };
 
+// ── Tenant brand intake (gap 3 of the 2026-05-14 launch-gate dossier) ────
+// Persists answers from the turn-1 intake conversation so the operator
+// never has to ask the same merchant twice. Safe to call from any context
+// — works for both founder and tenant. Tools that need brand context (copy
+// generation, materialization) read this profile to ground their output.
+
+const intake_brand_profile: OperatorTool = {
+  name: "intake_brand_profile",
+  description:
+    "Save what you learned about the merchant's brand during the intake conversation. Call this incrementally — every time you gather a new field, patch it in. Don't wait until you have everything to save the first time. Required fields to consider this profile complete: brandName, audience, voice, fulfillment. Optional: tagline, shopifyStoreDomain, tierOneNotes (what they've already done — domain, store, payments KYC, fulfillment account), notes (anything else relevant).",
+  input_schema: {
+    type: "object",
+    properties: {
+      brandName: { type: "string", description: "The merchant's brand name." },
+      tagline: { type: "string", description: "One-line tagline if they have one." },
+      audience: {
+        type: "string",
+        description:
+          "Who they're selling to, in their own words. 1-2 sentences. Capture demographics + psychographics + price tolerance."
+      },
+      voice: {
+        type: "string",
+        description:
+          "How they want to sound. Cite comparables (\"like Wild One\", \"like Aimé Leon Dore\", \"premium-restrained\", \"playful-confident\"). 1-2 sentences."
+      },
+      fulfillment: {
+        type: "string",
+        enum: ["printful", "cj-dropship", "digital", "manual", "unknown"],
+        description:
+          "Primary fulfillment lane. printful=apparel POD, cj-dropship=hardware/general dropship, digital=info products, manual=they fulfill themselves, unknown=ask them."
+      },
+      shopifyStoreDomain: {
+        type: "string",
+        description: "Their store domain, e.g. 'pawvault.myshopify.com'. Omit if they don't have one yet."
+      },
+      tierOneNotes: {
+        type: "string",
+        description:
+          "Short notes on Tier-1 footwork status — domain owned? Shopify store created? Payments KYC submitted? Fulfillment account exists? One short sentence per item, comma-separated."
+      },
+      notes: {
+        type: "array",
+        items: { type: "string" },
+        description: "Free-form intake notes that don't fit a structured field."
+      }
+    }
+  },
+  async run(args, ctx) {
+    const tenantId = ctx.tenantId ?? FOUNDER_TENANT_ID;
+    const patch: Record<string, unknown> = {};
+    if (typeof args.brandName === "string" && args.brandName.trim()) patch.brandName = args.brandName.trim();
+    if (typeof args.tagline === "string" && args.tagline.trim()) patch.tagline = args.tagline.trim();
+    if (typeof args.audience === "string" && args.audience.trim()) patch.audience = args.audience.trim();
+    if (typeof args.voice === "string" && args.voice.trim()) patch.voice = args.voice.trim();
+    if (typeof args.fulfillment === "string") {
+      patch.fulfillment = args.fulfillment as FulfillmentLane;
+    }
+    if (typeof args.shopifyStoreDomain === "string" && args.shopifyStoreDomain.trim()) {
+      patch.shopifyStoreDomain = args.shopifyStoreDomain.trim().toLowerCase();
+    }
+    if (typeof args.tierOneNotes === "string" && args.tierOneNotes.trim()) {
+      patch.tierOneNotes = args.tierOneNotes.trim();
+    }
+    if (Array.isArray(args.notes)) {
+      patch.notes = (args.notes as unknown[]).filter((n): n is string => typeof n === "string");
+    }
+
+    const profile = await patchTenantProfile(patch, tenantId);
+    await logActivity(
+      {
+        kind: "note",
+        message: `intake: profile updated${profile.completedAt ? " (complete)" : ""}`,
+        data: { fields: Object.keys(patch), brandName: profile.brandName }
+      },
+      tenantId
+    );
+    return {
+      saved: true,
+      profile,
+      complete: Boolean(profile.completedAt),
+      missing:
+        ["brandName", "audience", "voice", "fulfillment"].filter(
+          (k) => !(profile as unknown as Record<string, unknown>)[k]
+        )
+    };
+  }
+};
+
 const run_pipeline: OperatorTool = {
   name: "run_pipeline",
   description:
@@ -1525,6 +1614,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
   propose_action,
   request_human_input,
   record_note,
+  intake_brand_profile,
   run_pipeline,
   generate_policies,
   publish_policies,

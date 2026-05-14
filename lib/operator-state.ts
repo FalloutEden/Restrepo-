@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile, readdir, appendFile, access } from "node:fs
 import path from "node:path";
 
 import { buildTenantPaths, FOUNDER_TENANT_ID, type TenantPaths } from "@/lib/tenant-context";
+import { getTenant } from "@/lib/tenancy";
 
 // All persistent operator state lives under tenant-scoped paths. The founder
 // tenant (FOUNDER_TENANT_ID) maps to the legacy `.openclaw/operator/` layout
@@ -23,7 +24,23 @@ const IS_VERCEL = process.env.VERCEL === "1";
 
 // Knowledge files live at the repo path even on Vercel because they're
 // committed and read-only.
+//
+// Layout after the gap-6 tenant-portable split:
+//   knowledge/                      — legacy flat *.md files (founder-only)
+//   knowledge/meta-rules/*.md       — universal, loaded for every tenant
+//   knowledge/brands/<slug>/*.md    — brand-scoped, loaded only when active
+//                                      brand matches the slug
+//
+// Founder context loads ALL THREE: flat + meta-rules + brands/black-vault
+// (founder's primary brand). Tenants load only meta-rules + their own brand
+// slice so they never see another tenant's lore or BV-specific scars.
 const KNOWLEDGE_DIR = path.join(process.cwd(), ".openclaw", "operator", "knowledge");
+const KNOWLEDGE_META_DIR = path.join(KNOWLEDGE_DIR, "meta-rules");
+const KNOWLEDGE_BRANDS_DIR = path.join(KNOWLEDGE_DIR, "brands");
+
+/** Brand slug the founder's primary identity maps to. Used when loading
+ *  brand-scoped knowledge in founder context. */
+const FOUNDER_PRIMARY_BRAND = "black-vault";
 
 // Per-tenant path resolver. Cheap to call — no IO until ensureDirs() fires.
 function pathsFor(tenantId: string): TenantPaths {
@@ -113,24 +130,79 @@ export async function readOperatorMemory(tenantId: string = FOUNDER_TENANT_ID): 
   return "";
 }
 
+// Resolve the brand slug to use when loading brand-scoped knowledge for
+// the given tenant. Founder context → FOUNDER_PRIMARY_BRAND. Real tenants
+// → tenant.brandSlug (e.g. "pawvault", "stoneandsteel"). The brand-knowledge
+// directory is opt-in — if no files exist for a tenant's slug, the operator
+// just doesn't load brand-specific content, which is fine for tenants who
+// haven't seeded any yet.
+async function resolveBrandSlugForKnowledge(tenantId: string): Promise<string | null> {
+  if (tenantId === FOUNDER_TENANT_ID) return FOUNDER_PRIMARY_BRAND;
+  try {
+    const tenant = await getTenant(tenantId);
+    if (!tenant) return null;
+    // Match against the directory naming convention. brandSlug already lowercase-hyphen.
+    return tenant.brandSlug;
+  } catch {
+    return null;
+  }
+}
+
+async function readDirMd(dir: string): Promise<Array<{ name: string; body: string }>> {
+  try {
+    const files = await readdir(dir);
+    const mdFiles = files.filter((f) => f.endsWith(".md")).sort();
+    const out: Array<{ name: string; body: string }> = [];
+    for (const f of mdFiles) {
+      const body = await readFile(path.join(dir, f), "utf8");
+      out.push({ name: f, body });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 // Curated knowledge — markdown files under .openclaw/operator/knowledge/.
 // Concatenated and pinned into the operator system prompt every turn so the
 // agent has stable, version-controlled context (brand fit rules, supplier
 // research, anti-patterns) instead of having to relearn it from chat history.
-// Stays global — same files for every tenant. (Tenant-portable vs BV-flavored
-// knowledge split is gap 6, separate work.)
-export async function readOperatorKnowledge(_tenantId: string = FOUNDER_TENANT_ID): Promise<string> {
+//
+// Tenant slicing (gap 6):
+//   - Tenants always get meta-rules/ (universal: supplier vetting, footwork
+//     checklist, sourcing framework, CEREBRO usage). NEVER see another
+//     tenant's brand lore.
+//   - Founder context additionally loads the legacy flat *.md files +
+//     brands/black-vault/ (BV's specific scars: AOP hoodie, Meta denial,
+//     monogram file id, etc.).
+//   - Each tenant gets brands/<their-slug>/*.md if any exists.
+export async function readOperatorKnowledge(tenantId: string = FOUNDER_TENANT_ID): Promise<string> {
   try {
     await mkdir(KNOWLEDGE_DIR, { recursive: true });
-    const files = await readdir(KNOWLEDGE_DIR);
-    const mdFiles = files.filter((f) => f.endsWith(".md")).sort();
-    if (mdFiles.length === 0) return "";
-    const sections = await Promise.all(
-      mdFiles.map(async (f) => {
-        const body = await readFile(path.join(KNOWLEDGE_DIR, f), "utf8");
-        return `\n\n<!-- knowledge/${f} -->\n${body}`;
-      })
-    );
+    const sections: string[] = [];
+
+    // Meta rules — universal, always loaded
+    const meta = await readDirMd(KNOWLEDGE_META_DIR);
+    for (const m of meta) sections.push(`\n\n<!-- knowledge/meta-rules/${m.name} -->\n${m.body}`);
+
+    // Brand-scoped — load only the active brand's slice
+    const brandSlug = await resolveBrandSlugForKnowledge(tenantId);
+    if (brandSlug) {
+      const brandDir = path.join(KNOWLEDGE_BRANDS_DIR, brandSlug);
+      const brandFiles = await readDirMd(brandDir);
+      for (const b of brandFiles) {
+        sections.push(`\n\n<!-- knowledge/brands/${brandSlug}/${b.name} -->\n${b.body}`);
+      }
+    }
+
+    // Legacy flat *.md — founder-only, for backward compat with files not
+    // yet sorted into meta-rules/ or brands/. Tenants never see flat files
+    // because they may contain BV-specific lore that hasn't been moved yet.
+    if (tenantId === FOUNDER_TENANT_ID) {
+      const flat = await readDirMd(KNOWLEDGE_DIR);
+      for (const f of flat) sections.push(`\n\n<!-- knowledge/${f.name} -->\n${f.body}`);
+    }
+
     return sections.join("");
   } catch {
     return "";
