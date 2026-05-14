@@ -5,6 +5,15 @@ import { useState } from "react";
 // Multi-step onboarding wizard for The Operator (by Black Vault).
 // Light technical aesthetic — different audience than BV apparel merch
 // buyers. These are SaaS buyers; they want clarity not mood.
+//
+// Why 5 steps (not 3): the operator system prompt reads the tenant
+// brand profile (lib/tenant-profile.ts) at every chat turn. Without
+// audience + voice + fulfillment captured up-front, the merchant lands
+// on the dashboard and the operator has to ask everything via chat —
+// that's the "11 idle agents, idk what to do" experience the user
+// flagged. Capture it here, ship the merchant a primed operator.
+
+type Step = 1 | 2 | 3 | 4 | 5;
 
 type FormState = {
   brandName: string;
@@ -12,6 +21,9 @@ type FormState = {
   ownerEmail: string;
   voiceVibe: string;
   tagline: string;
+  audience: string;
+  fulfillment: "printful" | "manual";
+  firstTask: string;
 };
 
 const EMPTY: FormState = {
@@ -19,7 +31,10 @@ const EMPTY: FormState = {
   brandSlug: "",
   ownerEmail: "",
   voiceVibe: "",
-  tagline: ""
+  tagline: "",
+  audience: "",
+  fulfillment: "printful",
+  firstTask: ""
 };
 
 function slugify(s: string): string {
@@ -30,8 +45,36 @@ function slugify(s: string): string {
     .slice(0, 40);
 }
 
+const STEP_TITLES: Record<Step, { eyebrow: string; title: string; sub: string }> = {
+  1: {
+    eyebrow: "STEP 1 OF 5",
+    title: "Brand basics",
+    sub: "Name the brand and pick a URL handle."
+  },
+  2: {
+    eyebrow: "STEP 2 OF 5",
+    title: "Voice & feel",
+    sub: "How should the agent write for you? Optional — sharper briefs make sharper answers."
+  },
+  3: {
+    eyebrow: "STEP 3 OF 5",
+    title: "Audience & fulfillment",
+    sub: "Who buys this, and how do orders ship? The operator uses this in every product page and email it writes."
+  },
+  4: {
+    eyebrow: "STEP 4 OF 5",
+    title: "First task",
+    sub: "What do you want the operator to do FIRST? It will start on this the moment you land on your dashboard."
+  },
+  5: {
+    eyebrow: "STEP 5 OF 5",
+    title: "Review & launch",
+    sub: "Confirm everything, then we'll send you to Stripe."
+  }
+};
+
 export default function OnboardPage() {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<Step>(1);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,11 +83,23 @@ export default function OnboardPage() {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  function validateStep1(): string | null {
-    if (!form.brandName.trim()) return "Brand name is required.";
-    const slug = slugify(form.brandSlug || form.brandName);
-    if (slug.length < 3) return "Brand slug must be at least 3 chars (letters/numbers/-).";
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.ownerEmail)) return "Owner email looks invalid.";
+  function validateStep(target: Step): string | null {
+    if (target === 1) {
+      if (!form.brandName.trim()) return "Brand name is required.";
+      const slug = slugify(form.brandSlug || form.brandName);
+      if (slug.length < 3) return "Brand slug must be at least 3 chars (letters/numbers/-).";
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.ownerEmail)) return "Owner email looks invalid.";
+    }
+    if (target === 3) {
+      if (!form.audience.trim() || form.audience.trim().length < 6) {
+        return "Tell us who this is for in one short sentence — even a rough first guess.";
+      }
+    }
+    if (target === 4) {
+      if (!form.firstTask.trim() || form.firstTask.trim().length < 6) {
+        return "Give the operator one concrete first task. You can change direction in chat anytime.";
+      }
+    }
     return null;
   }
 
@@ -61,7 +116,10 @@ export default function OnboardPage() {
           ownerEmail: form.ownerEmail.trim().toLowerCase(),
           brandName: form.brandName.trim(),
           voiceVibe: form.voiceVibe.trim() || undefined,
-          tagline: form.tagline.trim() || undefined
+          tagline: form.tagline.trim() || undefined,
+          audience: form.audience.trim(),
+          fulfillment: form.fulfillment,
+          firstTask: form.firstTask.trim()
         })
       });
       const data = await r.json();
@@ -99,6 +157,12 @@ export default function OnboardPage() {
     marginBottom: 16,
     boxSizing: "border-box"
   };
+  const textareaInput: React.CSSProperties = {
+    ...baseInput,
+    minHeight: 92,
+    resize: "vertical",
+    fontFamily: "inherit"
+  };
   const labelStyle: React.CSSProperties = {
     fontSize: 12,
     color: "#666",
@@ -125,6 +189,18 @@ export default function OnboardPage() {
     color: "#0F0E0C",
     border: "1px solid #d8d8d8"
   };
+  const radioCard = (selected: boolean): React.CSSProperties => ({
+    flex: 1,
+    padding: "16px 18px",
+    border: selected ? "2px solid #0F0E0C" : "1px solid #d8d8d8",
+    borderRadius: 8,
+    cursor: "pointer",
+    background: selected ? "#FAFAFA" : "#fff",
+    transition: "all 120ms ease",
+    fontSize: 14
+  });
+
+  const stepCopy = STEP_TITLES[step];
 
   return (
     <main
@@ -139,17 +215,13 @@ export default function OnboardPage() {
     >
       <div style={{ maxWidth: 540, margin: "0 auto" }}>
         <p style={{ fontSize: 12, letterSpacing: "0.15em", color: "#A67843", marginBottom: 8, fontWeight: 600 }}>
-          STEP {step} OF 3
+          {stepCopy.eyebrow}
         </p>
         <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8, letterSpacing: "-0.01em" }}>
-          {step === 1 && "Brand basics"}
-          {step === 2 && "Voice & feel"}
-          {step === 3 && "Review & launch"}
+          {stepCopy.title}
         </h1>
         <p style={{ fontSize: 15, color: "#666", marginBottom: 28 }}>
-          {step === 1 && "Name the brand and pick a URL handle."}
-          {step === 2 && "How should the agent write for you? Optional — sharper briefs make sharper answers."}
-          {step === 3 && "Confirm everything, then we'll send you to Stripe."}
+          {stepCopy.sub}
         </p>
 
         {error && (
@@ -243,6 +315,98 @@ export default function OnboardPage() {
           )}
 
           {step === 3 && (
+            <>
+              <label style={labelStyle}>Who buys this?</label>
+              <textarea
+                placeholder="e.g. design-conscious dog owners 28-50 who buy premium gear; or, builders and tradespeople in their 30s-50s who hate cheap merch"
+                value={form.audience}
+                onChange={(e) => setField("audience", e.target.value)}
+                style={textareaInput}
+              />
+              <p style={{ fontSize: 12, color: "#888", marginTop: -8, marginBottom: 24 }}>
+                One short sentence. The operator uses this verbatim in product copy and ad targeting.
+              </p>
+
+              <label style={labelStyle}>Fulfillment</label>
+              <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setField("fulfillment", "printful")}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setField("fulfillment", "printful");
+                    }
+                  }}
+                  style={radioCard(form.fulfillment === "printful")}
+                >
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Printful</div>
+                  <div style={{ fontSize: 12, color: "#666" }}>
+                    Print-on-demand. Apparel, posters, accessories. Auto-ships from Printful warehouses.
+                  </div>
+                </div>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setField("fulfillment", "manual")}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setField("fulfillment", "manual");
+                    }
+                  }}
+                  style={radioCard(form.fulfillment === "manual")}
+                >
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Manual</div>
+                  <div style={{ fontSize: 12, color: "#666" }}>
+                    You ship orders yourself or use a non-integrated supplier. Operator skips fulfillment automation.
+                  </div>
+                </div>
+              </div>
+              <p style={{ fontSize: 12, color: "#888", marginTop: 8, marginBottom: 0 }}>
+                You can connect Printful credentials later from your dashboard. Most merchants start here.
+              </p>
+            </>
+          )}
+
+          {step === 4 && (
+            <>
+              <label style={labelStyle}>First task for the operator</label>
+              <textarea
+                placeholder="e.g. Build me 8 premium black t-shirt drafts ready for Shopify; or, audit my Shopify store and tell me the 3 highest-impact things to fix this week"
+                value={form.firstTask}
+                onChange={(e) => setField("firstTask", e.target.value)}
+                style={textareaInput}
+              />
+              <p style={{ fontSize: 12, color: "#888", marginTop: -8, marginBottom: 8 }}>
+                One concrete ask. The operator picks this up the moment you land on your dashboard — no idle screen.
+              </p>
+              <div
+                style={{
+                  marginTop: 18,
+                  padding: 14,
+                  background: "#FAFAFA",
+                  border: "1px solid #ebebeb",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  color: "#555"
+                }}
+              >
+                <div style={{ fontWeight: 700, marginBottom: 6, color: "#0F0E0C" }}>
+                  Examples that work well
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  <li>Build 6-10 product drafts in our brand voice and put them in my Shopify drafts.</li>
+                  <li>Audit my current product pages and rewrite the weakest 3.</li>
+                  <li>Set up a Klaviyo welcome flow + abandoned cart sequence.</li>
+                  <li>Find 5 print-on-demand niches I&apos;m a good fit for and rank them.</li>
+                </ul>
+              </div>
+            </>
+          )}
+
+          {step === 5 && (
             <div>
               {[
                 ["Brand name", form.brandName],
@@ -253,18 +417,22 @@ export default function OnboardPage() {
                   form.voiceVibe ||
                     "(not provided — agent will use neutral premium defaults)"
                 ],
-                ["Tagline", form.tagline || "(not provided)"]
+                ["Tagline", form.tagline || "(not provided)"],
+                ["Audience", form.audience],
+                ["Fulfillment", form.fulfillment === "printful" ? "Printful (POD)" : "Manual"],
+                ["First task", form.firstTask]
               ].map(([k, v]) => (
                 <div key={k} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: "1px solid #f0f0f0" }}>
                   <div style={{ fontSize: 11, color: "#888", letterSpacing: "0.06em", fontWeight: 600, textTransform: "uppercase" }}>
                     {k}
                   </div>
-                  <div style={{ fontSize: 15, marginTop: 4, color: "#0F0E0C" }}>{v}</div>
+                  <div style={{ fontSize: 15, marginTop: 4, color: "#0F0E0C", whiteSpace: "pre-wrap" }}>{v}</div>
                 </div>
               ))}
               <p style={{ fontSize: 13, color: "#666", marginTop: 16 }}>
                 Next: Stripe checkout for $499 setup + $99/month. After payment, your Operator
-                activates and we email you a bearer token for API access.
+                activates with all of this context already loaded — it picks up your first task
+                the moment you land on your dashboard.
               </p>
             </div>
           )}
@@ -273,7 +441,7 @@ export default function OnboardPage() {
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24 }}>
           {step > 1 ? (
             <button
-              onClick={() => setStep((s) => (s - 1) as 1 | 2)}
+              onClick={() => setStep((s) => Math.max(1, s - 1) as Step)}
               style={buttonSecondary}
               type="button"
               disabled={submitting}
@@ -283,18 +451,16 @@ export default function OnboardPage() {
           ) : (
             <span />
           )}
-          {step < 3 ? (
+          {step < 5 ? (
             <button
               onClick={() => {
-                if (step === 1) {
-                  const err = validateStep1();
-                  if (err) {
-                    setError(err);
-                    return;
-                  }
-                  setError(null);
+                const err = validateStep(step);
+                if (err) {
+                  setError(err);
+                  return;
                 }
-                setStep((s) => (s + 1) as 2 | 3);
+                setError(null);
+                setStep((s) => Math.min(5, s + 1) as Step);
               }}
               style={button}
               type="button"

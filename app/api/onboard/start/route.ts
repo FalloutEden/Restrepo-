@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server";
 
 import { createTenant } from "@/lib/tenancy";
+import { patchTenantProfile } from "@/lib/tenant-profile";
 import { createCheckoutSession, isStripeConfigured } from "@/lib/stripe";
 import { rateLimitCheck, clientIdFromRequest } from "@/lib/rate-limit";
 import { audit } from "@/lib/audit";
 
 // Public endpoint — no auth — the visitor doesn't have auth yet.
-// Creates a draft tenant + a Stripe Checkout session.
+// Creates a draft tenant + seeds the brand profile + a Stripe Checkout
+// session.
+//
+// The wizard captures audience + voice + fulfillment + first task so
+// the operator's system prompt (which reads the brand profile every
+// turn) lands fully primed — no "11 idle agents, idk what to do" gap
+// after the merchant pays.
 //
 // Rate limited (5 attempts per IP per hour) to prevent signup abuse.
 // Audit-logged.
@@ -20,7 +27,16 @@ type StartBody = {
   brandName: string;
   voiceVibe?: string;
   tagline?: string;
+  audience?: string;
+  fulfillment?: "printful" | "manual";
+  firstTask?: string;
 };
+
+// Marker prefix the operator system prompt scans for in profile.notes
+// to find a wizard-supplied first task. Keep in sync with wherever the
+// operator reads it (lib/operator-agent.ts surfaces profile.notes
+// verbatim today).
+const FIRST_TASK_PREFIX = "FIRST_TASK:";
 
 function getOrigin(req: Request): string {
   const fromHeader = req.headers.get("origin");
@@ -94,13 +110,50 @@ export async function POST(req: Request) {
     );
   }
 
+  // Seed the brand profile from the wizard answers. The operator system
+  // prompt reads this at every turn; without it the operator would have
+  // to re-ask audience/voice/fulfillment via chat after the merchant
+  // pays. We tolerate missing fields (older clients, retries) — anything
+  // missing falls back to chat-based intake the way it did before.
+  try {
+    const audience = (body.audience ?? "").trim();
+    const voice = (body.voiceVibe ?? "").trim();
+    const fulfillment = body.fulfillment === "manual" ? "manual" : "printful";
+    const firstTask = (body.firstTask ?? "").trim();
+    const notes: string[] = [];
+    if (firstTask) notes.push(`${FIRST_TASK_PREFIX} ${firstTask}`);
+    await patchTenantProfile(
+      {
+        brandName,
+        tagline: (body.tagline ?? "").trim() || undefined,
+        audience: audience || undefined,
+        voice: voice || undefined,
+        fulfillment,
+        notes
+      },
+      tenant.id
+    );
+  } catch (e) {
+    // Non-fatal: tenant exists, payment can still proceed; operator will
+    // fall back to chat intake. Log and move on.
+    audit({
+      action: "admin.action",
+      actor: ownerEmail,
+      target: tenant.id,
+      ip,
+      userAgent,
+      detail: { step: "profile_seed_failed", message: e instanceof Error ? e.message : "unknown" },
+      ok: false
+    });
+  }
+
   audit({
     action: "tenant.created",
     actor: ownerEmail,
     target: tenant.id,
     ip,
     userAgent,
-    detail: { brandSlug, brandName },
+    detail: { brandSlug, brandName, hasFirstTask: Boolean((body.firstTask ?? "").trim()) },
     ok: true
   });
 

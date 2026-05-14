@@ -360,6 +360,15 @@ ${memory || "_(empty — write your first note when you learn something worth ke
   // The brand-profile block is what the turn-1-intake rule (above)
   // reads to decide whether to self-introduce or get to work.
 
+  // Pull the wizard-supplied first task out of profile.notes. The /onboard
+  // wizard prefixes one note with "FIRST_TASK:" so the operator knows what
+  // the merchant asked for at signup. We surface it in the dynamic block
+  // when present so the operator can engage with it on turn 1 instead of
+  // sitting on an idle dashboard waiting to be told what to do.
+  const firstTaskPrefix = "FIRST_TASK:";
+  const firstTaskNote = profile?.notes?.find((n) => n.trim().startsWith(firstTaskPrefix));
+  const firstTask = firstTaskNote?.slice(firstTaskNote.indexOf(firstTaskPrefix) + firstTaskPrefix.length).trim();
+
   // Build the brand-profile block. Founder skips this (it's the founder's
   // own instance, no intake needed). Tenants get a precise status that
   // drives turn-1 behavior.
@@ -372,6 +381,14 @@ ${memory || "_(empty — write your first note when you learn something worth ke
     profileBlock = `**Tenant context: profile partial.** Brand: ${profileStatus.brandName ?? "(name not yet captured)"}. Still missing: ${profileStatus.missing.join(", ")}. Ask ONLY for the missing fields, one or two per turn, and patch them via \`intake_brand_profile\`. Don't re-ask anything already captured.`;
   } else {
     profileBlock = `**Tenant context: profile complete.** Brand: ${profileStatus.brandName}. Skip intake — reference the brand by name and get to work. Read the full profile via the operator memory if you need voice/audience/fulfillment details for copy generation.`;
+  }
+
+  // Append the first-task hint when present. Only appended for non-founder
+  // tenants with a complete profile — anyone else is mid-intake or the
+  // founder. The operator decides how to engage; we don't strip the marker
+  // automatically (a follow-up can add a "mark handled" tool if needed).
+  if (firstTask && !isFounder && profileStatus.isComplete) {
+    profileBlock += `\n\n**Merchant's stated first task from onboarding:** "${firstTask}". On the first chat turn, acknowledge it by name and either start (free actions) or propose it (spend-bound actions). If you've already engaged with it on a prior turn, don't re-offer — continue the conversation naturally.`;
   }
 
   const dynamicPart = `## Current state (rebuilt every turn)
