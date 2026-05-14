@@ -3,10 +3,12 @@ import "server-only";
 import type { BuiltProduct, CreatedProduct } from "@/lib/autonomous-products";
 import {
   listConfiguredShopifyCredentials,
+  listShopifyCredentialsForContext,
   resolveShopifyCredentials,
   type ShopifyCredentials
 } from "@/lib/shopify-credentials";
 import { resolveBrand } from "@/lib/brands";
+import type { TenantContext } from "@/lib/tenant-context";
 
 type ShopifyProductResponse = {
   product?: {
@@ -222,10 +224,13 @@ export async function listShopifyCleanupQueue(options: {
   brand?: string;
   includePublished?: boolean;
   limit?: number;
+  tenantCtx?: TenantContext;
 } = {}): Promise<ShopifyCleanupItem[]> {
-  const credsList = options.brand
-    ? [resolveShopifyCredentials(options.brand)]
-    : listConfiguredShopifyCredentials();
+  const credsList = options.tenantCtx && !options.tenantCtx.isFounder
+    ? listShopifyCredentialsForContext(options.tenantCtx)
+    : options.brand
+      ? [resolveShopifyCredentials(options.brand)]
+      : listConfiguredShopifyCredentials();
   const limit = options.limit ?? 250;
   const perBrand = await Promise.all(
     credsList.map((creds) =>
@@ -242,12 +247,19 @@ export async function listShopifyCleanupQueue(options: {
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
 }
 
-export async function listShopifyDrafts(limit = 50, brand?: string): Promise<ShopifyDraftSummary[]> {
-  // If a specific brand is requested, only that store. Otherwise aggregate
-  // across every brand whose env vars are configured.
-  const credsList = brand
-    ? [resolveShopifyCredentials(brand)]
-    : listConfiguredShopifyCredentials();
+export async function listShopifyDrafts(
+  limit = 50,
+  brand?: string,
+  tenantCtx?: TenantContext
+): Promise<ShopifyDraftSummary[]> {
+  // Tenant context (real merchant): single-store aggregation from their own
+  // vault. Founder + brand: that one store. Founder + no brand: aggregate
+  // across every configured brand env-var prefix.
+  const credsList = tenantCtx && !tenantCtx.isFounder
+    ? listShopifyCredentialsForContext(tenantCtx)
+    : brand
+      ? [resolveShopifyCredentials(brand)]
+      : listConfiguredShopifyCredentials();
 
   const perBrand = await Promise.all(
     credsList.map((creds) =>

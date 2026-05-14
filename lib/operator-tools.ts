@@ -52,7 +52,7 @@ import {
   klaviyoSubscribeProfileToList,
   klaviyoListCampaigns
 } from "@/lib/klaviyo";
-import { FOUNDER_TENANT_ID } from "@/lib/tenant-context";
+import { FOUNDER_TENANT_ID, contextForTenantId } from "@/lib/tenant-context";
 import { patchTenantProfile, type FulfillmentLane } from "@/lib/tenant-profile";
 
 // Each tool the operator can call is declared once here:
@@ -74,12 +74,13 @@ import { patchTenantProfile, type FulfillmentLane } from "@/lib/tenant-profile";
 // The list shrinks as each underlying service lib gets the BYOK pass.
 
 const FOUNDER_ONLY_TOOLS = new Set<string>([
-  // Shopify-backed tools (need lib/shopify-credentials.ts BYOK refactor)
-  "list_drafts",
-  "get_recent_orders",
+  // Shopify-backed tools — list_drafts / get_recent_orders / list_cleanup_queue
+  // were lifted on 2026-05-14 once shopify-credentials.ts became tenant-aware.
+  // The remaining ones below still call internal helpers (shopify-menus.ts,
+  // bulk-store-ops.ts, store-bootstrap.ts, launch-status.ts, etc.) that read
+  // env vars directly. Each gets lifted as its underlying lib is migrated.
   "delete_listing",
   "publish_listing",
-  "list_cleanup_queue",
   "bootstrap_store",
   "attach_all_to_online_store",
   "list_menus",
@@ -179,11 +180,10 @@ type ShopifyOrder = {
 };
 
 async function fetchRecentOrdersForBrand(
-  brandSlug: string,
+  creds: import("@/lib/shopify-credentials").ShopifyCredentials,
   sinceIsoDate: string
 ): Promise<{ brandSlug: string; orders: ShopifyOrder[]; error?: string }> {
   try {
-    const creds = resolveShopifyCredentials(brandSlug);
     const url = `https://${creds.storeDomain}/admin/api/${creds.apiVersion}/orders.json?status=any&created_at_min=${encodeURIComponent(sinceIsoDate)}&limit=250&fields=id,created_at,total_price,currency,financial_status,line_items`;
     const response = await fetch(url, {
       headers: {
@@ -192,13 +192,13 @@ async function fetchRecentOrdersForBrand(
       }
     });
     if (!response.ok) {
-      return { brandSlug, orders: [], error: `Shopify orders ${response.status}` };
+      return { brandSlug: creds.brandSlug, orders: [], error: `Shopify orders ${response.status}` };
     }
     const body = (await response.json()) as { orders?: ShopifyOrder[] };
-    return { brandSlug, orders: body.orders ?? [] };
+    return { brandSlug: creds.brandSlug, orders: body.orders ?? [] };
   } catch (error) {
     return {
-      brandSlug,
+      brandSlug: creds.brandSlug,
       orders: [],
       error: error instanceof Error ? error.message : "Unknown orders error"
     };
@@ -222,10 +222,11 @@ const list_drafts: OperatorTool = {
       limit: { type: "integer", minimum: 1, maximum: 250 }
     }
   },
-  async run(args) {
+  async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const brand = typeof args.brand === "string" && args.brand !== "all" ? args.brand : undefined;
     const limit = typeof args.limit === "number" ? args.limit : 50;
-    const drafts = await listShopifyDrafts(limit, brand);
+    const drafts = await listShopifyDrafts(limit, brand, tenantCtx);
     return {
       count: drafts.length,
       drafts: drafts.map((d) => ({
@@ -252,16 +253,22 @@ const get_recent_orders: OperatorTool = {
       brand: { type: "string", enum: Object.keys(BRANDS).concat(["all"]) }
     }
   },
-  async run(args) {
+  async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const sinceDays = typeof args.sinceDays === "number" ? args.sinceDays : 30;
     const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString();
     const targetBrand = typeof args.brand === "string" && args.brand !== "all" ? args.brand : null;
 
-    const allCreds = listConfiguredShopifyCredentials();
+    // Resolve creds: tenant gets their one store; founder gets the requested
+    // brand or every configured brand.
+    const { listShopifyCredentialsForContext } = await import("@/lib/shopify-credentials");
+    const allCreds = tenantCtx.isFounder
+      ? listConfiguredShopifyCredentials()
+      : listShopifyCredentialsForContext(tenantCtx);
     const targets = targetBrand ? allCreds.filter((c) => c.brandSlug === targetBrand) : allCreds;
 
     const results = await Promise.all(
-      targets.map((creds) => fetchRecentOrdersForBrand(creds.brandSlug, since))
+      targets.map((creds) => fetchRecentOrdersForBrand(creds, since))
     );
 
     const perBrand = results.map((r) => {
@@ -430,11 +437,13 @@ const list_cleanup_queue: OperatorTool = {
       limit: { type: "integer", minimum: 1, maximum: 250 }
     }
   },
-  async run(args) {
+  async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const items = await listShopifyCleanupQueue({
       brand: typeof args.brand === "string" ? args.brand : undefined,
       includePublished: args.includePublished === true,
-      limit: typeof args.limit === "number" ? args.limit : 250
+      limit: typeof args.limit === "number" ? args.limit : 250,
+      tenantCtx
     });
     return {
       count: items.length,
