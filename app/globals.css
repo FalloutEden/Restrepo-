@@ -53,10 +53,15 @@ body {
 }
 
 .app-background-media {
+  /* Dark gradient backdrop. Used to layer a background image here
+     (UmbrellaBackground.gif) but that asset was Capcom IP — removed
+     2026-05-14 as part of the BYOK customer-instance scrub. The
+     radial gradients alone give the same dark-cyberpunk mood. */
   background:
     radial-gradient(circle at top left, rgba(179, 19, 27, 0.16), transparent 28%),
     radial-gradient(circle at top right, rgba(90, 0, 0, 0.18), transparent 24%),
-    url("/ui/UmbrellaBackground.gif") center / cover no-repeat;
+    radial-gradient(ellipse at center, rgba(20, 22, 26, 0.4), rgba(8, 9, 11, 0.95) 70%),
+    #0a0b0d;
 }
 
 .app-background-overlay {

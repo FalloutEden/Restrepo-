@@ -2,9 +2,10 @@
  *
  * When this stylesheet is loaded by /dashboard, the page-shell is wrapped
  * in a .dashboard-light element. Body picks up `.has-dashboard-light` via
- * a small useEffect — that hides globals.css's UmbrellaBackground and gives
- * us a clean white canvas to render the operator UI on. Pipeline / admin
- * surfaces still use the dark globals (intentional — your internal cockpit).
+ * a small useEffect — that hides the dark cyberpunk background from
+ * globals.css and gives us a clean white canvas to render the operator UI
+ * on. Pipeline / admin surfaces still use the dark globals (intentional —
+ * your internal cockpit).
  */
 
 /* ── Body-level reset when the dashboard is open ────────────────────────── */

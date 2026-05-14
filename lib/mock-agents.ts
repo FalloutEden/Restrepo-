@@ -38,7 +38,7 @@ const OPERATIONAL_ERROR_MESSAGE = "Agent data unavailable. Review payload and re
 const agentDefaults: Agent[] = [
   {
     id: "planner-01",
-    name: "Wesker",
+    name: "Atlas",
     role: "Trend Research Agent",
     avatar: "/agents/Wesker/glasses-1.png",
     background: "/backgrounds/wesker-room.png",
@@ -76,7 +76,7 @@ const agentDefaults: Agent[] = [
   },
   {
     id: "research-02",
-    name: "Red Queen",
+    name: "Compass",
     role: "Opportunity Router Agent",
     avatar: "/agents/Red Queen/hologram-5.png",
     background: "/backgrounds/red-queen-room.png",
@@ -111,7 +111,7 @@ const agentDefaults: Agent[] = [
   },
   {
     id: "ops-03",
-    name: "HUNK",
+    name: "Forge",
     role: "Product Strategy Agent",
     avatar: "/agents/Hunk/standing-rest.png",
     background: "/backgrounds/hunk-room.png",
@@ -158,11 +158,11 @@ const agentDefaults: Agent[] = [
     latestOutput: "Prepared buyer clarity, feasibility, and build constraints for the strongest opportunities in the queue.",
     updatedAt: "18 minutes ago",
     queueDepth: 1,
-    owner: "USS Command"
+    owner: "Design Direction"
   },
   {
     id: "writer-04",
-    name: "Nemesis",
+    name: "Loom",
     role: "Design Direction Agent",
     avatar: "/agents/Nemesis/standing-rest.png",
     background: "/backgrounds/nemesis-room.png",
@@ -189,11 +189,11 @@ const agentDefaults: Agent[] = [
     latestOutput: "Generated style direction notes, layout cues, and premium execution guidance for each shortlisted opportunity.",
     updatedAt: "4 minutes ago",
     queueDepth: 3,
-    owner: "Bio-Weapon Division"
+    owner: "Product Strategy Group"
   },
   {
     id: "review-05",
-    name: "Birkin",
+    name: "Sentinel",
     role: "Review/Approval Agent",
     avatar: "/agents/William Burkin/blink-1.png",
     background: "/backgrounds/birkin-room.png",
@@ -223,7 +223,7 @@ const agentDefaults: Agent[] = [
   },
   {
     id: "triage-06",
-    name: "Tyrant",
+    name: "Warden",
     role: "Validation Guard Agent",
     avatar: "/agents/Tyrant/tip-hat-1.png",
     background: "/backgrounds/tyrant-room.png",
@@ -253,7 +253,7 @@ const agentDefaults: Agent[] = [
   },
   {
     id: "builder-07",
-    name: "Ada",
+    name: "Anvil",
     role: "Build Agent",
     avatar: "/agents/Ada/standing-rest.png",
     background: "/backgrounds/ada-room.png",
@@ -307,7 +307,7 @@ const agentDefaults: Agent[] = [
     name: "Core Runtime",
     role: "Runtime Monitor Agent",
     avatar: "/agents/Umbrealla Core/message-1.png",
-    background: "/backgrounds/umbrella-core-room.png",
+    background: "/backgrounds/core-runtime-room.png",
     avatarFrames: ["/agents/Umbrealla Core/message-1.png"],
     blinkAnimations: [
       [
@@ -372,7 +372,7 @@ const agentDefaults: Agent[] = [
     latestOutput: "Runtime trace captured successfully. Built drafts are staged for approval and remain disconnected from live publishing.",
     updatedAt: "31 minutes ago",
     queueDepth: 1,
-    owner: "Umbrella Systems"
+    owner: "Vault Systems"
   },
   {
     id: "research-jobs-09",
@@ -491,7 +491,7 @@ const rawAgentPayloads: AgentPayload[] = [
   agentDefaults[3],
   {
     id: "review-05",
-    name: "Birkin",
+    name: "Chimera",
     role: "Mutation Analysis",
     avatar: "not-a-valid-path" as never,
     background: "/backgrounds/birkin-room.png",

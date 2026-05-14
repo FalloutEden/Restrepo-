@@ -6,7 +6,8 @@ import { DashboardBodyClass } from "./body-class";
 
 // The Operator dashboard — light SaaS theme.
 // DashboardBodyClass toggles `body.has-dashboard-light` on mount, which
-// operator.css uses to override globals.css's dark UmbrellaBackground.
+// operator.css uses to swap the global dark cyberpunk backdrop for the
+// light SaaS theme used inside /dashboard.
 //
 // Admin nav links (/pipeline, /content-studio, /admin/incidents) are
 // only rendered when an admin cookie is present. Paying tenants never

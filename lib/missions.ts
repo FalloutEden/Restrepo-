@@ -367,7 +367,7 @@ const SAFE_CONSTRAINTS = [
   "Keep the output to one complete listing output package ready for human review."
 ] as const;
 
-const AGENT_ORDER = ["Wesker", "Red Queen", "Ada", "Umbrella Core"] as const;
+const AGENT_ORDER = ["Atlas", "Compass", "Anvil", "Core Runtime"] as const;
 
 function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
@@ -2061,7 +2061,7 @@ function buildProductTaskBlueprints(mission: Mission, blueprint: StyledProductBl
 
   return [
     {
-      assignedAgent: "Wesker",
+      assignedAgent: "Atlas",
       title: "Research channel opportunity and style patterns",
       description: `Research Agent identifies one ${channelLabel} opportunity for ${blueprint.customer}, then combines local research examples, style notes, and prior feedback to find the strongest sellable direction before Product Agent generation.`,
       outputSummary: `Research Agent selected the ${channelLabel} product ${blueprint.productTitle}, completed style research, and passed the buyer, channel, and sales direction to the Product Agent.`,
@@ -2088,7 +2088,7 @@ function buildProductTaskBlueprints(mission: Mission, blueprint: StyledProductBl
       ]
     },
     {
-      assignedAgent: "Red Queen",
+      assignedAgent: "Compass",
       title: "Generate digital product concept and contents",
       description:
         "Product Agent converts the research brief into one sellable product concept, including the page breakdown, file format, product contents, deliverable type, and the exact mockup prompt needed for imagery.",
@@ -2135,7 +2135,7 @@ function buildProductTaskBlueprints(mission: Mission, blueprint: StyledProductBl
       ]
     },
     {
-      assignedAgent: "Ada",
+      assignedAgent: "Anvil",
       title: "Generate one complete listing output",
       description:
         "Listing Agent turns the digital product concept into one publish-ready listing output with title, full description, thirteen tags, price, file delivery description, and product contents.",
@@ -2159,7 +2159,7 @@ function buildProductTaskBlueprints(mission: Mission, blueprint: StyledProductBl
       ]
     },
     {
-      assignedAgent: "Umbrella Core",
+      assignedAgent: "Core Runtime",
       title: "Prepare approval packet before publishing",
       description:
         "Approval System assembles the final listing output, preserves each agent handoff, and marks the product ready for human approval before any marketplace action.",
@@ -2187,7 +2187,7 @@ function buildServiceTaskBlueprints(mission: Mission, blueprint: StyledServiceBl
 
   return [
     {
-      assignedAgent: "Wesker",
+      assignedAgent: "Atlas",
       title: "Research service demand and buyer angle",
       description: `Research Agent identifies one ${channelLabel} service opportunity for ${blueprint.customer}, combining local research, feedback, and reference signals before the service package is built.`,
       outputSummary: `Research Agent selected the ${blueprint.serviceType} offer, clarified the buyer, and passed the positioning to the service strategy stage.`,
@@ -2211,7 +2211,7 @@ function buildServiceTaskBlueprints(mission: Mission, blueprint: StyledServiceBl
       ]
     },
     {
-      assignedAgent: "Red Queen",
+      assignedAgent: "Compass",
       title: "Define service scope, deliverables, and process",
       description:
         "Product Strategy Agent converts the research brief into a sellable service package with deliverables, process steps, package tiers, fulfillment notes, and reusable workflow guidance.",
@@ -2234,7 +2234,7 @@ function buildServiceTaskBlueprints(mission: Mission, blueprint: StyledServiceBl
       ]
     },
     {
-      assignedAgent: "Ada",
+      assignedAgent: "Anvil",
       title: "Generate one complete service output",
       description:
         "Build Agent turns the service strategy into a Fiverr-style gig output with title, description, packages, turnaround, deliverables, delivery steps, and fulfillment notes.",
@@ -2258,7 +2258,7 @@ function buildServiceTaskBlueprints(mission: Mission, blueprint: StyledServiceBl
       ]
     },
     {
-      assignedAgent: "Umbrella Core",
+      assignedAgent: "Core Runtime",
       title: "Prepare approval packet before client delivery",
       description:
         "Review Agent assembles the final service output, preserves the handoff between agents, and blocks any outbound action until manual approval happens.",

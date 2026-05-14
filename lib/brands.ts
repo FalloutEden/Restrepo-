@@ -1,4 +1,4 @@
-// Brand registry. Restrepo is the umbrella project / automation framework;
+// Brand registry. Restrepo is the parent project / automation framework;
 // LockLayer and Black Vault Apparel are the customer-facing brands it ships
 // products under. One Restrepo pipeline → many brands → many Shopify stores.
 //

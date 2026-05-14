@@ -3,9 +3,9 @@
 import { useEffect } from "react";
 
 // Toggles `body.has-dashboard-light` on mount/unmount.
-// operator.css uses this class to override globals.css's dark
-// UmbrellaBackground and switch the operator UI to a light SaaS theme.
-// Scoped to /dashboard only — admin routes keep the dark globals.
+// operator.css uses this class to override the dark cyberpunk globals
+// and switch the operator UI to a light SaaS theme. Scoped to /dashboard
+// only — admin routes keep the dark globals.
 
 export function DashboardBodyClass() {
   useEffect(() => {

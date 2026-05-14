@@ -514,13 +514,23 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
       }
     }
 
-    const savedArchive = window.localStorage.getItem("umbrella-mission-archive");
+    // Migrate legacy "umbrella-mission-archive" key if present, then read
+    // from the brand-neutral "operator-mission-archive" key. The old name
+    // leaked Capcom IP into devtools; scrubbed 2026-05-14.
+    const legacyArchive = window.localStorage.getItem("umbrella-mission-archive");
+    if (legacyArchive) {
+      try {
+        window.localStorage.setItem("operator-mission-archive", legacyArchive);
+      } catch {}
+      window.localStorage.removeItem("umbrella-mission-archive");
+    }
+    const savedArchive = window.localStorage.getItem("operator-mission-archive");
     if (savedArchive) {
       try {
         const parsed = JSON.parse(savedArchive) as RunnerState["archive"];
         setRunnerState((current) => ({ ...current, archive: parsed }));
       } catch {
-        window.localStorage.removeItem("umbrella-mission-archive");
+        window.localStorage.removeItem("operator-mission-archive");
       }
     }
 
@@ -669,7 +679,7 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
   }, [hasSavedDatasetSelection, selectedDatasetKeys.length]);
 
   useEffect(() => {
-    window.localStorage.setItem("umbrella-mission-archive", JSON.stringify(runnerState.archive));
+    window.localStorage.setItem("operator-mission-archive", JSON.stringify(runnerState.archive));
   }, [runnerState.archive]);
 
   useEffect(() => {
