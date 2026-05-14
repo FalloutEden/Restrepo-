@@ -1,0 +1,77 @@
+name: Deploy to Vercel (production)
+
+# Auto-deploys main to Vercel production on every push.
+#
+# Why this exists: Vercel's GitHub auto-deploy webhook went silent on
+# 2026-05-14 and 14+ commits sat undeployed for ~21 hours before anyone
+# noticed. The dashboard's "Redeploy" button only redeploys EXISTING
+# deployments — it can't pick up new git commits when the webhook is dead.
+# This workflow bypasses that failure mode by deploying via the Vercel
+# CLI directly, which only needs a token + the public project/org IDs.
+#
+# Required GitHub secret:
+#   VERCEL_TOKEN — create at Vercel Dashboard → Account Settings → Tokens
+#
+# The two ID env vars below are NOT secrets; they're public identifiers
+# visible in any Vercel URL. They live in .vercel/repo.json after a local
+# `vercel link`.
+#
+# Manual trigger: Actions tab → "Deploy to Vercel (production)" → Run
+# workflow. Useful for forcing a re-deploy without a code change.
+#
+# Full runbook: .openclaw/research/vercel-deploy-runbook-2026-05-14.md
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel any in-flight deploy if a newer commit lands while the older one
+# is still building. The newest commit always wins.
+concurrency:
+  group: vercel-prod-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: vercel deploy --prod
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_O2QE3dej2lnTzvL05GRa0znj
+      VERCEL_PROJECT_ID: prj_WjEV0BLTYKnYmDukPy1FzU8K1K4V
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment (production)
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build (production)
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy prebuilt artifact to production
+        id: deploy
+        run: |
+          url="$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})"
+          echo "Deployed: $url"
+          echo "deployment_url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Vercel production deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Triggered by: \`${{ github.event_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Status: \`${{ job.status }}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${{ steps.deploy.outputs.deployment_url }}" ]; then
+            echo "- URL: ${{ steps.deploy.outputs.deployment_url }}" >> "$GITHUB_STEP_SUMMARY"
+          fi

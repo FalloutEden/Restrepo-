@@ -70,3 +70,6 @@ tsconfig.tsbuildinfo
 # Tenant data — never commit (encrypted but still tenant-private)
 .openclaw/tenants/
 .openclaw/audit.jsonl
+
+.vercel
+.env*.local
