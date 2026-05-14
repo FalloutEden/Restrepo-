@@ -52,11 +52,89 @@ import {
   klaviyoSubscribeProfileToList,
   klaviyoListCampaigns
 } from "@/lib/klaviyo";
+import { FOUNDER_TENANT_ID } from "@/lib/tenant-context";
 
 // Each tool the operator can call is declared once here:
 //   - schema: JSONSchema Anthropic uses to constrain tool_use
 //   - run:    server-side implementation
 // The agent loop in lib/operator-agent.ts dispatches by tool name.
+//
+// ── Tenant safety gate (Gap 7 follow-up) ─────────────────────────────────
+// Several service libs (lib/shopify-credentials.ts, lib/cj-service.ts,
+// lib/printful-service.ts, lib/klaviyo.ts) still read credentials directly
+// from process.env.* — that means in tenant mode they would silently act
+// on the founder's keys and bill the founder's Shopify/Printful/Klaviyo
+// accounts. Until each of those libs is refactored to accept a per-tenant
+// credential, tools that touch them must be guarded.
+//
+// FOUNDER_ONLY_TOOLS lists tools that read credentials and have NOT yet
+// been migrated to per-tenant credential resolution. When invoked from a
+// non-founder context they return a clear error instead of executing.
+// The list shrinks as each underlying service lib gets the BYOK pass.
+
+const FOUNDER_ONLY_TOOLS = new Set<string>([
+  // Shopify-backed tools (need lib/shopify-credentials.ts BYOK refactor)
+  "list_drafts",
+  "get_recent_orders",
+  "delete_listing",
+  "publish_listing",
+  "list_cleanup_queue",
+  "bootstrap_store",
+  "attach_all_to_online_store",
+  "list_menus",
+  "add_menu_item",
+  "remove_menu_item",
+  "transparentize_brand_images",
+  "composite_on_bv_background",
+  "composite_all_brand_images",
+  "summarize_drafts",
+  "launch_status",
+  "generate_policies",
+  "publish_policies",
+  // CJ Dropshipping (needs lib/cj-service.ts BYOK refactor)
+  "search_cj_products",
+  // Printful-backed tools (needs lib/printful-service.ts BYOK refactor)
+  "materialize_product",
+  "relink_printful_variants",
+  // Klaviyo (needs lib/klaviyo.ts BYOK refactor)
+  "klaviyo_status",
+  "klaviyo_push_test_contact",
+  // Content studio (needs OpenAI BYOK + Printful for mockups)
+  "create_content_drop",
+  "list_content_drops",
+  "get_content_drop",
+  "generate_content_drop_run",
+  "mark_content_post_posted",
+  // Autonomous research pipeline (uses every credential type)
+  "run_pipeline",
+  // CEREBRO (still blocked by gap 2 on Vercel)
+  "cerebro_query"
+]);
+
+function isFounder(ctx: OperatorToolContext): boolean {
+  return (ctx.tenantId ?? FOUNDER_TENANT_ID) === FOUNDER_TENANT_ID;
+}
+
+/** Returns a structured error result when a tenant invokes a tool that
+ *  hasn't been BYOK-migrated yet. Lets the operator surface a clear
+ *  "configure your platform credentials" message instead of silently
+ *  running on the founder's keys. Returns null when the tool is safe to
+ *  proceed (founder context, or tool already migrated). */
+export function tenantSafetyGate(toolName: string, ctx: OperatorToolContext) {
+  if (isFounder(ctx)) return null;
+  if (!FOUNDER_ONLY_TOOLS.has(toolName)) return null;
+  return {
+    ok: false,
+    error: "tenant-byok-pending",
+    message:
+      `The ${toolName} tool is not yet available on the tenant SaaS — it routes to a platform ` +
+      `service (Shopify / Printful / CJ / Klaviyo / OpenAI) whose credentials are still ` +
+      `read from the founder's environment. The BYOK migration for that service is queued; ` +
+      `until it ships, only the founder/admin can invoke this tool. ` +
+      `Tools that work for tenants today: record_note, propose_action, request_human_input, ` +
+      `get_spend_summary, set_spend_budget.`
+  };
+}
 
 export type OperatorToolContext = {
   conversationId?: string;
@@ -638,6 +716,7 @@ const propose_action: OperatorTool = {
       humanFootwork: Array.isArray(args.humanFootwork) ? (args.humanFootwork as string[]) : []
     });
 
+    const tenantId = ctx.tenantId ?? FOUNDER_TENANT_ID;
     const proposal = await writeProposal(
       {
         id,
@@ -648,14 +727,18 @@ const propose_action: OperatorTool = {
         estimatedMonthlyRevenueUsd: monthly,
         source: { kind: ctx.source, conversationId: ctx.conversationId }
       },
-      { briefMarkdown, roiCsv }
+      { briefMarkdown, roiCsv },
+      tenantId
     );
 
-    await logActivity({
-      kind: "proposal_created",
-      message: `Proposal "${proposal.title}" created — $${proposal.estimatedCostUsd} est. cost`,
-      data: { proposalId: proposal.id, source: ctx.source }
-    });
+    await logActivity(
+      {
+        kind: "proposal_created",
+        message: `Proposal "${proposal.title}" created — $${proposal.estimatedCostUsd} est. cost`,
+        data: { proposalId: proposal.id, source: ctx.source }
+      },
+      tenantId
+    );
 
     return {
       id: proposal.id,
@@ -680,18 +763,25 @@ const request_human_input: OperatorTool = {
     required: ["title", "detail", "why"]
   },
   async run(args, ctx) {
-    const task = await writeHumanTask({
-      id: newId("task"),
-      title: String(args.title),
-      detail: String(args.detail),
-      why: String(args.why),
-      source: { kind: ctx.source, conversationId: ctx.conversationId }
-    });
-    await logActivity({
-      kind: "task_created",
-      message: `Human task: ${task.title}`,
-      data: { taskId: task.id, source: ctx.source }
-    });
+    const tenantId = ctx.tenantId ?? FOUNDER_TENANT_ID;
+    const task = await writeHumanTask(
+      {
+        id: newId("task"),
+        title: String(args.title),
+        detail: String(args.detail),
+        why: String(args.why),
+        source: { kind: ctx.source, conversationId: ctx.conversationId }
+      },
+      tenantId
+    );
+    await logActivity(
+      {
+        kind: "task_created",
+        message: `Human task: ${task.title}`,
+        data: { taskId: task.id, source: ctx.source }
+      },
+      tenantId
+    );
     return { id: task.id, status: task.status };
   }
 };
@@ -707,11 +797,12 @@ const record_note: OperatorTool = {
     },
     required: ["note"]
   },
-  async run(args) {
+  async run(args, ctx) {
     const note = String(args.note || "").trim();
     if (!note) return { saved: false };
-    await appendOperatorMemory(note);
-    await logActivity({ kind: "note", message: note });
+    const tenantId = ctx.tenantId ?? FOUNDER_TENANT_ID;
+    await appendOperatorMemory(note, tenantId);
+    await logActivity({ kind: "note", message: note }, tenantId);
     return { saved: true };
   }
 };
@@ -994,10 +1085,13 @@ const get_spend_summary: OperatorTool = {
       sinceDays: { type: "integer", minimum: 1, maximum: 365 }
     }
   },
-  async run(args) {
+  async run(args, ctx) {
+    const tenantId = ctx.tenantId ?? FOUNDER_TENANT_ID;
     const sinceDays = typeof args.sinceDays === "number" ? args.sinceDays : undefined;
-    const summary = await summarizeSpend(sinceDays ? { sinceDays } : {});
-    const budgetStatus = await getBudgetStatus();
+    const summary = await summarizeSpend(
+      sinceDays ? { sinceDays, tenantId } : { tenantId }
+    );
+    const budgetStatus = await getBudgetStatus(tenantId);
     return { summary, budgetStatus };
   }
 };
@@ -1014,11 +1108,12 @@ const set_spend_budget: OperatorTool = {
     },
     required: ["monthlyCapUsd"]
   },
-  async run(args) {
+  async run(args, ctx) {
+    const tenantId = ctx.tenantId ?? FOUNDER_TENANT_ID;
     const monthlyCapUsd = Number(args.monthlyCapUsd ?? 0);
     const warnAtPct = typeof args.warnAtPct === "number" ? Number(args.warnAtPct) : 80;
-    await writeBudget({ monthlyCapUsd, warnAtPct });
-    const status = await getBudgetStatus();
+    await writeBudget({ monthlyCapUsd, warnAtPct }, tenantId);
+    const status = await getBudgetStatus(tenantId);
     return { ok: true, budgetStatus: status };
   }
 };

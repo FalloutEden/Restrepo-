@@ -1,9 +1,9 @@
 import "server-only";
 
-import { claude } from "@/lib/claude";
+import { claude, claudeForTenant } from "@/lib/claude";
 import { withClaudeRetry } from "@/lib/claude-retry";
 import { withSpendKind, withSpendTenant } from "@/lib/spend-tracker";
-import { FOUNDER_TENANT_ID } from "@/lib/tenant-context";
+import { FOUNDER_TENANT_ID, contextForTenantId } from "@/lib/tenant-context";
 import { BRANDS } from "@/lib/brands";
 import {
   appendConversationMessage,
@@ -21,6 +21,7 @@ import {
   OPERATOR_TOOLS,
   toAnthropicTools,
   getToolByName,
+  tenantSafetyGate,
   type OperatorToolContext
 } from "@/lib/operator-tools";
 import {
@@ -399,6 +400,12 @@ async function runOperatorInner(
   const tools = toAnthropicTools();
   const ctx: OperatorToolContext = { conversationId, source, tenantId };
 
+  // Build the right Anthropic client for this tenant. Founder context falls
+  // through to the singleton via env vars; real tenants must have their own
+  // anthropicApiKey configured in the secret vault.
+  const tenantCtx = await contextForTenantId(tenantId);
+  const claudeClient = tenantCtx.isFounder ? claude : claudeForTenant(tenantCtx);
+
   // Persist the user turn first so the system prompt sees it (and so the
   // dashboard activity feed renders it even if the agent crashes mid-loop).
   if (userMessage) {
@@ -456,7 +463,7 @@ async function runOperatorInner(
 
     const response = await withClaudeRetry(
       () =>
-        claude.messages.create({
+        claudeClient.messages.create({
           model: OPERATOR_MODEL,
           max_tokens: MAX_TOKENS,
           system: systemBlocks as import("@anthropic-ai/sdk/resources").TextBlockParam[],
@@ -500,6 +507,20 @@ async function runOperatorInner(
             type: "tool_result" as const,
             tool_use_id: block.id,
             content: JSON.stringify({ error: `Unknown tool: ${block.name}` }),
+            is_error: true
+          };
+        }
+        // Tenant safety gate — if the tool reads credentials that haven't
+        // been BYOK-migrated yet, refuse early with a clear message rather
+        // than silently running on the founder's keys.
+        const gated = tenantSafetyGate(block.name, ctx);
+        if (gated) {
+          toolCallTrace.push({ name: block.name, input: block.input, result: gated });
+          onEvent?.({ kind: "tool_result", name: block.name, resultPreview: `gated: tenant-byok-pending` });
+          return {
+            type: "tool_result" as const,
+            tool_use_id: block.id,
+            content: JSON.stringify(gated),
             is_error: true
           };
         }
