@@ -1,13 +1,12 @@
 {
-  "_comment_crons": "Vercel Hobby plan only allows at-most-once-per-day crons. The two schedules below marked HOBBY-DEGRADED were originally tighter (health-check */5min, spend-ceiling hourly). Upgrade to Pro and restore them to: '*/5 * * * *' and '0 * * * *' respectively for proper 15-min outage detection + hourly tenant cap enforcement.",
   "crons": [
     {
       "path": "/api/cron/health-check",
-      "schedule": "0 14 * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/spend-ceiling",
-      "schedule": "0 6 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/cerebro-refresh",
