@@ -30,18 +30,21 @@ type Feed = { slug: string; name: string; url: string; tags: string[] };
 // Curated set — keep this tight. Each new feed = 1 more outbound request +
 // parse cost per day. Add aggressively when an agent surfaces a gap, prune
 // when a feed goes dead.
+// Validated 2026-05-13 — every URL below returned a parseable feed with at
+// least 5 items. Klaviyo / Baymard / Shopify Engineering / IndieHackers do
+// not publish public feeds (all 404 or HTML), so we route around them.
 const FEEDS: Feed[] = [
-  {
-    slug: "shopify-engineering",
-    name: "Shopify Engineering",
-    url: "https://shopify.engineering/blog.atom",
-    tags: ["platform", "engineering", "ecom"]
-  },
   {
     slug: "shopify-changelog",
     name: "Shopify Changelog",
     url: "https://shopify.dev/changelog/feed",
     tags: ["platform", "api", "ecom"]
+  },
+  {
+    slug: "shopify-news",
+    name: "Shopify News",
+    url: "https://news.shopify.com/feed",
+    tags: ["platform", "business", "ecom"]
   },
   {
     slug: "printful-blog",
@@ -50,22 +53,34 @@ const FEEDS: Feed[] = [
     tags: ["pod", "fulfillment", "ecom"]
   },
   {
-    slug: "klaviyo-blog",
-    name: "Klaviyo Blog",
-    url: "https://www.klaviyo.com/blog/feed",
-    tags: ["email", "lifecycle", "ecom"]
+    slug: "stripe-blog",
+    name: "Stripe Blog",
+    url: "https://stripe.com/blog/feed.rss",
+    tags: ["payments", "platform"]
   },
   {
-    slug: "baymard",
-    name: "Baymard Institute",
-    url: "https://baymard.com/blog.rss",
-    tags: ["ux", "conversion", "research"]
+    slug: "nielsen-norman",
+    name: "Nielsen Norman Group",
+    url: "https://www.nngroup.com/feed/rss/",
+    tags: ["ux", "research", "conversion"]
   },
   {
-    slug: "indiehackers-products",
-    name: "IndieHackers Products",
-    url: "https://www.indiehackers.com/products.rss",
-    tags: ["saas", "competitive", "indie"]
+    slug: "practical-ecom",
+    name: "Practical Ecommerce",
+    url: "https://www.practicalecommerce.com/feed",
+    tags: ["ecom", "tactics", "news"]
+  },
+  {
+    slug: "producthunt",
+    name: "Product Hunt",
+    url: "https://www.producthunt.com/feed",
+    tags: ["saas", "competitive", "launches"]
+  },
+  {
+    slug: "indiehackers-podcast",
+    name: "Indie Hackers Podcast",
+    url: "https://feeds.transistor.fm/the-indie-hackers-podcast",
+    tags: ["saas", "indie", "playbooks"]
   }
 ];
 
