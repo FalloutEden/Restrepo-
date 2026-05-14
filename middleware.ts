@@ -17,7 +17,9 @@ const PUBLIC_PREFIXES = [
   "/api/webhooks/", // HMAC-protected, must remain reachable
   "/api/stripe/webhook", // Stripe signs payloads; verified inline
   "/api/onboard/start", // Public signup endpoint — no auth required to start
-  "/api/admin/login" // Owner's login endpoint — verifies secret inline
+  "/api/admin/login", // Owner's login endpoint — verifies secret inline
+  "/api/health", // Health endpoint — pinged by uptime monitors + Vercel cron
+  "/api/cron/" // Vercel cron endpoints — verify CRON_SECRET inline
 ];
 
 export const config = {
