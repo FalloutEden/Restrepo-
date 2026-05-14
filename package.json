@@ -10,7 +10,9 @@
         "test": "node --import tsx --test tests/openai-retry.test.ts tests/token-batching.test.ts tests/workflow-orchestrator.test.ts && node --require ./tests/env-stub.cjs --require ./scripts/server-only-stub.cjs --import tsx --test tests/bg-composite.test.ts tests/launch-status.test.ts tests/operator-hallucination-guard.test.ts tests/tenant-context.test.ts tests/tenant-isolation.test.ts tests/tenant-tool-gate.test.ts tests/tenant-profile.test.ts tests/shopify-byok.test.ts",
         "deploy": "vercel --prod",
         "deploy:preview": "vercel",
-        "env:pull": "vercel env pull .env.local --environment=production"
+        "env:pull": "vercel env pull .env.local --environment=production",
+        "env:backup": "node scripts/env-doctor.mjs --backup",
+        "doctor": "node scripts/env-doctor.mjs"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.91.0",
