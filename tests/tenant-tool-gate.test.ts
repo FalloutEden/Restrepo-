@@ -45,16 +45,47 @@ test("founder context with no tenantId also passes (defaults to founder)", () =>
 
 // ── Tenant context: credential-touching tools are blocked ────────────────
 
-test("tenant context blocks materialize_product (needs Printful BYOK)", () => {
+test("tenant context blocks materialize_product (needs Printful BYOK on product-materialization.ts)", () => {
   const gated = tenantSafetyGate("materialize_product", tenantCtx());
   assert.ok(gated && gated.ok === false);
   assert.equal(gated?.error, "tenant-byok-pending");
   assert.match(gated?.message ?? "", /materialize_product/);
 });
 
-test("tenant context blocks bootstrap_store (needs Shopify BYOK)", () => {
+test("tenant context blocks bootstrap_store (needs Shopify BYOK on store-bootstrap.ts)", () => {
   const gated = tenantSafetyGate("bootstrap_store", tenantCtx());
   assert.ok(gated && gated.ok === false);
+});
+
+test("tenant context blocks delete_listing (gated overnight despite migration — destructive)", () => {
+  const gated = tenantSafetyGate("delete_listing", tenantCtx());
+  assert.ok(gated && gated.ok === false);
+});
+
+// ── Lifted tools (Shopify read + non-destructive write) — must pass through ─
+
+test("tenant context ALLOWS list_drafts (lifted 2026-05-14 once shopify-credentials.ts became tenant-aware)", () => {
+  assert.equal(tenantSafetyGate("list_drafts", tenantCtx()), null);
+});
+
+test("tenant context ALLOWS get_recent_orders (lifted same migration)", () => {
+  assert.equal(tenantSafetyGate("get_recent_orders", tenantCtx()), null);
+});
+
+test("tenant context ALLOWS list_cleanup_queue (lifted same migration)", () => {
+  assert.equal(tenantSafetyGate("list_cleanup_queue", tenantCtx()), null);
+});
+
+test("tenant context ALLOWS publish_listing (lifted after shopify-service write fns accept tenantCtx)", () => {
+  assert.equal(tenantSafetyGate("publish_listing", tenantCtx()), null);
+});
+
+test("tenant context ALLOWS attach_all_to_online_store (lifted same migration)", () => {
+  assert.equal(tenantSafetyGate("attach_all_to_online_store", tenantCtx()), null);
+});
+
+test("tenant context ALLOWS relink_printful_variants (lifted after printful-link.ts migrated)", () => {
+  assert.equal(tenantSafetyGate("relink_printful_variants", tenantCtx()), null);
 });
 
 test("tenant context blocks search_cj_products (needs CJ BYOK)", () => {

@@ -3,6 +3,8 @@ import "server-only";
 import type { BuildSpec, BuiltProduct } from "@/lib/autonomous-products";
 import { uploadBufferToShopifyFiles } from "@/lib/shopify-service";
 import { generateProductImage } from "@/lib/image-generation";
+import { resolvePrintfulCredentials } from "@/lib/printful-credentials";
+import type { TenantContext } from "@/lib/tenant-context";
 
 type PrintfulConfig = {
   token: string;
@@ -11,28 +13,28 @@ type PrintfulConfig = {
   retailPrice: string;
 };
 
-function ensurePrintfulConfig(): PrintfulConfig {
-  const token = process.env.PRINTFUL_API_KEY?.trim();
-  const storeId = process.env.PRINTFUL_STORE_ID?.trim();
-  const variantId = Number(process.env.PRINTFUL_DEFAULT_VARIANT_ID?.trim() || "");
-
-  if (!token) {
-    throw new Error("Missing PRINTFUL_API_KEY in server environment.");
+function ensurePrintfulConfig(tenantCtx?: TenantContext): PrintfulConfig {
+  const creds = resolvePrintfulCredentials(tenantCtx);
+  // The default variant id only lives in env vars (founder path). For
+  // tenants this lookup currently has no source — the tenant's catalog
+  // choices come from their materialize_product call's `variantId` arg
+  // when implemented, OR (for now) we fall back to the env var.
+  // This is a known limitation: tenant materialize_product needs to
+  // specify a Printful catalog variant explicitly. Tracked in the
+  // launch-gate dossier as part of materialize_product's tenant unlock.
+  const variantIdRaw = creds.defaultVariantId ?? Number(process.env.PRINTFUL_DEFAULT_VARIANT_ID?.trim() || "");
+  if (!Number.isFinite(variantIdRaw)) {
+    throw new Error(
+      "No Printful variant id available. " +
+        "Set PRINTFUL_DEFAULT_VARIANT_ID in env (founder) or pass a variant id explicitly (tenant)."
+    );
   }
-
-  if (!storeId) {
-    throw new Error("Missing PRINTFUL_STORE_ID in server environment.");
-  }
-
-  if (!Number.isFinite(variantId)) {
-    throw new Error("Missing PRINTFUL_DEFAULT_VARIANT_ID in server environment.");
-  }
-
   return {
-    token,
-    storeId,
-    variantId,
-    retailPrice: process.env.PRINTFUL_RETAIL_PRICE?.trim() || "29.99"
+    token: creds.token,
+    storeId: creds.storeId,
+    variantId: variantIdRaw as number,
+    retailPrice:
+      creds.defaultRetailPrice ?? process.env.PRINTFUL_RETAIL_PRICE?.trim() ?? "29.99"
   };
 }
 
@@ -88,8 +90,11 @@ async function createPrintfulSyncProduct(spec: BuildSpec, imageUrl: string, conf
   };
 }
 
-export async function buildPrintfulProduct(spec: BuildSpec): Promise<BuiltProduct> {
-  const config = ensurePrintfulConfig();
+export async function buildPrintfulProduct(
+  spec: BuildSpec,
+  tenantCtx?: TenantContext
+): Promise<BuiltProduct> {
+  const config = ensurePrintfulConfig(tenantCtx);
   const direction = spec.imagePrompt?.trim();
   const themeLine = direction
     ? `Theme and style direction: ${direction}`

@@ -74,15 +74,21 @@ import { patchTenantProfile, type FulfillmentLane } from "@/lib/tenant-profile";
 // The list shrinks as each underlying service lib gets the BYOK pass.
 
 const FOUNDER_ONLY_TOOLS = new Set<string>([
-  // Shopify-backed tools — list_drafts / get_recent_orders / list_cleanup_queue
-  // were lifted on 2026-05-14 once shopify-credentials.ts became tenant-aware.
-  // The remaining ones below still call internal helpers (shopify-menus.ts,
-  // bulk-store-ops.ts, store-bootstrap.ts, launch-status.ts, etc.) that read
-  // env vars directly. Each gets lifted as its underlying lib is migrated.
+  // Shopify-backed tools — the lifted list (no longer founder-only) on 2026-05-14:
+  //   list_drafts, get_recent_orders, list_cleanup_queue (read-only)
+  //   publish_listing, attach_all_to_online_store (write — non-destructive)
+  //
+  // delete_listing stays gated overnight because destructive ops deserve a
+  // daylight review pass with real tenant testing before lifting.
+  //
+  // bootstrap_store, list_menus, add_menu_item, remove_menu_item,
+  // transparentize_brand_images, summarize_drafts, launch_status,
+  // generate_policies, publish_policies, composite_* still call helpers in
+  // lib/shopify-menus.ts / lib/store-bootstrap.ts / lib/launch-status.ts /
+  // lib/policies-* / lib/bg-composite.ts that read env vars directly. Each
+  // helper needs the same tenantCtx pass before its tool can be lifted.
   "delete_listing",
-  "publish_listing",
   "bootstrap_store",
-  "attach_all_to_online_store",
   "list_menus",
   "add_menu_item",
   "remove_menu_item",
@@ -95,9 +101,12 @@ const FOUNDER_ONLY_TOOLS = new Set<string>([
   "publish_policies",
   // CJ Dropshipping (needs lib/cj-service.ts BYOK refactor)
   "search_cj_products",
-  // Printful-backed tools (needs lib/printful-service.ts BYOK refactor)
+  // Printful — materialize_product still gated because product-materialization.ts
+  // (1000+ lines, direct HTTP to Printful + Shopify) needs a careful migration
+  // pass that doesn't fit in the overnight window. relink_printful_variants
+  // was lifted on 2026-05-14 once printful-credentials.ts was built and
+  // printful-link.ts was migrated.
   "materialize_product",
-  "relink_printful_variants",
   // Klaviyo (needs lib/klaviyo.ts BYOK refactor)
   "klaviyo_status",
   "klaviyo_push_test_contact",
@@ -412,10 +421,11 @@ const delete_listing: OperatorTool = {
     required: ["productId", "brand", "reason"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const productId = Number(args.productId);
     const brand = String(args.brand);
     const reason = String(args.reason || "no reason given");
-    const result = await deleteShopifyProduct(productId, brand);
+    const result = await deleteShopifyProduct(productId, brand, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `delete_listing → ${productId} (${brand})`,
@@ -469,9 +479,10 @@ const publish_listing: OperatorTool = {
     required: ["productId", "brand"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const productId = Number(args.productId);
     const brand = String(args.brand);
-    const result = await publishShopifyProduct(productId, brand);
+    const result = await publishShopifyProduct(productId, brand, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `publish_listing → ${productId} (${brand}) onlineStore=${result.onlineStorePublished}`,
@@ -521,13 +532,17 @@ const relink_printful_variants: OperatorTool = {
     required: ["brand"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const brand = String(args.brand);
-    const summary = await relinkPrintfulVariants(brand);
-    await logActivity({
-      kind: "tool_call",
-      message: `relink_printful_variants → ${brand} (${summary.updated} updated, ${summary.alreadyLinked} ok)`,
-      data: { source: ctx.source }
-    });
+    const summary = await relinkPrintfulVariants(brand, tenantCtx);
+    await logActivity(
+      {
+        kind: "tool_call",
+        message: `relink_printful_variants → ${brand} (${summary.updated} updated, ${summary.alreadyLinked} ok)`,
+        data: { source: ctx.source }
+      },
+      ctx.tenantId ?? FOUNDER_TENANT_ID
+    );
     return summary;
   }
 };
@@ -544,8 +559,9 @@ const attach_all_to_online_store: OperatorTool = {
     required: ["brand"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const brand = String(args.brand);
-    const result = await attachAllToOnlineStore(brand);
+    const result = await attachAllToOnlineStore(brand, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `attach_all_to_online_store → ${brand} (${result.attached}/${result.total})`,

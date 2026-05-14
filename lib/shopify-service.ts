@@ -310,9 +310,10 @@ async function getOnlineStorePublicationId(creds: ShopifyCredentials): Promise<s
 // Idempotent on both paths.
 export async function attachProductToOnlineStore(
   productId: number,
-  brand?: string
+  brand?: string,
+  tenantCtx?: TenantContext
 ): Promise<{ onlineStoreAttached: boolean; publicationId: string | null; via: "graphql" | "rest" }> {
-  const creds = resolveShopifyCredentials(brand);
+  const creds = resolveShopifyCredentials(brand, tenantCtx);
 
   // Try GraphQL first
   try {
@@ -364,8 +365,12 @@ export async function attachProductToOnlineStore(
 }
 
 // Publish a product: set status=active AND ensure it's on the Online Store.
-export async function publishShopifyProduct(productId: number, brand?: string) {
-  const creds = resolveShopifyCredentials(brand);
+export async function publishShopifyProduct(
+  productId: number,
+  brand?: string,
+  tenantCtx?: TenantContext
+) {
+  const creds = resolveShopifyCredentials(brand, tenantCtx);
   await shopifyRest(creds, `/products/${productId}.json`, {
     method: "PUT",
     body: JSON.stringify({ product: { id: productId, status: "active", published: true } })
@@ -373,7 +378,7 @@ export async function publishShopifyProduct(productId: number, brand?: string) {
   // Best-effort GraphQL attach — covers stores where REST `published:true`
   // doesn't take effect. Errors swallowed since REST already did the job.
   try {
-    await attachProductToOnlineStore(productId, brand);
+    await attachProductToOnlineStore(productId, brand, tenantCtx);
   } catch {}
   return {
     id: productId,
@@ -383,8 +388,12 @@ export async function publishShopifyProduct(productId: number, brand?: string) {
   };
 }
 
-export async function deleteShopifyProduct(productId: number, brand?: string) {
-  const creds = resolveShopifyCredentials(brand);
+export async function deleteShopifyProduct(
+  productId: number,
+  brand?: string,
+  tenantCtx?: TenantContext
+) {
+  const creds = resolveShopifyCredentials(brand, tenantCtx);
   await shopifyRest(creds, `/products/${productId}.json`, { method: "DELETE" });
   return { id: productId, deleted: true, brand: creds.brandSlug };
 }

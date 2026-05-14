@@ -8,6 +8,7 @@ import {
 import { resolveShopifyCredentials, type ShopifyCredentials } from "@/lib/shopify-credentials";
 import { makeBackgroundTransparent } from "@/lib/image-transparency";
 import { aiBackgroundReplace, cutoutComposite, sharpFlatWhiteCutout, type SubjectHint } from "@/lib/bg-composite";
+import type { TenantContext } from "@/lib/tenant-context";
 
 // Derive a SubjectHint (gender, garmentType) from a product title so we can
 // guide gpt-image-1 to render the right model + silhouette. Without this we
@@ -57,8 +58,11 @@ export type AttachAllResult = {
   failed: Array<{ id: number; title: string; message: string }>;
 };
 
-export async function attachAllToOnlineStore(brand: string): Promise<AttachAllResult> {
-  const creds = resolveShopifyCredentials(brand);
+export async function attachAllToOnlineStore(
+  brand: string,
+  tenantCtx?: TenantContext
+): Promise<AttachAllResult> {
+  const creds = resolveShopifyCredentials(brand, tenantCtx);
   const data = await shopifyRest<{ products: Array<{ id: number; title: string }> }>(
     creds,
     "/products.json?limit=250&fields=id,title",
@@ -72,7 +76,7 @@ export async function attachAllToOnlineStore(brand: string): Promise<AttachAllRe
   };
   for (const p of data.products) {
     try {
-      await attachProductToOnlineStore(p.id, creds.brandSlug);
+      await attachProductToOnlineStore(p.id, creds.brandSlug, tenantCtx);
       result.attached += 1;
     } catch (e) {
       result.failed.push({ id: p.id, title: p.title, message: e instanceof Error ? e.message : String(e) });

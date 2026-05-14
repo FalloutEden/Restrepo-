@@ -1,6 +1,8 @@
 import "server-only";
 
 import { resolveShopifyCredentials, type ShopifyCredentials } from "@/lib/shopify-credentials";
+import { resolvePrintfulCredentials, type PrintfulCredentials } from "@/lib/printful-credentials";
+import type { TenantContext } from "@/lib/tenant-context";
 
 // Re-link Printful sync_variant external_ids to the correct Shopify variant ids
 // for a given brand.
@@ -49,16 +51,18 @@ async function shopifyRest<T>(creds: ShopifyCredentials, endpoint: string, init:
   return text ? (JSON.parse(text) as T) : ({} as T);
 }
 
-async function pfFetch<T>(method: "GET" | "PUT", urlPath: string, body?: unknown): Promise<T> {
-  const token = process.env.PRINTFUL_API_KEY?.trim();
-  const storeId = process.env.PRINTFUL_STORE_ID?.trim();
-  if (!token || !storeId) throw new Error("Missing Printful credentials");
+async function pfFetch<T>(
+  creds: PrintfulCredentials,
+  method: "GET" | "PUT",
+  urlPath: string,
+  body?: unknown
+): Promise<T> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const r = await fetch(`${PF_BASE}${urlPath}`, {
       method,
       headers: {
-        Authorization: `Bearer ${token}`,
-        "X-PF-Store-Id": storeId,
+        Authorization: `Bearer ${creds.token}`,
+        "X-PF-Store-Id": creds.storeId,
         ...(body ? { "Content-Type": "application/json" } : {})
       },
       body: body ? JSON.stringify(body) : undefined
@@ -85,18 +89,22 @@ export type RelinkSummary = {
   errors: Array<{ title: string; message: string }>;
 };
 
-export async function relinkPrintfulVariants(brand: string): Promise<RelinkSummary> {
-  const creds = resolveShopifyCredentials(brand);
+export async function relinkPrintfulVariants(
+  brand: string,
+  tenantCtx?: TenantContext
+): Promise<RelinkSummary> {
+  const shopifyCreds = resolveShopifyCredentials(brand, tenantCtx);
+  const printfulCreds = resolvePrintfulCredentials(tenantCtx);
   const list = await shopifyRest<{ products: ShopifyProduct[] }>(
-    creds,
+    shopifyCreds,
     "/products.json?limit=250&fields=id,title,tags,status,variants",
     { method: "GET" }
   );
-  const tagFilter = `brand:${creds.brandSlug}`;
+  const tagFilter = `brand:${shopifyCreds.brandSlug}`;
   const products = list.products.filter((p) => (p.tags ?? "").split(",").some((t) => t.trim() === tagFilter));
 
   const summary: RelinkSummary = {
-    brand: creds.brandSlug,
+    brand: shopifyCreds.brandSlug,
     totalProducts: products.length,
     updated: 0,
     alreadyLinked: 0,
@@ -115,7 +123,7 @@ export async function relinkPrintfulVariants(brand: string): Promise<RelinkSumma
 
     let detail: { result?: { sync_variants?: PrintfulSyncVariant[] } };
     try {
-      detail = await pfFetch("GET", `/store/products/${syncProductId}`);
+      detail = await pfFetch(printfulCreds, "GET", `/store/products/${syncProductId}`);
     } catch (e) {
       summary.errors.push({ title: product.title, message: e instanceof Error ? e.message : String(e) });
       continue;
@@ -154,7 +162,7 @@ export async function relinkPrintfulVariants(brand: string): Promise<RelinkSumma
     }
 
     try {
-      await pfFetch("PUT", `/store/products/${syncProductId}`, { sync_variants: updates });
+      await pfFetch(printfulCreds, "PUT", `/store/products/${syncProductId}`, { sync_variants: updates });
       summary.updated += 1;
     } catch (e) {
       summary.errors.push({ title: product.title, message: e instanceof Error ? e.message : String(e) });
