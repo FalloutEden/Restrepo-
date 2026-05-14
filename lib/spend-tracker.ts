@@ -1,15 +1,25 @@
 import "server-only";
 
-import { mkdir, readFile, appendFile, access } from "node:fs/promises";
+import { mkdir, readFile, appendFile, access, writeFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-// Spend tracker — instruments every Claude and OpenAI call so we know
-// exactly what's been charged to the API keys. Append-only JSONL log under
-// .openclaw/operator/spend.jsonl. Aggregation reads the tail and groups by
-// model + kind + day. Lightweight: no DB, no external deps.
+import { buildTenantPaths, FOUNDER_TENANT_ID } from "@/lib/tenant-context";
 
-const ROOT = path.join(process.cwd(), ".openclaw", "operator");
-const LOG_PATH = path.join(ROOT, "spend.jsonl");
+// Spend tracker — instruments every Claude and OpenAI call so we know
+// exactly what's been charged to the API keys. Append-only JSONL log.
+//
+// Per-tenant layout (post-BYOK migration):
+//   .openclaw/operator/spend.jsonl                 — founder/admin (legacy path preserved)
+//   .openclaw/tenants/<tenantId>/operator/spend.jsonl  — each merchant's own log
+//
+// Writes go to the per-tenant file so the tenant's dashboard sees only their
+// own usage. Cross-tenant aggregation (founder/admin dashboard, spend-ceiling
+// cron) iterates tenant directories. The legacy global `.openclaw/operator/
+// spend.jsonl` path is preserved for the founder tenant so existing cron and
+// reporting code keeps working without per-tenant tenant ID awareness.
+//
+// Aggregation reads the tail and groups by model + kind + tenant + day.
+// Lightweight: no DB, no external deps.
 
 // Cost rates per million tokens (Claude) and per call (OpenAI image).
 // Source: anthropic.com/pricing and platform.openai.com/docs/pricing as of
@@ -49,6 +59,9 @@ export type SpendEntry = {
   provider: "anthropic" | "openai";
   // What part of the system made the call (best-effort tagging).
   kind: string;
+  // Tenant attribution. "_founder" for admin/dev/internal; tnt_* for real
+  // merchants. The spend-ceiling cron uses this to enforce per-tenant caps.
+  tenantId: string;
   model?: string;
   // Anthropic token counts (zero for OpenAI).
   inputTokens?: number;
@@ -65,10 +78,6 @@ export type SpendEntry = {
   // Final computed dollar cost for this call.
   costUsd: number;
 };
-
-async function ensureRoot() {
-  await mkdir(ROOT, { recursive: true });
-}
 
 async function fileExists(p: string) {
   try {
@@ -108,13 +117,14 @@ export function priceOpenAIImage(quality: "standard" | "medium" | "high" = "stan
 
 // ── Recording ─────────────────────────────────────────────────────────────
 
+// Active tagging — module-globals updated via with* wrappers. The agent loop
+// wraps each turn with both withSpendKind and withSpendTenant so any nested
+// API call attributes correctly. Async-local-storage would be more rigorous
+// but module-globals are simpler to reason about for v1; don't nest these
+// wrappers.
 let currentKind: string = "unknown";
+let currentTenantId: string = FOUNDER_TENANT_ID;
 
-// Set the active "kind" tag for spend that happens during the wrapped call.
-// Use this around blocks of work — operator chat turns, pipeline runs,
-// content studio drops, etc. Async-local would be cleaner but adds enough
-// complexity that a module-global with explicit set/clear is easier to
-// reason about for v1. Don't nest these.
 export async function withSpendKind<T>(kind: string, fn: () => Promise<T>): Promise<T> {
   const prev = currentKind;
   currentKind = kind;
@@ -125,18 +135,45 @@ export async function withSpendKind<T>(kind: string, fn: () => Promise<T>): Prom
   }
 }
 
+export async function withSpendTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = currentTenantId;
+  currentTenantId = tenantId;
+  try {
+    return await fn();
+  } finally {
+    currentTenantId = prev;
+  }
+}
+
 export function getActiveSpendKind(): string {
   return currentKind;
 }
 
-export async function recordSpend(partial: Omit<SpendEntry, "ts" | "kind"> & { kind?: string }): Promise<void> {
-  await ensureRoot();
+export function getActiveTenantId(): string {
+  return currentTenantId;
+}
+
+function spendLogPathForTenant(tenantId: string): string {
+  return buildTenantPaths(tenantId).spendLog;
+}
+
+async function ensureSpendDir(p: string) {
+  await mkdir(path.dirname(p), { recursive: true });
+}
+
+export async function recordSpend(
+  partial: Omit<SpendEntry, "ts" | "kind" | "tenantId"> & { kind?: string; tenantId?: string }
+): Promise<void> {
+  const tenantId = partial.tenantId ?? currentTenantId ?? FOUNDER_TENANT_ID;
+  const logPath = spendLogPathForTenant(tenantId);
+  await ensureSpendDir(logPath);
   const entry: SpendEntry = {
     ts: new Date().toISOString(),
     kind: partial.kind ?? currentKind,
+    tenantId,
     ...partial
   };
-  await appendFile(LOG_PATH, `${JSON.stringify(entry)}\n`, "utf8");
+  await appendFile(logPath, `${JSON.stringify(entry)}\n`, "utf8");
 }
 
 // ── Aggregation ───────────────────────────────────────────────────────────
@@ -146,6 +183,7 @@ export type SpendSummary = {
   byProvider: Record<string, number>;
   byKind: Record<string, number>;
   byModel: Record<string, number>;
+  byTenant: Record<string, number>;
   byDay: Array<{ day: string; usd: number }>;
   entryCount: number;
   // Computed rolling windows
@@ -156,14 +194,14 @@ export type SpendSummary = {
   lastEntryAt?: string;
 };
 
-export async function summarizeSpend(options: { sinceDays?: number } = {}): Promise<SpendSummary> {
-  await ensureRoot();
-  if (!(await fileExists(LOG_PATH))) {
-    return emptySummary();
-  }
-  const raw = await readFile(LOG_PATH, "utf8");
-  const lines = raw.split("\n").filter((l) => l.trim());
-  const entries: SpendEntry[] = lines
+async function readSpendEntries(tenantId: string): Promise<SpendEntry[]> {
+  const logPath = spendLogPathForTenant(tenantId);
+  await ensureSpendDir(logPath);
+  if (!(await fileExists(logPath))) return [];
+  const raw = await readFile(logPath, "utf8");
+  return raw
+    .split("\n")
+    .filter((l) => l.trim())
     .map((l) => {
       try {
         return JSON.parse(l) as SpendEntry;
@@ -171,7 +209,41 @@ export async function summarizeSpend(options: { sinceDays?: number } = {}): Prom
         return null;
       }
     })
-    .filter((e): e is SpendEntry => !!e);
+    .filter((e): e is SpendEntry => !!e)
+    // Back-fill tenantId on legacy entries written before this migration so
+    // grouping works without a migration script.
+    .map((e) => ({ ...e, tenantId: e.tenantId ?? FOUNDER_TENANT_ID }));
+}
+
+/** All known tenant ids that have a spend log on disk, including the founder. */
+async function listTenantIdsWithSpend(): Promise<string[]> {
+  const base = (() => {
+    const onVercel = Boolean(process.env.VERCEL);
+    return onVercel ? path.join("/tmp", "openclaw") : path.join(process.cwd(), ".openclaw");
+  })();
+  const out: string[] = [FOUNDER_TENANT_ID];
+  const tenantsDir = path.join(base, "tenants");
+  try {
+    const entries = await readdir(tenantsDir, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.isDirectory() && /^[a-zA-Z0-9_]+$/.test(e.name)) {
+        out.push(e.name);
+      }
+    }
+  } catch {
+    // No tenants directory — only founder spend exists
+  }
+  return out;
+}
+
+export async function summarizeSpend(
+  options: { sinceDays?: number; tenantId?: string } = {}
+): Promise<SpendSummary> {
+  const tenantIds = options.tenantId ? [options.tenantId] : await listTenantIdsWithSpend();
+  const entriesByTenant = await Promise.all(tenantIds.map(readSpendEntries));
+  const entries = entriesByTenant.flat();
+
+  if (entries.length === 0) return emptySummary();
 
   const cutoff = options.sinceDays ? Date.now() - options.sinceDays * 24 * 60 * 60 * 1000 : 0;
   const filtered = cutoff ? entries.filter((e) => Date.parse(e.ts) >= cutoff) : entries;
@@ -179,6 +251,7 @@ export async function summarizeSpend(options: { sinceDays?: number } = {}): Prom
   const byProvider: Record<string, number> = {};
   const byKind: Record<string, number> = {};
   const byModel: Record<string, number> = {};
+  const byTenant: Record<string, number> = {};
   const byDayMap: Record<string, number> = {};
   let total = 0;
 
@@ -187,6 +260,7 @@ export async function summarizeSpend(options: { sinceDays?: number } = {}): Prom
     total += cost;
     byProvider[e.provider] = (byProvider[e.provider] ?? 0) + cost;
     byKind[e.kind] = (byKind[e.kind] ?? 0) + cost;
+    byTenant[e.tenantId] = (byTenant[e.tenantId] ?? 0) + cost;
     if (e.model) byModel[e.model] = (byModel[e.model] ?? 0) + cost;
     const day = e.ts.slice(0, 10);
     byDayMap[day] = (byDayMap[day] ?? 0) + cost;
@@ -206,17 +280,25 @@ export async function summarizeSpend(options: { sinceDays?: number } = {}): Prom
       .reduce((s, e) => s + (e.costUsd ?? 0), 0);
   };
 
+  // entries was flattened from possibly multiple tenant logs. lastEntryAt is
+  // the max ts across all of them.
+  const lastEntryAt = entries.reduce<string | undefined>((latest, e) => {
+    if (!latest || e.ts > latest) return e.ts;
+    return latest;
+  }, undefined);
+
   return {
     totalUsd: Number(total.toFixed(6)),
     byProvider,
     byKind,
     byModel,
+    byTenant,
     byDay,
     entryCount: filtered.length,
     today: Number(today.toFixed(6)),
     last7Days: Number(sinceWindow(7).toFixed(6)),
     last30Days: Number(sinceWindow(30).toFixed(6)),
-    lastEntryAt: entries.length > 0 ? entries[entries.length - 1].ts : undefined
+    lastEntryAt
   };
 }
 
@@ -226,6 +308,7 @@ function emptySummary(): SpendSummary {
     byProvider: {},
     byKind: {},
     byModel: {},
+    byTenant: {},
     byDay: [],
     entryCount: 0,
     today: 0,
@@ -235,36 +318,44 @@ function emptySummary(): SpendSummary {
 }
 
 // ── Budget cap ────────────────────────────────────────────────────────────
-// Stored under .openclaw/operator/spend-budget.json. Soft cap — emits a
-// warning when approached and an alert when exceeded. Does NOT block calls
-// in v1 (would require deeper integration in every code path).
+// Per-tenant soft cap. Emits a warning when approached and an alert when
+// exceeded. The spend-ceiling cron enforces the hard cap by toggling
+// tenant.config.operatorEnabled when monthly spend exceeds the tenant's
+// configured cap (lib/tenancy.ts spendBudgetUsdMonthly). This file's budget
+// is the per-tenant warning layer for the in-app dashboard.
 
 export type SpendBudget = {
   monthlyCapUsd: number; // 0 = no cap
   warnAtPct: number; // 0–100, warn when monthly spend exceeds this %
 };
 
-const BUDGET_PATH = path.join(ROOT, "spend-budget.json");
-
 const DEFAULT_BUDGET: SpendBudget = {
   monthlyCapUsd: 0,
   warnAtPct: 80
 };
 
-export async function readBudget(): Promise<SpendBudget> {
-  if (!(await fileExists(BUDGET_PATH))) return { ...DEFAULT_BUDGET };
+function budgetPathForTenant(tenantId: string): string {
+  return buildTenantPaths(tenantId).spendBudgetFile;
+}
+
+export async function readBudget(tenantId: string = FOUNDER_TENANT_ID): Promise<SpendBudget> {
+  const p = budgetPathForTenant(tenantId);
+  if (!(await fileExists(p))) return { ...DEFAULT_BUDGET };
   try {
-    const raw = await readFile(BUDGET_PATH, "utf8");
+    const raw = await readFile(p, "utf8");
     return { ...DEFAULT_BUDGET, ...(JSON.parse(raw) as Partial<SpendBudget>) };
   } catch {
     return { ...DEFAULT_BUDGET };
   }
 }
 
-export async function writeBudget(budget: SpendBudget): Promise<void> {
-  await ensureRoot();
-  const { writeFile } = await import("node:fs/promises");
-  await writeFile(BUDGET_PATH, JSON.stringify(budget, null, 2), "utf8");
+export async function writeBudget(
+  budget: SpendBudget,
+  tenantId: string = FOUNDER_TENANT_ID
+): Promise<void> {
+  const p = budgetPathForTenant(tenantId);
+  await ensureSpendDir(p);
+  await writeFile(p, JSON.stringify(budget, null, 2), "utf8");
 }
 
 export type BudgetStatus = {
@@ -275,9 +366,9 @@ export type BudgetStatus = {
   exceeded: boolean;
 };
 
-export async function getBudgetStatus(): Promise<BudgetStatus> {
-  const budget = await readBudget();
-  const summary = await summarizeSpend({ sinceDays: 30 });
+export async function getBudgetStatus(tenantId: string = FOUNDER_TENANT_ID): Promise<BudgetStatus> {
+  const budget = await readBudget(tenantId);
+  const summary = await summarizeSpend({ sinceDays: 30, tenantId });
   const monthlyUsd = summary.totalUsd;
   const utilization =
     budget.monthlyCapUsd > 0 ? (monthlyUsd / budget.monthlyCapUsd) * 100 : 0;

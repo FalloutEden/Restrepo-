@@ -2,7 +2,8 @@ import "server-only";
 
 import { claude } from "@/lib/claude";
 import { withClaudeRetry } from "@/lib/claude-retry";
-import { withSpendKind } from "@/lib/spend-tracker";
+import { withSpendKind, withSpendTenant } from "@/lib/spend-tracker";
+import { FOUNDER_TENANT_ID } from "@/lib/tenant-context";
 import { BRANDS } from "@/lib/brands";
 import {
   appendConversationMessage,
@@ -61,13 +62,13 @@ function brandsBlock() {
 // within the 5-minute cache window only pay full tokens for the dynamic
 // state + new user message. Cuts per-turn cost ~80% on cache hits and
 // substantially reduces rate-limit pressure.
-async function buildSystem(): Promise<{ staticPart: string; dynamicPart: string }> {
+async function buildSystem(tenantId: string): Promise<{ staticPart: string; dynamicPart: string }> {
   const [state, memory, knowledge, pendingProposals, openTasks] = await Promise.all([
-    readOperatorState(),
-    readOperatorMemory(),
-    readOperatorKnowledge(),
-    listProposals({ status: "pending" }),
-    listHumanTasks({ status: "open" })
+    readOperatorState(tenantId),
+    readOperatorMemory(tenantId),
+    readOperatorKnowledge(tenantId),
+    listProposals({ status: "pending" }, tenantId),
+    listHumanTasks({ status: "open" }, tenantId)
   ]);
 
   const recentRejections =
@@ -361,6 +362,10 @@ export type AgentRunOptions = {
   conversationId: string;
   userMessage?: string; // omitted when running an autonomous tick
   source: "chat" | "tick";
+  // Tenant attribution. Defaults to FOUNDER_TENANT_ID so admin/dev/tick
+  // contexts keep working without explicit wiring. Real merchant sessions
+  // must pass the resolved tenant id from lib/tenant-context.resolveTenantContext.
+  tenantId?: string;
   // Surfaced to the caller for streaming/UI updates.
   onEvent?: (event: AgentEvent) => void;
 };
@@ -375,30 +380,43 @@ export type AgentEvent =
   | { kind: "done"; finalText: string };
 
 export async function runOperator(options: AgentRunOptions): Promise<{ finalText: string }> {
-  return withSpendKind(options.source === "tick" ? "operator_tick" : "operator_chat", () =>
-    runOperatorInner(options)
+  const tenantId = options.tenantId ?? FOUNDER_TENANT_ID;
+  // Wrap with both spend-kind AND spend-tenant so every nested API call gets
+  // attributed correctly. The tenant tag drives the spend-ceiling cron's
+  // per-tenant pause logic.
+  return withSpendTenant(tenantId, () =>
+    withSpendKind(options.source === "tick" ? "operator_tick" : "operator_chat", () =>
+      runOperatorInner(options, tenantId)
+    )
   );
 }
 
-async function runOperatorInner(options: AgentRunOptions): Promise<{ finalText: string }> {
+async function runOperatorInner(
+  options: AgentRunOptions,
+  tenantId: string
+): Promise<{ finalText: string }> {
   const { conversationId, userMessage, source, onEvent } = options;
   const tools = toAnthropicTools();
-  const ctx: OperatorToolContext = { conversationId, source };
+  const ctx: OperatorToolContext = { conversationId, source, tenantId };
 
   // Persist the user turn first so the system prompt sees it (and so the
   // dashboard activity feed renders it even if the agent crashes mid-loop).
   if (userMessage) {
-    await appendConversationMessage(conversationId, {
-      role: "user",
-      content: userMessage,
-      timestamp: new Date().toISOString()
-    });
-    await logActivity({ kind: "chat_user", message: userMessage });
+    await appendConversationMessage(
+      conversationId,
+      {
+        role: "user",
+        content: userMessage,
+        timestamp: new Date().toISOString()
+      },
+      tenantId
+    );
+    await logActivity({ kind: "chat_user", message: userMessage }, tenantId);
   } else if (source === "tick") {
-    await logActivity({ kind: "tick_started", message: "Autonomous tick started" });
+    await logActivity({ kind: "tick_started", message: "Autonomous tick started" }, tenantId);
   }
 
-  const persisted = await readConversation(conversationId);
+  const persisted = await readConversation(conversationId, tenantId);
   const messages: AnthropicMessage[] = persistedMessagesToAnthropic(persisted);
 
   // For autonomous ticks, inject a synthetic user prompt so the model has
@@ -410,7 +428,7 @@ async function runOperatorInner(options: AgentRunOptions): Promise<{ finalText: 
     });
   }
 
-  const { staticPart, dynamicPart } = await buildSystem();
+  const { staticPart, dynamicPart } = await buildSystem(tenantId);
   // Anthropic prompt-caching: mark the static portion (brands, playbooks,
   // guardrails, knowledge, memory) with cache_control. Within 5 minutes the
   // static portion is served from cache for ~10% of the input cost. Dynamic
@@ -543,27 +561,35 @@ async function runOperatorInner(options: AgentRunOptions): Promise<{ finalText: 
   // Persist the assistant turn (text + tool trace) so the next conversation
   // load reproduces it.
   if (finalText || toolCallTrace.length > 0) {
-    await appendConversationMessage(conversationId, {
-      role: "assistant",
-      content: finalText || "(used tools without text response)",
-      timestamp: new Date().toISOString(),
-      toolCalls: toolCallTrace
-    });
-    await logActivity({
-      kind: "chat_assistant",
-      message: finalText.slice(0, 500) || `(tool-only turn, ${toolCallTrace.length} calls)`
-    });
+    await appendConversationMessage(
+      conversationId,
+      {
+        role: "assistant",
+        content: finalText || "(used tools without text response)",
+        timestamp: new Date().toISOString(),
+        toolCalls: toolCallTrace
+      },
+      tenantId
+    );
+    await logActivity(
+      {
+        kind: "chat_assistant",
+        message: finalText.slice(0, 500) || `(tool-only turn, ${toolCallTrace.length} calls)`
+      },
+      tenantId
+    );
   }
 
   // Update state pointers.
   await patchOperatorState(
     source === "tick"
       ? { lastTickAt: new Date().toISOString() }
-      : { lastChatAt: new Date().toISOString() }
+      : { lastChatAt: new Date().toISOString() },
+    tenantId
   );
 
   if (source === "tick") {
-    await logActivity({ kind: "tick_completed", message: finalText.slice(0, 300) || "tick done" });
+    await logActivity({ kind: "tick_completed", message: finalText.slice(0, 300) || "tick done" }, tenantId);
   }
 
   onEvent?.({ kind: "done", finalText });

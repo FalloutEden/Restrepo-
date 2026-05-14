@@ -1,5 +1,6 @@
 import { runOperator, type AgentEvent } from "@/lib/operator-agent";
 import { newId } from "@/lib/operator-state";
+import { resolveTenantContext } from "@/lib/tenant-context";
 
 export const runtime = "nodejs";
 // Long-running streaming response — opt out of static caching.
@@ -18,6 +19,11 @@ export async function POST(request: Request) {
   }
   const conversationId = body.conversationId?.trim() || newId("conv");
 
+  // Resolve which tenant this chat belongs to. Admin/dev with no btk_ bearer
+  // gets the founder context (legacy behavior). Real merchants identified by
+  // their btk_* bearer route to their own isolated state + credentials.
+  const tenantCtx = await resolveTenantContext(request);
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -31,6 +37,7 @@ export async function POST(request: Request) {
           conversationId,
           userMessage: message,
           source: "chat",
+          tenantId: tenantCtx.tenantId,
           onEvent: send
         });
       } catch (error) {

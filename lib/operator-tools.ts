@@ -61,6 +61,11 @@ import {
 export type OperatorToolContext = {
   conversationId?: string;
   source: "chat" | "tick";
+  /** Tenant that owns this invocation. Tools that persist state or read
+   *  credentials must scope by this — never by hardcoded env vars or global
+   *  filesystem paths. Defaults to FOUNDER_TENANT_ID when not provided so
+   *  legacy admin/dev call sites keep working. See lib/tenant-context.ts. */
+  tenantId?: string;
 };
 
 export type OperatorTool = {
