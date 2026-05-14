@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AgentCard } from "@/components/AgentCard";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
+import { AgentHabitat } from "@/components/AgentHabitat";
 import { AutonomousQueueBoard } from "@/components/AutonomousQueueBoard";
+import { CerebroHeartbeat } from "@/components/CerebroHeartbeat";
 import { DatasetCatalogue } from "@/components/DatasetCatalogue";
 import { MorningReportView } from "@/components/MorningReportView";
 import { MissionStatusBoard } from "@/components/MissionStatusBoard";
@@ -50,6 +52,10 @@ import {
 
 type AgentDashboardProps = {
   agents: Agent[];
+  // When false (customer surface), the Data Catalogue tab and the
+  // founder-internal Settings sections are hidden. Defaults to true so
+  // existing /pipeline (admin-only) renders unchanged.
+  isAdmin?: boolean;
 };
 
 type DashboardTab =
@@ -140,14 +146,21 @@ function timestampLabel(date: Date) {
   });
 }
 
-function buildNavigationTabs(): Array<{ id: DashboardTab; label: string }> {
-  return [
+function buildNavigationTabs(isAdmin: boolean): Array<{ id: DashboardTab; label: string }> {
+  // Data Catalogue is admin-only — exposes raw token batches, dataset
+  // selection, and runtime internals that read as "infrastructure
+  // noise" to a paying merchant. Customers see Overview / Approval /
+  // Agents / Settings only.
+  const tabs: Array<{ id: DashboardTab; label: string }> = [
     { id: "overview", label: "Overview" },
-    { id: "catalogue", label: "Data Catalogue" },
     { id: "approval", label: "Approval" },
     { id: "agents", label: "Agents" },
     { id: "settings", label: "Settings" }
   ];
+  if (isAdmin) {
+    tabs.splice(1, 0, { id: "catalogue", label: "Data Catalogue" });
+  }
+  return tabs;
 }
 
 function completeMissionTasks(tasks: MissionTask[]) {
@@ -306,7 +319,7 @@ function buildExportPayload(payload: object, fileName: string) {
   window.URL.revokeObjectURL(url);
 }
 
-export function AgentDashboard({ agents }: AgentDashboardProps) {
+export function AgentDashboard({ agents, isAdmin = true }: AgentDashboardProps) {
   const [activeTab, setActiveTab] = useState<DashboardTab>("agents");
   const [selectedWorkflowId, setSelectedWorkflowId] = useState(DEFAULT_TEMPLATE_ID);
   const [workflowStages, setWorkflowStages] = useState<AutomationStage[]>(() =>
@@ -957,71 +970,99 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
         </div>
       </section>
 
-      <section className="archive-shell">
-        <div className="status-header">
-          <div>
-            <span className="eyebrow">Automation Snapshot</span>
-            <h2 className="section-title">Selected data coverage and runtime context</h2>
+      {/*
+        CEREBRO heartbeat — replaces the old "Automation Snapshot" block
+        that exposed token batches, dataset selection, and ZENDROP-key
+        startup warnings. Those were internal infrastructure noise and
+        read as "rebranded LLM wrapper" to a paying merchant. The
+        heartbeat surfaces real-time evidence the brain is being fed +
+        service health, which is the premium-feel anchor.
+
+        Founder-facing internals (token load, dataset coverage, runtime
+        metrics) are still available below, collapsed by default. Phase
+        4 of the UX overhaul will gate these behind isAdmin entirely.
+      */}
+      <CerebroHeartbeat />
+
+      {isAdmin ? (
+      <details className="archive-shell" style={{ marginTop: 16 }}>
+        <summary
+          style={{
+            cursor: "pointer",
+            listStyle: "none",
+            padding: "12px 16px",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(166, 120, 67, 0.15)",
+            borderRadius: 8,
+            fontSize: 12,
+            letterSpacing: "0.14em",
+            color: "rgba(245, 241, 232, 0.6)",
+            fontWeight: 600,
+            textTransform: "uppercase"
+          }}
+        >
+          ▸ Internal: dataset coverage + runtime metrics
+        </summary>
+        <div style={{ marginTop: 12 }}>
+          {startupCheck?.errors.length ? (
+            <div className="dataset-error-shell">
+              <p className="detail-body">Fatal startup checks: {startupCheck.errors.join(" | ")}</p>
+              <p className="detail-body">Action: Add the missing server keys or restore the full eight-agent runtime before running the workflow.</p>
+            </div>
+          ) : null}
+
+          <div className="hero-stats dashboard-stats-wide">
+            <div className="stat-card">
+              <span className="stat-label">Selected Datasets</span>
+              <span className="stat-value">{selectedDatasetKeys.length}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Token Load</span>
+              <span className="stat-value">{Math.round(selectedTokenLoad / 1000)}k</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Queued Jobs</span>
+              <span className="stat-value">{queuedJobCount}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Draft Builds</span>
+              <span className="stat-value">{buildQueue.length}</span>
+            </div>
+          </div>
+
+          <div className="report-section-grid">
+            <section className="detail-card">
+              <h3>Runtime Status</h3>
+              <p className="detail-body">{runtimeStatus || "No workflow has run yet."}</p>
+              {runtimeError ? <p className="detail-body">Issue: {runtimeError}</p> : null}
+              <p className="detail-body">Workflow: {selectedWorkflow.name}</p>
+              <p className="detail-body">Chain: {workflowStages.join(" -> ")}</p>
+              <p className="detail-body">Confidence threshold: {confidenceThreshold}%</p>
+              <p className="detail-body">
+                Token load: {selectedTokenLoad.toLocaleString()} / {maxTokensPerMinute.toLocaleString()} across about {estimatedBatchCount} batch{estimatedBatchCount === 1 ? "" : "es"}
+              </p>
+            </section>
+            <section className="detail-card">
+              <h3>Personalized Highlights</h3>
+              <p className="detail-body">
+                Favorite datasets: {favoriteDatasets.length > 0 ? favoriteDatasets.map((dataset) => dataset.title).join(", ") : "No usage history yet."}
+              </p>
+              <p className="detail-body">
+                Favorite workflows: {favoriteWorkflows.length > 0 ? favoriteWorkflows.map((workflow) => workflow.name).join(", ") : "No usage history yet."}
+              </p>
+              <p className="detail-body">
+                Metrics: {workflowMetrics ? `${workflowMetrics.accuracyProxy}% accuracy proxy and ${workflowMetrics.conversionReadiness}% conversion readiness.` : "Run the testing harness to populate workflow metrics."}
+              </p>
+              <p className="detail-body">
+                Revenue range: {workflowMetrics ? `$${Math.round(workflowMetrics.revenueEstimateLow / 1000)}k-$${Math.round(workflowMetrics.revenueEstimateHigh / 1000)}k` : "$0k-$0k"}
+              </p>
+              {startupCheck?.errors.length ? <p className="detail-body warning-copy">Startup errors: {startupCheck.errors.join(" | ")}</p> : null}
+              {startupCheck?.warnings.length ? <p className="detail-body warning-copy">Startup warnings: {startupCheck.warnings.join(" | ")}</p> : null}
+            </section>
           </div>
         </div>
-
-        {startupCheck?.errors.length ? (
-          <div className="dataset-error-shell">
-            <p className="detail-body">Fatal startup checks: {startupCheck.errors.join(" | ")}</p>
-            <p className="detail-body">Action: Add the missing server keys or restore the full eight-agent runtime before running the workflow.</p>
-          </div>
-        ) : null}
-
-        <div className="hero-stats dashboard-stats-wide">
-          <div className="stat-card">
-            <span className="stat-label">Selected Datasets</span>
-            <span className="stat-value">{selectedDatasetKeys.length}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">Token Load</span>
-            <span className="stat-value">{Math.round(selectedTokenLoad / 1000)}k</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">Queued Jobs</span>
-            <span className="stat-value">{queuedJobCount}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">Draft Builds</span>
-            <span className="stat-value">{buildQueue.length}</span>
-          </div>
-        </div>
-
-        <div className="report-section-grid">
-          <section className="detail-card">
-            <h3>Runtime Status</h3>
-            <p className="detail-body">{runtimeStatus || "No workflow has run yet."}</p>
-            {runtimeError ? <p className="detail-body">Issue: {runtimeError}</p> : null}
-            <p className="detail-body">Workflow: {selectedWorkflow.name}</p>
-            <p className="detail-body">Chain: {workflowStages.join(" -> ")}</p>
-            <p className="detail-body">Confidence threshold: {confidenceThreshold}%</p>
-            <p className="detail-body">
-              Token load: {selectedTokenLoad.toLocaleString()} / {maxTokensPerMinute.toLocaleString()} across about {estimatedBatchCount} batch{estimatedBatchCount === 1 ? "" : "es"}
-            </p>
-          </section>
-          <section className="detail-card">
-            <h3>Personalized Highlights</h3>
-            <p className="detail-body">
-              Favorite datasets: {favoriteDatasets.length > 0 ? favoriteDatasets.map((dataset) => dataset.title).join(", ") : "No usage history yet."}
-            </p>
-            <p className="detail-body">
-              Favorite workflows: {favoriteWorkflows.length > 0 ? favoriteWorkflows.map((workflow) => workflow.name).join(", ") : "No usage history yet."}
-            </p>
-            <p className="detail-body">
-              Metrics: {workflowMetrics ? `${workflowMetrics.accuracyProxy}% accuracy proxy and ${workflowMetrics.conversionReadiness}% conversion readiness.` : "Run the testing harness to populate workflow metrics."}
-            </p>
-            <p className="detail-body">
-              Revenue range: {workflowMetrics ? `$${Math.round(workflowMetrics.revenueEstimateLow / 1000)}k-$${Math.round(workflowMetrics.revenueEstimateHigh / 1000)}k` : "$0k-$0k"}
-            </p>
-            {startupCheck?.errors.length ? <p className="detail-body warning-copy">Startup errors: {startupCheck.errors.join(" | ")}</p> : null}
-            {startupCheck?.warnings.length ? <p className="detail-body warning-copy">Startup warnings: {startupCheck.warnings.join(" | ")}</p> : null}
-          </section>
-        </div>
-      </section>
+      </details>
+      ) : null}
 
       <details className="archive-shell advanced-shell" open>
         <summary className="archive-summary">
@@ -1146,13 +1187,28 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
       <section className="archive-shell">
         <div className="status-header">
           <div>
-            <span className="eyebrow">Agents</span>
+            <span className="eyebrow">Agents · Habitats</span>
             <h2 className="section-title">Autonomous agent roster and latest runtime summaries</h2>
           </div>
         </div>
-        <div className="dashboard-grid" aria-label="Agent dashboard">
+        {/*
+          Sparser 2-3 across habitat grid (vs. the AgentCard 4-across
+          tile grid in AgentHero). Each habitat is a full cyberpunk room
+          with the agent's synapse running behind a readable foreground
+          plate. The "alive ecosystem" feel — each agent is a habitat,
+          not a cramped tile.
+        */}
+        <div
+          aria-label="Agent dashboard"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+            gap: 20,
+            marginTop: 4
+          }}
+        >
           {liveAgents.map((agent) => (
-            <AgentCard key={agent.id} agent={agent} onClick={() => setSelectedAgentId(agent.id)} />
+            <AgentHabitat key={agent.id} agent={agent} onClick={() => setSelectedAgentId(agent.id)} />
           ))}
         </div>
       </section>
@@ -1301,7 +1357,7 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
   return (
     <div>
       <nav className="tab-nav" aria-label="Dashboard sections">
-        {buildNavigationTabs().map((tab) => (
+        {buildNavigationTabs(isAdmin).map((tab) => (
           <button
             key={tab.id}
             type="button"
@@ -1313,7 +1369,15 @@ export function AgentDashboard({ agents }: AgentDashboardProps) {
         ))}
       </nav>
 
-      {tabContentMap[activeTab]}
+      {/*
+        Fall back to overview when a non-admin somehow lands on a
+        gated tab (e.g. activeTab persisted from a prior admin session,
+        or someone hand-edits state). Without this guard, an admin tab
+        could render to a customer when isAdmin flips false.
+      */}
+      {!isAdmin && activeTab === "catalogue"
+        ? tabContentMap.overview
+        : tabContentMap[activeTab]}
 
       {selectedAgent ? <AgentDetailModal agent={selectedAgent} onClose={() => setSelectedAgentId(null)} /> : null}
     </div>
