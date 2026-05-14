@@ -304,7 +304,7 @@ const agentDefaults: Agent[] = [
   },
   {
     id: "memory-08",
-    name: "Umbrella Core",
+    name: "Core Runtime",
     role: "Runtime Monitor Agent",
     avatar: "/agents/Umbrealla Core/message-1.png",
     background: "/backgrounds/umbrella-core-room.png",

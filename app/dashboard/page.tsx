@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers, cookies } from "next/headers";
 import { OperatorPanel } from "@/components/operator/OperatorPanel";
 import "../operator.css";
 import { DashboardBodyClass } from "./body-class";
@@ -6,11 +7,33 @@ import { DashboardBodyClass } from "./body-class";
 // The Operator dashboard — light SaaS theme.
 // DashboardBodyClass toggles `body.has-dashboard-light` on mount, which
 // operator.css uses to override globals.css's dark UmbrellaBackground.
-// Admin routes (/pipeline, /content-studio) keep the dark globals.
+//
+// Admin nav links (/pipeline, /content-studio, /admin/incidents) are
+// only rendered when an admin cookie is present. Paying tenants never
+// see those routes — they belong to the founder's private cockpit.
 
 export const dynamic = "force-dynamic";
 
-export default function DashboardPage() {
+async function isAdmin(): Promise<boolean> {
+  const expected = process.env.OPERATOR_AUTH_SECRET?.trim();
+  if (!expected) {
+    // Local dev with no secret set — founder is always admin
+    return !process.env.VERCEL;
+  }
+  const cookieStore = await cookies();
+  const cookieVal = cookieStore.get("x-operator-auth")?.value?.trim();
+  if (cookieVal === expected) return true;
+  // Also accept Authorization header for API-like access via curl etc
+  const h = await headers();
+  const auth = h.get("authorization") ?? "";
+  const bearer = auth.toLowerCase().startsWith("bearer ")
+    ? auth.slice("bearer ".length).trim()
+    : "";
+  return bearer === expected;
+}
+
+export default async function DashboardPage() {
+  const admin = await isAdmin();
   const navLink: React.CSSProperties = {
     color: "#555",
     textDecoration: "none",
@@ -56,9 +79,18 @@ export default function DashboardPage() {
             <span style={{ fontSize: 11, color: "#888", marginLeft: 2 }}>by Black Vault</span>
           </Link>
           <div style={{ display: "flex", gap: 8 }}>
-            <Link href="/launch" style={navLink}>Launch readiness →</Link>
-            <Link href="/content-studio" style={navLink}>Content studio →</Link>
-            <Link href="/pipeline" style={navLink}>View pipeline →</Link>
+            {admin ? (
+              <>
+                <Link href="/launch" style={navLink}>Launch readiness →</Link>
+                <Link href="/content-studio" style={navLink}>Content studio →</Link>
+                <Link href="/pipeline" style={navLink}>View pipeline →</Link>
+                <Link href="/admin/incidents" style={navLink}>Incidents →</Link>
+              </>
+            ) : (
+              <span style={{ fontSize: 12, color: "#888" }}>
+                Tenant view — admin tools hidden
+              </span>
+            )}
           </div>
         </nav>
         <header className="operator-header">

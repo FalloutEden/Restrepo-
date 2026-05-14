@@ -2,6 +2,50 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Agent } from "@/lib/mock-agents";
+import { CerebroSynapseVisual, type CerebroSynapseStatus } from "@/components/CerebroSynapseVisual";
+
+// Feature flag: when true, the entire AgentVisual renders as a CEREBRO
+// synapse animation instead of character sprites + room backgrounds.
+// Originally the visuals shipped Resident Evil character sprites which were
+// Capcom-trademarked — that's now scrubbed from any surface a tenant could
+// reach. Setting this to false would re-enable the legacy sprite renderer
+// (kept around for the founder's personal-instance Easter egg if desired).
+const USE_CEREBRO_SYNAPSE = true;
+
+// Map a role string to a synapse accent color. Stable across renders so
+// the same agent always glows the same hue.
+function accentColorForAgent(agent: { role?: string; name?: string }): string {
+  const role = (agent.role ?? agent.name ?? "").toLowerCase();
+  if (/research|recon|trend|long-tail|vocab|meta/.test(role)) return "#5B8CFF"; // blue — discovery
+  if (/design|direction/.test(role)) return "#A67843"; // BV gold — craft
+  if (/build|product|mutation/.test(role)) return "#6EDC96"; // mint — production
+  if (/validation|guard|review|approval/.test(role)) return "#F0B34B"; // amber — gating
+  if (/runtime|monitor|core/.test(role)) return "#D6A2FF"; // violet — meta
+  if (/router|opportunity|strategy/.test(role)) return "#7FD8FF"; // cyan — orchestration
+  return "#A67843"; // fallback BV gold
+}
+
+// Translate the legacy agent.status enum into the synapse status type
+function toSynapseStatus(s: Agent["status"]): CerebroSynapseStatus {
+  switch (s) {
+    case "Running":
+      return "running";
+    case "Retrying":
+      return "retrying";
+    case "Idle":
+      return "idle";
+    case "Completed":
+      return "completed";
+    case "Blocked":
+      return "blocked";
+    case "Failed":
+      return "failed";
+    case "Error":
+      return "error";
+    default:
+      return "idle";
+  }
+}
 
 type AgentVisualProps = {
   agent: Pick<Agent, "name" | "avatar" | "background" | "avatarFrames" | "blinkFrames" | "blinkAnimations" | "frameRate" | "loop" | "status" | "blinkIntervalMs" | "flashOnFrames">;
@@ -217,6 +261,24 @@ export function AgentVisual({ agent, variant }: AgentVisualProps) {
     variant === "card" ? "agent-visual-sprite-card" : "agent-visual-sprite-modal",
   ].join(" ");
 
+  // CEREBRO synapse mode — the customer-facing visual. Replaces the legacy
+  // Resident Evil character sprites (Capcom IP, removed from public surfaces).
+  if (USE_CEREBRO_SYNAPSE) {
+    const synapseAgent = agent as unknown as { role?: string; name?: string; id?: string };
+    return (
+      <div ref={containerRef} className={rootClassName} aria-hidden="true">
+        <CerebroSynapseVisual
+          seed={synapseAgent.id ?? synapseAgent.name ?? "default"}
+          status={toSynapseStatus(agent.status)}
+          accentColor={accentColorForAgent(synapseAgent)}
+          variant={variant}
+        />
+      </div>
+    );
+  }
+
+  // Legacy sprite renderer — preserved for founder's personal-instance fork.
+  // Never reached when USE_CEREBRO_SYNAPSE is true.
   return (
     <div ref={containerRef} className={rootClassName} aria-hidden="true">
       <img ref={bgRef} className="agent-room-background" src={agent.background} alt="" />
