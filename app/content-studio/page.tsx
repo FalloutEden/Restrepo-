@@ -15,7 +15,7 @@ export default function ContentStudioPage() {
           fontSize: 13
         }}
       >
-        <Link href="/" style={{ color: "rgba(255, 255, 255, 0.6)", textDecoration: "none" }}>
+        <Link href="/dashboard" style={{ color: "rgba(255, 255, 255, 0.6)", textDecoration: "none" }}>
           ← Back to operator
         </Link>
       </nav>
