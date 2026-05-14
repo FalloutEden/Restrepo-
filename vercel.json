@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/spend-ceiling",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/cerebro-refresh",
+      "schedule": "30 8 * * *"
+    },
+    {
+      "path": "/api/cron/knowledge-gap-tracker",
+      "schedule": "0 9 * * *"
     }
   ]
 }

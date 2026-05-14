@@ -34,7 +34,10 @@ export type AuditAction =
   | "rate_limit.triggered"
   | "admin.action"
   | "stripe.webhook"
-  | "operator.tool_call";
+  | "operator.tool_call"
+  | "cron.run"
+  | "cron.skipped"
+  | "cron.failed";
 
 export type AuditEntry = {
   ts: string;
