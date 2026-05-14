@@ -81,11 +81,24 @@ export type SubscriptionStatus =
   | "paused";
 
 export type EncryptedSecrets = {
+  // Shopify
   shopifyAdminToken?: string;
   shopifyStoreDomain?: string;
+  shopifyWebhookSecret?: string;
+  // Printful
   printfulApiKey?: string;
   printfulStoreId?: string;
+  // Klaviyo
   klaviyoApiKey?: string;
+  // CJ Dropshipping
+  cjApiKey?: string;
+  cjEmail?: string;
+  // LLM provider keys — BYOK. When set, the tenant's spend flows through
+  // their own Anthropic/OpenAI billing account, not the founder's. When
+  // unset, requests from that tenant should error (not silently fall back
+  // to the founder's keys — that's a billing leak). See lib/tenant-context.ts.
+  anthropicApiKey?: string;
+  openaiApiKey?: string;
 };
 
 export type Tenant = {
