@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/industry-rss",
       "schedule": "15 9 * * *"
+    },
+    {
+      "path": "/api/cron/cerebro-deep-refresh",
+      "schedule": "0 10 * * 0"
     }
   ]
 }
