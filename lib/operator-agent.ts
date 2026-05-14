@@ -22,6 +22,12 @@ import {
   getToolByName,
   type OperatorToolContext
 } from "@/lib/operator-tools";
+import {
+  detectHallucinatedClaims,
+  summarizeHallucination,
+  type ToolCallTraceEntry
+} from "@/lib/operator-hallucination-guard";
+import { audit } from "@/lib/audit";
 
 // Operator chat brain. Runs a tool-use loop against Claude — system prompt is
 // rebuilt every turn from current operator state + memory + brand registry,
@@ -98,6 +104,37 @@ async function buildSystem(): Promise<{ staticPart: string; dynamicPart: string 
 
 ## Brands
 ${brandsBlock()}
+
+## CRITICAL: never claim an action you didn't actually take
+
+You can only narrate a side effect as completed if a tool call you just made returned successfully in this same response. If a tool errored, surface the error verbatim, explain in plain English what it means, and propose a next step — do NOT pretend the work happened anyway.
+
+This rule was added on 2026-05-14 after a cold-start pentest caught the operator narrating "File exported. Drop it into your Obsidian vault and run \`graphify .\` to ingest." inside the same response where both \`cerebro_query\` and \`search_cj_products\` had errored. There was no export tool. No file was written. That fabrication is the worst failure mode this agent can have — worse than any UX gap — because it destroys merchant trust faster than anything else.
+
+**Hard-banned phrasings (the operator has NO tool to back any of these — say them only as future intent, never past-tense):**
+- "File exported / saved / written / dropped / ingested" — there is no file-writing tool exposed to chat. \`propose_action\`, \`generate_policies\`, \`request_human_input\`, \`create_content_drop\` write structured records on disk; describe what those tools did, not "I exported a file."
+- "Ran graphify / ingested into CEREBRO / triggered the graph rebuild" — graphify runs on the founder's local machine via a post-commit hook. The operator never invokes it. \`record_note\` writes to operator memory; \`cerebro_query\` reads from CEREBRO. Neither updates the graph.
+- "Pushed to Vercel / deployed / shipped to production" — the operator has no deploy tool.
+- "Registered the domain / set up DNS" — human-only, no tool exists.
+- "Submitted Shopify Payments KYC / set up payments" — human-only, no tool exists.
+- "Sent the email" — the operator has no chat-facing email tool. Cron-side email digests are a different surface.
+
+**Tool-backed claims — legitimate ONLY if the matching tool succeeded in this turn:**
+- "Published the listing" → \`publish_listing\` or \`attach_all_to_online_store\` returned ok
+- "Deleted the draft" → \`delete_listing\` returned ok
+- "Created the draft / materialized the product" → \`materialize_product\` returned ok
+- "Saved a note" → \`record_note\` returned ok
+- "Submitted a proposal" → \`propose_action\` returned ok
+- "Registered the webhook / wired the store" → \`bootstrap_store\` returned ok
+- "Published the policies" → \`publish_policies\` or \`generate_policies\` or \`bootstrap_store\` returned ok
+
+**When a tool errors:**
+1. Report the error verbatim (sanitized of secrets)
+2. Translate it: "this means X — the brain isn't reachable from Vercel because graphify is installed locally only"
+3. Tell the user what they CAN do next (or what tool you'll try)
+4. Do not pretend the work happened anyway, ever
+
+A post-hoc validator scans your final text against the tool transcript and audit-logs any unverified claim. Repeated hits get the response reviewed and the prompt tightened. Keep the validator quiet by following the rule.
 
 ## What you can do without asking
 - Create and manage Shopify drafts (drafts are not customer-facing — fully reversible).
@@ -473,6 +510,34 @@ async function runOperatorInner(options: AgentRunOptions): Promise<{ finalText: 
     );
 
     messages.push({ role: "user", content: toolResults });
+  }
+
+  // Hallucination guard — scan final text for action-completed phrases that
+  // the tool transcript can't justify. Layer-2 defense behind the system
+  // prompt rules above. Logs an audit entry + surfaces a warning event; does
+  // NOT rewrite the text. See lib/operator-hallucination-guard.ts and the
+  // 2026-05-14 pentest dossier at .openclaw/research/operator-gaps-2026-05-14.md.
+  if (finalText) {
+    const claims = detectHallucinatedClaims(finalText, toolCallTrace as ToolCallTraceEntry[]);
+    if (claims.length > 0) {
+      audit({
+        action: "operator.hallucination_suspected",
+        actor: "operator-validator",
+        target: conversationId,
+        detail: {
+          source,
+          claimCount: claims.length,
+          claims,
+          finalTextPreview: finalText.slice(0, 600),
+          toolsRan: toolCallTrace.map((t) => t.name)
+        },
+        ok: false
+      });
+      onEvent?.({
+        kind: "error",
+        message: `Hallucination guard flagged ${claims.length} unverified claim(s): ${summarizeHallucination(claims).slice(0, 240)}`
+      });
+    }
   }
 
   // Persist the assistant turn (text + tool trace) so the next conversation

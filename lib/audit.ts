@@ -35,6 +35,7 @@ export type AuditAction =
   | "admin.action"
   | "stripe.webhook"
   | "operator.tool_call"
+  | "operator.hallucination_suspected"
   | "cron.run"
   | "cron.skipped"
   | "cron.failed";
