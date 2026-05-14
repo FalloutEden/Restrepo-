@@ -6,17 +6,19 @@ import { isAuthorizedCron } from "@/lib/cron-auth";
 import { listTenants, updateTenant } from "@/lib/tenancy";
 import { sendEmail } from "@/lib/email";
 import { audit } from "@/lib/audit";
+import { buildTenantPaths } from "@/lib/tenant-context";
 
 // Spend ceiling enforcer — runs hourly via Vercel scheduler.
 //
-// For each tenant: sum their API spend for the current month from the
-// shared spend tracker, compare against their config.spendBudgetUsdMonthly.
+// For each tenant: sum their API spend for the current month from their
+// per-tenant spend log, compare against their config.spendBudgetUsdMonthly.
 // If exceeded: set config.operatorEnabled = false AND email the tenant.
 //
-// We read from the same .openclaw/operator/spend.jsonl that lib/spend-tracker
-// writes. Tenant attribution comes from the entry's `tenantId` field (added
-// by the per-tenant operator-tools wrappers in Phase 4 — for now, untagged
-// entries are treated as admin/global and don't count against any tenant).
+// After the 2026-05-14 BYOK migration, each tenant's spend lives at
+//   .openclaw/tenants/<tenantId>/operator/spend.jsonl
+// (or /tmp/openclaw/tenants/<tenantId>/operator/spend.jsonl on Vercel).
+// The founder's spend stays at the legacy .openclaw/operator/spend.jsonl
+// path but doesn't trigger a cap — the founder has no monthly tenant cap.
 //
 // Failure mode: if a tenant's email is missing, we still pause them but
 // log a warning. They'll figure it out when they try to use the operator.
@@ -35,30 +37,25 @@ function thisMonthStart(): number {
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
 }
 
-function readSpend(): Map<string, number> {
-  // Where spend log lives — same path as lib/spend-tracker.ts uses
-  const spendPath = (() => {
-    const onVercel = Boolean(process.env.VERCEL);
-    const base = onVercel ? "/tmp/openclaw" : path.join(process.cwd(), ".openclaw");
-    return path.join(base, "operator", "spend.jsonl");
-  })();
-
-  const byTenant = new Map<string, number>();
-  if (!fs.existsSync(spendPath)) return byTenant;
+/** Read one tenant's monthly spend from their per-tenant spend log.
+ *  Returns 0 if no log exists yet (new tenant, never billed). */
+function readTenantMonthlySpend(tenantId: string): number {
+  const spendPath = buildTenantPaths(tenantId).spendLog;
+  if (!fs.existsSync(spendPath)) return 0;
 
   const cutoff = thisMonthStart();
+  let total = 0;
   const lines = fs.readFileSync(spendPath, "utf8").split("\n").filter(Boolean);
   for (const ln of lines) {
     try {
       const e = JSON.parse(ln) as SpendEntry;
-      if (!e.tenantId) continue;
       if (new Date(e.ts).getTime() < cutoff) continue;
       const cost = Number(e.costUsd ?? 0);
       if (cost <= 0) continue;
-      byTenant.set(e.tenantId, (byTenant.get(e.tenantId) ?? 0) + cost);
+      total += cost;
     } catch {}
   }
-  return byTenant;
+  return total;
 }
 
 export async function GET(req: Request) {
@@ -66,7 +63,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const spendByTenant = readSpend();
   const tenants = await listTenants();
 
   const summary: Array<{
@@ -78,7 +74,10 @@ export async function GET(req: Request) {
   }> = [];
 
   for (const t of tenants) {
-    const monthlyUsd = spendByTenant.get(t.id) ?? 0;
+    // Each tenant's spend lives in their own log file post-BYOK migration.
+    // Reading per-tenant means deleting a tenant's spend log doesn't break
+    // anyone else's enforcement, and the cap math is naturally isolated.
+    const monthlyUsd = readTenantMonthlySpend(t.id);
     const capUsd = Number(t.config.spendBudgetUsdMonthly ?? 0);
     if (capUsd <= 0) {
       summary.push({ tenantId: t.id, brandSlug: t.brandSlug, monthlyUsd, capUsd: 0, action: "ok" });

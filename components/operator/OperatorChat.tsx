@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { labelForTool } from "@/lib/operator-tool-labels";
+
 type Bubble =
   | { kind: "user"; text: string }
   | { kind: "assistant"; text: string }
@@ -73,17 +75,20 @@ export function OperatorChat({ onTurnComplete }: Props) {
             setConversationId(event.id);
             window.localStorage.setItem(STORAGE_KEY, event.id);
           } else if (event.kind === "tool_call" && typeof event.name === "string") {
-            setBubbles((prev) => [
-              ...prev,
-              { kind: "tool", text: `→ ${String(event.name)}(${JSON.stringify(event.input)})` }
-            ]);
+            // Use human-readable labels — never leak raw tool names or param
+            // JSON to the merchant. (Gap 5 of the 2026-05-14 launch-gate dossier.)
+            const label = labelForTool(String(event.name));
+            setBubbles((prev) => [...prev, { kind: "tool", text: `→ ${label.active}…` }]);
           } else if (event.kind === "tool_result" && typeof event.name === "string") {
+            const label = labelForTool(String(event.name));
+            const preview = String(event.resultPreview ?? "");
+            // Surface errors verbatim so the merchant sees what went wrong.
+            // On success, just say "done" — the result preview can leak
+            // internal ids that mean nothing to a non-developer.
+            const isError = preview.toLowerCase().includes("error") || preview.toLowerCase().includes("gated:");
             setBubbles((prev) => [
               ...prev,
-              {
-                kind: "tool",
-                text: `← ${String(event.name)}: ${String(event.resultPreview ?? "")}`
-              }
+              { kind: "tool", text: isError ? `✗ ${label.active}: ${preview}` : `✓ ${label.done}` }
             ]);
           } else if (event.kind === "text_done" && typeof event.text === "string") {
             setBubbles((prev) => [...prev, { kind: "assistant", text: String(event.text) }]);
