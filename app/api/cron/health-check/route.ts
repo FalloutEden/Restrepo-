@@ -44,7 +44,13 @@ async function ping(name: string, url: string, init?: RequestInit): Promise<Chec
       signal: AbortSignal.timeout(10_000),
       headers: { ...(init?.headers ?? {}), "User-Agent": "OperatorHealthMonitor/1.0" }
     });
-    return { name, url, ok: r.ok, status: r.status, ms: Date.now() - start };
+    // Reachability check: any 2xx/3xx/4xx response means the host is up. Only
+    // network errors / 5xx / timeouts indicate the dependency is down. Status
+    // pages sometimes return 302 (redirect to statuspage.io) or 404 (URL
+    // changed). Those aren't outages — they're just URL churn. Don't false-alarm
+    // the founder over them.
+    const ok = r.status > 0 && r.status < 500;
+    return { name, url, ok, status: r.status, ms: Date.now() - start };
   } catch (e) {
     return {
       name,
@@ -70,11 +76,14 @@ export async function GET(req: Request) {
 
   const base = selfBaseUrl(req);
 
+  // Status-page URLs are the roots, not /api/v2/status.json — those JSON
+  // endpoints were Statuspage.io's old convention and Stripe + Anthropic
+  // both retired theirs. The roots are stable.
   const checks = await Promise.all([
     ping("self", `${base}/api/health`),
-    ping("stripe", "https://status.stripe.com/api/v2/status.json"),
-    ping("shopify", "https://www.shopifystatus.com/api/v2/status.json"),
-    ping("anthropic", "https://status.anthropic.com/api/v2/status.json")
+    ping("stripe", "https://status.stripe.com"),
+    ping("shopify", "https://www.shopifystatus.com"),
+    ping("anthropic", "https://status.anthropic.com")
   ]);
 
   const failed = checks.filter((c) => !c.ok);

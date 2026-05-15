@@ -16,11 +16,16 @@ import { DashboardBodyClass } from "./body-class";
 export const dynamic = "force-dynamic";
 
 async function isAdmin(): Promise<boolean> {
+  // Local dev is always the founder. `.env.local` is often pulled from Vercel
+  // (so OPERATOR_AUTH_SECRET AND VERCEL=1 end up set locally), but localhost
+  // is your box — it shouldn't gate you behind a cookie login dance. We rely
+  // on NODE_ENV here because Next.js sets it to "development" only inside
+  // `next dev`; .env.local can't override that the way it can override VERCEL.
+  if (process.env.NODE_ENV === "development") return true;
+
   const expected = process.env.OPERATOR_AUTH_SECRET?.trim();
-  if (!expected) {
-    // Local dev with no secret set — founder is always admin
-    return !process.env.VERCEL;
-  }
+  if (!expected) return false;
+
   const cookieStore = await cookies();
   const cookieVal = cookieStore.get("x-operator-auth")?.value?.trim();
   if (cookieVal === expected) return true;

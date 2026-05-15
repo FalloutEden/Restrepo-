@@ -35,19 +35,23 @@ export function middleware(request: NextRequest) {
   }
 
   const expected = process.env.OPERATOR_AUTH_SECRET?.trim();
-  const onVercel = Boolean(process.env.VERCEL);
+
+  // Local dev is always permissive — localhost is the founder's box.
+  // `.env.local` often has OPERATOR_AUTH_SECRET AND VERCEL=1 pulled from prod,
+  // so `!onVercel` isn't reliable. NODE_ENV === "development" only fires in
+  // `next dev` and .env.local can't override Next.js's runtime value, so use
+  // that as the local-dev detector instead. (Tenant bearer btk_ still works
+  // locally if you want to test the tenant path.)
+  if (process.env.NODE_ENV === "development") return NextResponse.next();
 
   if (!expected) {
-    if (onVercel) {
-      return NextResponse.json(
-        {
-          error:
-            "Operator API disabled. Set OPERATOR_AUTH_SECRET in Vercel project env (use `openssl rand -hex 32`) to enable."
-        },
-        { status: 503 }
-      );
-    }
-    return NextResponse.next();
+    return NextResponse.json(
+      {
+        error:
+          "Operator API disabled. Set OPERATOR_AUTH_SECRET in Vercel project env (use `openssl rand -hex 32`) to enable."
+      },
+      { status: 503 }
+    );
   }
 
   const header = request.headers.get("authorization") ?? "";
