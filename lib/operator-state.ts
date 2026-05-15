@@ -2,6 +2,7 @@ import "server-only";
 
 import { mkdir, readFile, writeFile, readdir, appendFile, access } from "node:fs/promises";
 import path from "node:path";
+import { sql } from "@vercel/postgres";
 
 import { buildTenantPaths, FOUNDER_TENANT_ID, type TenantPaths } from "@/lib/tenant-context";
 import { getTenant } from "@/lib/tenancy";
@@ -460,9 +461,18 @@ export async function resolveHumanTask(
 }
 
 // ── Activity log ──────────────────────────────────────────────────────────
-// One JSONL stream of every meaningful operator event so the dashboard can
-// render a unified timeline (chat turns, autonomous decisions, tool calls,
-// proposal outcomes).
+// One stream of every meaningful operator event so the dashboard can render a
+// unified timeline (chat turns, autonomous decisions, tool calls, proposal
+// outcomes).
+//
+// Storage:
+//   - PRODUCTION (Vercel + POSTGRES_URL set): rows in `activity_log` table.
+//     This is the only durable surface — /tmp on Vercel is instance-scoped
+//     and ephemeral, so file-based activity was invisible to the dashboard
+//     whenever cron writes and dashboard polls landed on different
+//     serverless instances (which is most of the time).
+//   - LOCAL DEV + TESTS (no POSTGRES_URL): JSONL append to the tenant's
+//     activity file. Same public API, same data shape.
 
 export type ActivityKind =
   | "chat_user"
@@ -485,13 +495,88 @@ export type ActivityEntry = {
   data?: Record<string, unknown>;
 };
 
+function usingPostgresForActivity(): boolean {
+  return Boolean(process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING);
+}
+
+let activityMigrated = false;
+
+async function pgMigrateActivity(): Promise<void> {
+  if (activityMigrated) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id BIGSERIAL PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      timestamp TIMESTAMPTZ NOT NULL,
+      kind TEXT NOT NULL,
+      message TEXT NOT NULL,
+      data JSONB
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_activity_tenant_ts ON activity_log(tenant_id, timestamp DESC)`;
+  activityMigrated = true;
+}
+
+async function pgLogActivity(tenantId: string, entry: ActivityEntry): Promise<void> {
+  await pgMigrateActivity();
+  const payload = entry.data ? JSON.stringify(entry.data) : null;
+  if (payload === null) {
+    await sql`
+      INSERT INTO activity_log (tenant_id, timestamp, kind, message)
+      VALUES (${tenantId}, ${entry.timestamp}, ${entry.kind}, ${entry.message})
+    `;
+  } else {
+    await sql`
+      INSERT INTO activity_log (tenant_id, timestamp, kind, message, data)
+      VALUES (${tenantId}, ${entry.timestamp}, ${entry.kind}, ${entry.message}, ${payload}::jsonb)
+    `;
+  }
+}
+
+async function pgReadActivity(tenantId: string, limit: number): Promise<ActivityEntry[]> {
+  await pgMigrateActivity();
+  const r = await sql<{
+    timestamp: string;
+    kind: string;
+    message: string;
+    data: Record<string, unknown> | null;
+  }>`
+    SELECT
+      to_char(timestamp AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS timestamp,
+      kind,
+      message,
+      data
+    FROM activity_log
+    WHERE tenant_id = ${tenantId}
+    ORDER BY timestamp DESC
+    LIMIT ${limit}
+  `;
+  return r.rows.map((row) => ({
+    timestamp: row.timestamp,
+    kind: row.kind as ActivityKind,
+    message: row.message,
+    ...(row.data ? { data: row.data } : {})
+  }));
+}
+
 export async function logActivity(
   entry: Omit<ActivityEntry, "timestamp">,
   tenantId: string = FOUNDER_TENANT_ID
 ): Promise<void> {
+  const full: ActivityEntry = { ...entry, timestamp: new Date().toISOString() };
+  if (usingPostgresForActivity()) {
+    try {
+      await pgLogActivity(tenantId, full);
+      return;
+    } catch (err) {
+      // If Postgres is misconfigured we still want the operator turn to
+      // succeed — activity is observability, not correctness. Fall through
+      // to file write so something is captured.
+      console.warn("[operator-state] pg activity write failed, falling back to file:", err);
+    }
+  }
   const paths = pathsFor(tenantId);
   await ensureDirs(paths);
-  const full: ActivityEntry = { ...entry, timestamp: new Date().toISOString() };
   await appendFile(paths.activityLog, `${JSON.stringify(full)}\n`, "utf8");
 }
 
@@ -499,6 +584,15 @@ export async function readActivity(
   limit = 100,
   tenantId: string = FOUNDER_TENANT_ID
 ): Promise<ActivityEntry[]> {
+  if (usingPostgresForActivity()) {
+    try {
+      return await pgReadActivity(tenantId, limit);
+    } catch (err) {
+      console.warn("[operator-state] pg activity read failed, falling back to file:", err);
+      // Fall through to file read so a degraded heartbeat still shows
+      // something rather than going dark.
+    }
+  }
   const paths = pathsFor(tenantId);
   await ensureDirs(paths);
   if (!(await fileExists(paths.activityLog))) return [];

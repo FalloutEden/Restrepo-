@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { readActivity as readActivityFromStore } from "@/lib/operator-state";
+import { FOUNDER_TENANT_ID } from "@/lib/tenant-context";
+
 // /api/cerebro/heartbeat — the live signal behind the dashboard's
 // CEREBRO heartbeat panel.
 //
@@ -64,15 +67,17 @@ type HeartbeatResponse = {
   services: ServiceProbe[];
 };
 
-// Path resolution mirrors the rest of the codebase (lib/tenancy.ts,
-// webhook routes, lib/audit.ts): on Vercel the writable surface is /tmp,
-// locally everything lives under ./.openclaw. The graph report is a
+// Path resolution mirrors the rest of the codebase. The graph report is a
 // build artifact shipped with the deploy — same path either way.
+//
+// Activity log is NOT read from disk here — it comes through
+// readActivityFromStore() which uses Postgres in production. The previous
+// /tmp-based read was instance-scoped on Vercel: cron writes landed on one
+// serverless instance, dashboard polls on another, so the panel was almost
+// always empty in production. The Postgres path is durable + shared across
+// every instance.
 const onVercel = Boolean(process.env.VERCEL);
 const GRAPH_REPORT_PATH = path.join(process.cwd(), "graphify-out", "GRAPH_REPORT.md");
-const ACTIVITY_LOG_PATH = onVercel
-  ? path.join("/tmp", "openclaw", "operator", "activity.jsonl")
-  : path.join(process.cwd(), ".openclaw", "operator", "activity.jsonl");
 
 async function readGraphState(): Promise<GraphState> {
   const deployCommit = onVercel ? (process.env.VERCEL_GIT_COMMIT_SHA?.trim() ?? null) : null;
@@ -129,26 +134,16 @@ async function readGraphState(): Promise<GraphState> {
 
 async function readActivity(limit = 25): Promise<ActivityEntry[]> {
   try {
-    const raw = await fs.readFile(ACTIVITY_LOG_PATH, "utf8");
-    const lines = raw.trim().split("\n").filter(Boolean);
-    const recent = lines.slice(-limit);
-    const out: ActivityEntry[] = [];
-    for (const line of recent) {
-      try {
-        const parsed = JSON.parse(line) as { kind?: string; message?: string; timestamp?: string };
-        if (!parsed.timestamp) continue;
-        const message = (parsed.message ?? "").toString();
-        out.push({
-          kind: (parsed.kind ?? "event").toString(),
-          // Truncate long messages so a 4KB chat dump doesn't dominate the panel
-          message: message.length > 240 ? message.slice(0, 237) + "..." : message,
-          timestamp: parsed.timestamp
-        });
-      } catch {
-        // Skip malformed line — activity log is best-effort
-      }
-    }
-    return out.reverse(); // newest first
+    // Founder tenant is the dashboard heartbeat's scope. Per-tenant activity
+    // (when multi-tenant SaaS goes live) belongs on a separate per-tenant
+    // probe — this endpoint is shared infra and has no auth.
+    const entries = await readActivityFromStore(limit, FOUNDER_TENANT_ID);
+    return entries.map((e) => ({
+      kind: e.kind,
+      // Truncate long messages so a 4KB chat dump doesn't dominate the panel
+      message: e.message.length > 240 ? e.message.slice(0, 237) + "..." : e.message,
+      timestamp: e.timestamp
+    }));
   } catch {
     return [];
   }
