@@ -147,18 +147,21 @@ function timestampLabel(date: Date) {
 }
 
 function buildNavigationTabs(isAdmin: boolean): Array<{ id: DashboardTab; label: string }> {
-  // Data Catalogue is admin-only — exposes raw token batches, dataset
-  // selection, and runtime internals that read as "infrastructure
-  // noise" to a paying merchant. Customers see Overview / Approval /
-  // Agents / Settings only.
+  // Customer-facing order: Overview (mission summary) → Agents (alive
+  // habitat grid) → Approval (drafts to review) → Settings.
+  //
+  // Data Catalogue is admin-only AND pushed to the last position —
+  // it's founder-internal noise (token batches, dataset selection,
+  // runtime warnings). Even on the admin surface we don't want it
+  // grabbing the eye like it used to in slot 2.
   const tabs: Array<{ id: DashboardTab; label: string }> = [
     { id: "overview", label: "Overview" },
-    { id: "approval", label: "Approval" },
     { id: "agents", label: "Agents" },
+    { id: "approval", label: "Approval" },
     { id: "settings", label: "Settings" }
   ];
   if (isAdmin) {
-    tabs.splice(1, 0, { id: "catalogue", label: "Data Catalogue" });
+    tabs.push({ id: "catalogue", label: "Data Catalogue" });
   }
   return tabs;
 }
@@ -320,7 +323,11 @@ function buildExportPayload(payload: object, fileName: string) {
 }
 
 export function AgentDashboard({ agents, isAdmin = true }: AgentDashboardProps) {
-  const [activeTab, setActiveTab] = useState<DashboardTab>("agents");
+  // Default landing tab is "overview" so the user lands on the brain
+  // panel context. With the CEREBRO heartbeat now persistent above the
+  // tab nav, the Overview tab can be the merchant-friendly summary
+  // and the Agents tab is one click away.
+  const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [selectedWorkflowId, setSelectedWorkflowId] = useState(DEFAULT_TEMPLATE_ID);
   const [workflowStages, setWorkflowStages] = useState<AutomationStage[]>(() =>
     cloneWorkflowStages(getWorkflowTemplateById(DEFAULT_TEMPLATE_ID)?.stages ?? ["research", "validate", "design", "list"])
@@ -971,19 +978,13 @@ export function AgentDashboard({ agents, isAdmin = true }: AgentDashboardProps) 
       </section>
 
       {/*
-        CEREBRO heartbeat — replaces the old "Automation Snapshot" block
-        that exposed token batches, dataset selection, and ZENDROP-key
-        startup warnings. Those were internal infrastructure noise and
-        read as "rebranded LLM wrapper" to a paying merchant. The
-        heartbeat surfaces real-time evidence the brain is being fed +
-        service health, which is the premium-feel anchor.
-
         Founder-facing internals (token load, dataset coverage, runtime
-        metrics) are still available below, collapsed by default. Phase
-        4 of the UX overhaul will gate these behind isAdmin entirely.
+        metrics). Collapsed and admin-gated. The CEREBRO heartbeat that
+        used to live here is now rendered ABOVE the tab nav so it's
+        visible regardless of which tab the user is on — the brain
+        pulse is the persistent premium-feel anchor, not a
+        per-tab artifact.
       */}
-      <CerebroHeartbeat />
-
       {isAdmin ? (
       <details className="archive-shell" style={{ marginTop: 16 }}>
         <summary
@@ -1257,6 +1258,12 @@ export function AgentDashboard({ agents, isAdmin = true }: AgentDashboardProps) 
       </div>
 
       <div className="report-section-grid">
+        {/*
+          Customer-facing settings only — operating policy, not
+          infrastructure noise. Founder-internal (token load, dataset
+          counts, storage keys, training files, env-var validation)
+          moved into the admin <details> block below this grid.
+        */}
         <section className="detail-card">
           <h3>Runtime Policy</h3>
           <p className="detail-body">Channel scope: {selectedChannel}</p>
@@ -1265,83 +1272,91 @@ export function AgentDashboard({ agents, isAdmin = true }: AgentDashboardProps) 
           <p className="detail-body">Agent runtime: server-side Claude API (Anthropic)</p>
           <p className="detail-body">Automatic publishing: disabled</p>
           <p className="detail-body">Build threshold: {confidenceThreshold}% confidence</p>
-          <p className="detail-body">Selected datasets: {selectedDatasetKeys.length}</p>
-          <p className="detail-body">Token load: {selectedTokenLoad.toLocaleString()} / {maxTokensPerMinute.toLocaleString()}</p>
-          <p className="detail-body">Estimated batches: {estimatedBatchCount}</p>
-          {trainingDataSummary ? (
-            <p className="detail-body">
-              Local training data: {trainingDataSummary.loadedFileCount}/{trainingDataSummary.fileCount} files loaded, {trainingDataSummary.exampleCount} selected examples available
-            </p>
-          ) : null}
-          {startupCheck?.errors.length ? (
-            <p className="detail-body warning-copy">Startup errors: {startupCheck.errors.join(" | ")}</p>
-          ) : null}
-          {startupCheck?.warnings.length ? (
-            <p className="detail-body warning-copy">Startup warnings: {startupCheck.warnings.join(" | ")}</p>
+          {isAdmin ? (
+            <>
+              <p className="detail-body">Selected datasets: {selectedDatasetKeys.length}</p>
+              <p className="detail-body">Token load: {selectedTokenLoad.toLocaleString()} / {maxTokensPerMinute.toLocaleString()}</p>
+              <p className="detail-body">Estimated batches: {estimatedBatchCount}</p>
+              {trainingDataSummary ? (
+                <p className="detail-body">
+                  Local training data: {trainingDataSummary.loadedFileCount}/{trainingDataSummary.fileCount} files loaded, {trainingDataSummary.exampleCount} selected examples available
+                </p>
+              ) : null}
+              {startupCheck?.errors.length ? (
+                <p className="detail-body warning-copy">Startup errors: {startupCheck.errors.join(" | ")}</p>
+              ) : null}
+              {startupCheck?.warnings.length ? (
+                <p className="detail-body warning-copy">Startup warnings: {startupCheck.warnings.join(" | ")}</p>
+              ) : null}
+            </>
           ) : null}
         </section>
 
-        <details className="detail-card">
-          <summary className="task-title">Advanced Storage Details</summary>
-          <div className="report-list">
-            <p className="detail-body">Research examples: market-research-examples</p>
-            <p className="detail-body">Selected datasets: selected-dataset-keys</p>
-            <p className="detail-body">Dataset usage: dataset-usage-map</p>
-            <p className="detail-body">Workflow usage: workflow-usage-map</p>
-            <p className="detail-body">Workflow stage chain: workflow-stage-chain</p>
-            <p className="detail-body">Research queue: autonomous-research-queue</p>
-            <p className="detail-body">Shortlist queue: autonomous-shortlist-queue</p>
-            <p className="detail-body">Draft build queue: autonomous-build-queue</p>
-            <p className="detail-body">Approval queue: autonomous-approval-queue</p>
-            <p className="detail-body">Runtime trace: autonomous-agent-runs</p>
-            <p className="detail-body">Workflow logs: workflow-run-logs</p>
-          </div>
-        </details>
+        {isAdmin ? (
+          <>
+            <details className="detail-card">
+              <summary className="task-title">Advanced Storage Details</summary>
+              <div className="report-list">
+                <p className="detail-body">Research examples: market-research-examples</p>
+                <p className="detail-body">Selected datasets: selected-dataset-keys</p>
+                <p className="detail-body">Dataset usage: dataset-usage-map</p>
+                <p className="detail-body">Workflow usage: workflow-usage-map</p>
+                <p className="detail-body">Workflow stage chain: workflow-stage-chain</p>
+                <p className="detail-body">Research queue: autonomous-research-queue</p>
+                <p className="detail-body">Shortlist queue: autonomous-shortlist-queue</p>
+                <p className="detail-body">Draft build queue: autonomous-build-queue</p>
+                <p className="detail-body">Approval queue: autonomous-approval-queue</p>
+                <p className="detail-body">Runtime trace: autonomous-agent-runs</p>
+                <p className="detail-body">Workflow logs: workflow-run-logs</p>
+              </div>
+            </details>
 
-        <details className="detail-card">
-          <summary className="task-title">Local Training Files</summary>
-          <div className="report-list">
-            {trainingDataSummary ? (
-              trainingDataSummary.files.map((file) => (
-                <p key={file.key} className="detail-body">
-                  {file.key}: {file.loaded ? `loaded (${file.exampleCount} examples, about ${file.estimatedTokens.toLocaleString()} tokens)` : `not loaded${file.error ? ` - ${file.error}` : ""}`} [{file.path}]
-                </p>
-              ))
-            ) : (
-              <p className="detail-body">Run the automation workflow to inspect file load status.</p>
-            )}
-          </div>
-        </details>
+            <details className="detail-card">
+              <summary className="task-title">Local Training Files</summary>
+              <div className="report-list">
+                {trainingDataSummary ? (
+                  trainingDataSummary.files.map((file) => (
+                    <p key={file.key} className="detail-body">
+                      {file.key}: {file.loaded ? `loaded (${file.exampleCount} examples, about ${file.estimatedTokens.toLocaleString()} tokens)` : `not loaded${file.error ? ` - ${file.error}` : ""}`} [{file.path}]
+                    </p>
+                  ))
+                ) : (
+                  <p className="detail-body">Run the automation workflow to inspect file load status.</p>
+                )}
+              </div>
+            </details>
 
-        <details className="detail-card">
-          <summary className="task-title">Last Runtime Agent Roles</summary>
-          <div className="report-list">
-            {buildAgentRoleCopy(agentRuns).length > 0 ? (
-              buildAgentRoleCopy(agentRuns).map((line) => (
-                <p key={line} className="detail-body">
-                  {line}
-                </p>
-              ))
-            ) : (
-              <p className="detail-body">No runtime trace captured yet.</p>
-            )}
-          </div>
-        </details>
+            <details className="detail-card">
+              <summary className="task-title">Last Runtime Agent Roles</summary>
+              <div className="report-list">
+                {buildAgentRoleCopy(agentRuns).length > 0 ? (
+                  buildAgentRoleCopy(agentRuns).map((line) => (
+                    <p key={line} className="detail-body">
+                      {line}
+                    </p>
+                  ))
+                ) : (
+                  <p className="detail-body">No runtime trace captured yet.</p>
+                )}
+              </div>
+            </details>
 
-        <details className="detail-card">
-          <summary className="task-title">Startup Validation</summary>
-          <div className="report-list">
-            {startupCheck ? (
-              startupCheck.checks.map((check) => (
-                <p key={check.envVar} className={`detail-body ${!check.present ? "warning-copy" : ""}`}>
-                  {check.label}: {check.present ? "configured" : `missing (${check.severity})`} [{check.envVar}]
-                </p>
-              ))
-            ) : (
-              <p className="detail-body">Runtime health not loaded yet.</p>
-            )}
-          </div>
-        </details>
+            <details className="detail-card">
+              <summary className="task-title">Startup Validation</summary>
+              <div className="report-list">
+                {startupCheck ? (
+                  startupCheck.checks.map((check) => (
+                    <p key={check.envVar} className={`detail-body ${!check.present ? "warning-copy" : ""}`}>
+                      {check.label}: {check.present ? "configured" : `missing (${check.severity})`} [{check.envVar}]
+                    </p>
+                  ))
+                ) : (
+                  <p className="detail-body">Runtime health not loaded yet.</p>
+                )}
+              </div>
+            </details>
+          </>
+        ) : null}
       </div>
     </section>
   );
@@ -1356,7 +1371,16 @@ export function AgentDashboard({ agents, isAdmin = true }: AgentDashboardProps) 
 
   return (
     <div>
-      <nav className="tab-nav" aria-label="Dashboard sections">
+      {/*
+        CEREBRO heartbeat persists above the tab nav — the brain pulse
+        is the premium-feel anchor, visible no matter which tab the
+        user is on. Was previously inside renderOverviewTab; moved out
+        because users were landing on Agents/Catalogue tabs and never
+        seeing it.
+      */}
+      <CerebroHeartbeat />
+
+      <nav className="tab-nav" aria-label="Dashboard sections" style={{ marginTop: 20 }}>
         {buildNavigationTabs(isAdmin).map((tab) => (
           <button
             key={tab.id}
