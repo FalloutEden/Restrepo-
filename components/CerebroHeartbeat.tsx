@@ -29,6 +29,8 @@ type GraphState = {
   commit: string | null;
   builtAt: string | null;
   ageMs: number | null;
+  deployCommit: string | null;
+  freshness: "fresh" | "stale" | "local-mtime" | "unknown";
 };
 
 type ActivityEntry = {
@@ -64,11 +66,28 @@ function fmtTimeAgo(ts: string): string {
 }
 
 function fmtAgeMs(ms: number | null): string {
-  if (ms == null) return "unknown";
+  if (ms == null) return "—";
   if (ms < 60_000) return `${Math.floor(ms / 1000)}s`;
   if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m`;
   if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h`;
   return `${Math.floor(ms / 86_400_000)}d`;
+}
+
+function graphFreshnessLabel(graph: GraphState | undefined): string {
+  if (!graph) return "Graph: connecting…";
+  if (!graph.commit) return "Graph: not built";
+  const commit = graph.commit.slice(0, 7);
+  switch (graph.freshness) {
+    case "fresh":
+      return `Graph in sync with deploy · ${commit}`;
+    case "stale":
+      return `Graph out of sync · graph ${commit} · deploy ${graph.deployCommit?.slice(0, 7) ?? "?"}`;
+    case "local-mtime":
+      return `Graph rebuilt ${graph.builtAt ? fmtTimeAgo(graph.builtAt) : "?"} · ${commit}`;
+    case "unknown":
+    default:
+      return `Graph commit ${commit}`;
+  }
 }
 
 function kindLabel(kind: string): { label: string; color: string } {
@@ -392,9 +411,7 @@ export function CerebroHeartbeat() {
             {data ? `Last poll ${fmtTimeAgo(data.ts)}` : "Connecting…"}
           </div>
           <div>
-            {data?.graph.builtAt
-              ? `Graph rebuilt ${fmtTimeAgo(data.graph.builtAt)}${data.graph.commit ? ` · ${data.graph.commit.slice(0, 7)}` : ""}`
-              : "Graph: not built"}
+            {graphFreshnessLabel(data?.graph)}
           </div>
         </div>
       </div>

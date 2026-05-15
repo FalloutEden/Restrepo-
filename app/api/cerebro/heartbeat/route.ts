@@ -31,8 +31,17 @@ type GraphState = {
   edges: number | null;
   communities: number | null;
   commit: string | null;
-  builtAt: string | null; // mtime of GRAPH_REPORT.md as ISO string
+  builtAt: string | null; // mtime of GRAPH_REPORT.md as ISO string. NULL on
+  // Vercel — the deploy bundle stamps all files with a default epoch
+  // (~2018), so mtime is meaningless. Use `freshness` instead.
   ageMs: number | null;
+  // Deploy commit (from VERCEL_GIT_COMMIT_SHA, only set on Vercel).
+  // Compare against `commit` to know if the graph is fresh-with-deploy.
+  deployCommit: string | null;
+  // "fresh" = graph commit matches deploy commit. "stale" = differ.
+  // "local-mtime" = no deploy context, trust mtime/age. "unknown" = no
+  // graph or no commit info either way.
+  freshness: "fresh" | "stale" | "local-mtime" | "unknown";
 };
 
 type ActivityEntry = {
@@ -66,13 +75,16 @@ const ACTIVITY_LOG_PATH = onVercel
   : path.join(process.cwd(), ".openclaw", "operator", "activity.jsonl");
 
 async function readGraphState(): Promise<GraphState> {
+  const deployCommit = onVercel ? (process.env.VERCEL_GIT_COMMIT_SHA?.trim() ?? null) : null;
   const empty: GraphState = {
     nodes: null,
     edges: null,
     communities: null,
     commit: null,
     builtAt: null,
-    ageMs: null
+    ageMs: null,
+    deployCommit,
+    freshness: "unknown"
   };
   try {
     const stat = await fs.stat(GRAPH_REPORT_PATH);
@@ -81,13 +93,34 @@ async function readGraphState(): Promise<GraphState> {
     const summary = raw.match(/-\s*(\d[\d,]*)\s*nodes\s*[·•]\s*(\d[\d,]*)\s*edges\s*[·•]\s*(\d[\d,]*)\s*communities/i);
     // Match: "- Built from commit: `7571bed7`"
     const commit = raw.match(/Built from commit:\s*`([a-f0-9]+)`/i);
+    const graphCommit = commit ? commit[1] : null;
+
+    // Vercel stamps deploy-bundle files with a default epoch (around
+    // 2018), so mtime is useless on prod. Suppress builtAt/ageMs on
+    // Vercel and rely on the commit-hash match to indicate freshness.
+    // Locally mtime is real, so we surface it.
+    const builtAt = onVercel ? null : stat.mtime.toISOString();
+    const ageMs = onVercel ? null : Date.now() - stat.mtime.getTime();
+
+    let freshness: GraphState["freshness"];
+    if (!graphCommit) {
+      freshness = "unknown";
+    } else if (deployCommit) {
+      // Compare prefix-tolerantly — graph stores 8 chars, deploy SHA is full 40
+      freshness = deployCommit.startsWith(graphCommit) || graphCommit.startsWith(deployCommit) ? "fresh" : "stale";
+    } else {
+      freshness = "local-mtime";
+    }
+
     return {
       nodes: summary ? Number(summary[1].replace(/,/g, "")) : null,
       edges: summary ? Number(summary[2].replace(/,/g, "")) : null,
       communities: summary ? Number(summary[3].replace(/,/g, "")) : null,
-      commit: commit ? commit[1] : null,
-      builtAt: stat.mtime.toISOString(),
-      ageMs: Date.now() - stat.mtime.getTime()
+      commit: graphCommit,
+      builtAt,
+      ageMs,
+      deployCommit,
+      freshness
     };
   } catch {
     return empty;
