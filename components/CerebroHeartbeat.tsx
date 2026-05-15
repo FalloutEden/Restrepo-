@@ -79,14 +79,33 @@ function graphFreshnessLabel(graph: GraphState | undefined): string {
   const commit = graph.commit.slice(0, 7);
   switch (graph.freshness) {
     case "fresh":
-      return `Graph in sync with deploy · ${commit}`;
+      return `Graph synced · ${commit}`;
     case "stale":
-      return `Graph out of sync · graph ${commit} · deploy ${graph.deployCommit?.slice(0, 7) ?? "?"}`;
+      // Neutral framing — the graphify post-commit hook is async, so
+      // every deploy ships with the previous commit's graph. "Stale"
+      // by one commit is the normal steady state, not a problem worth
+      // alarming. Just show the commit pair so the user can verify.
+      return `Graph: ${commit} · Deploy: ${graph.deployCommit?.slice(0, 7) ?? "?"}`;
     case "local-mtime":
       return `Graph rebuilt ${graph.builtAt ? fmtTimeAgo(graph.builtAt) : "?"} · ${commit}`;
     case "unknown":
     default:
       return `Graph commit ${commit}`;
+  }
+}
+
+function freshnessPill(graph: GraphState | undefined): { label: string; tone: string } {
+  if (!graph || !graph.commit) return { label: "—", tone: "#888" };
+  switch (graph.freshness) {
+    case "fresh":
+      return { label: "SYNCED", tone: "#6EDC96" };
+    case "stale":
+      return { label: "OFFSET", tone: "#F0B34B" };
+    case "local-mtime":
+      return { label: "LOCAL", tone: "#7FD8FF" };
+    case "unknown":
+    default:
+      return { label: "—", tone: "#888" };
   }
 }
 
@@ -449,8 +468,13 @@ export function CerebroHeartbeat() {
               </div>
             </div>
             <div className="cerebro-heartbeat__stat">
-              <div className="cerebro-heartbeat__stat-label">Age</div>
-              <div className="cerebro-heartbeat__stat-value">{fmtAgeMs(data?.graph.ageMs ?? null)}</div>
+              <div className="cerebro-heartbeat__stat-label">Status</div>
+              <div
+                className="cerebro-heartbeat__stat-value"
+                style={{ color: freshnessPill(data?.graph).tone, fontSize: 16, letterSpacing: "0.06em" }}
+              >
+                {freshnessPill(data?.graph).label}
+              </div>
             </div>
           </div>
 
