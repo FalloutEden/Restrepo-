@@ -36,8 +36,12 @@ coverage
 .openclaw/brand/.aop-linear-high-dpi-url.txt
 .openclaw/brand/.aop-linear-padded-url.txt
 
-# CEREBRO / Graphify generated artifacts — regenerable from code
-graphify-out/
+# CEREBRO / Graphify generated artifacts — regenerable from code.
+# Exception: GRAPH_REPORT.md is committed because the production
+# CerebroHeartbeat dashboard reads it for live brain stats. Without
+# this file shipping with the deploy, prod heartbeat shows null nodes.
+graphify-out/*
+!graphify-out/GRAPH_REPORT.md
 .openclaw/cerebro-usage.jsonl
 .openclaw/cerebro-scrape-results.json
 

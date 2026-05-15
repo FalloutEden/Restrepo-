@@ -55,8 +55,15 @@ type HeartbeatResponse = {
   services: ServiceProbe[];
 };
 
+// Path resolution mirrors the rest of the codebase (lib/tenancy.ts,
+// webhook routes, lib/audit.ts): on Vercel the writable surface is /tmp,
+// locally everything lives under ./.openclaw. The graph report is a
+// build artifact shipped with the deploy — same path either way.
+const onVercel = Boolean(process.env.VERCEL);
 const GRAPH_REPORT_PATH = path.join(process.cwd(), "graphify-out", "GRAPH_REPORT.md");
-const ACTIVITY_LOG_PATH = path.join(process.cwd(), ".openclaw", "operator", "activity.jsonl");
+const ACTIVITY_LOG_PATH = onVercel
+  ? path.join("/tmp", "openclaw", "operator", "activity.jsonl")
+  : path.join(process.cwd(), ".openclaw", "operator", "activity.jsonl");
 
 async function readGraphState(): Promise<GraphState> {
   const empty: GraphState = {
