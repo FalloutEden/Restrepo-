@@ -19,7 +19,8 @@ const PUBLIC_PREFIXES = [
   "/api/onboard/start", // Public signup endpoint — no auth required to start
   "/api/admin/login", // Owner's login endpoint — verifies secret inline
   "/api/health", // Health endpoint — pinged by uptime monitors + Vercel cron
-  "/api/cron/" // Vercel cron endpoints — verify CRON_SECRET inline
+  "/api/cron/", // Vercel cron endpoints — verify CRON_SECRET inline
+  "/api/cerebro/heartbeat" // Live brain heartbeat — read-only, no secrets exposed; polled client-side from the dashboard (incl. customer surfaces in future)
 ];
 
 export const config = {
