@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { headers, cookies } from "next/headers";
 import { OperatorPanel } from "@/components/operator/OperatorPanel";
+import { CerebroHeartbeat } from "@/components/CerebroHeartbeat";
 import "../operator.css";
 import { DashboardBodyClass } from "./body-class";
 
@@ -108,6 +109,12 @@ export default async function DashboardPage() {
             fresh research.
           </p>
         </header>
+        {/* Brain heartbeat sits above the chat so the user sees the system is alive
+            before they type a word — the premium-feel anchor on every tenant's
+            landing surface, not just the admin /pipeline route. */}
+        <div style={{ margin: "0 0 24px" }}>
+          <CerebroHeartbeat />
+        </div>
         <OperatorPanel />
       </div>
     </>

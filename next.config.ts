@@ -13,6 +13,22 @@ import path from "path";
 //
 // Note: deliberately NOT setting CSP via meta tag — using header so it
 // applies to ALL responses, not just HTML. Stricter.
+//
+// 'unsafe-eval' is added to script-src in DEV ONLY. Next.js's webpack dev
+// server uses eval-based source maps for fast HMR — without unsafe-eval,
+// EVERY client-side bundle fails to evaluate, React never hydrates, fetch
+// effects never run. Symptom: pages look static, network panel quiet,
+// component state stays at initial values. Production builds don't use
+// eval, so the prod CSP stays strict.
+const isDev = process.env.NODE_ENV === "development";
+const scriptSrc = [
+  "'self'",
+  "'unsafe-inline'",
+  ...(isDev ? ["'unsafe-eval'"] : []),
+  "https://js.stripe.com",
+  "https://app.pageview.app"
+].join(" ");
+
 const securityHeaders = [
   {
     key: "Strict-Transport-Security",
@@ -31,7 +47,8 @@ const securityHeaders = [
       "default-src 'self'",
       // Allow Stripe.js for any inline checkout (we currently redirect, but
       // future-proofing). Allow Next.js inline scripts (hashed by build).
-      "script-src 'self' 'unsafe-inline' https://js.stripe.com https://app.pageview.app",
+      // In dev, also allow eval — see scriptSrc comment above.
+      `script-src ${scriptSrc}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https://cdn.shopify.com https://files.cdn.printful.com https://printful-upload.s3-accelerate.amazonaws.com https://*.stripe.com",
       "font-src 'self' data:",
