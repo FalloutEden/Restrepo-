@@ -165,10 +165,10 @@ function SuccessInner() {
 
         <ChecklistCard
           step={2}
-          title="Connect your Shopify store"
-          body="Paste your Shopify admin API token and store domain. We encrypt them — your operator reads them only when it needs to."
-          ctaLabel="Connect Shopify →"
-          ctaHref="/launch"
+          title="Hook up your Shopify store"
+          body="Sign up if you don't have one yet, then walk through the 5-step guide to install the operator's custom app and paste the access token. Takes about 5 minutes."
+          ctaLabel="Set up Shopify →"
+          ctaHref="/setup/shopify"
         />
 
         <ChecklistCard
