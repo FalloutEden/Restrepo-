@@ -152,7 +152,7 @@ function SuccessInner() {
       <section style={{ marginBottom: 28 }}>
         <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 14px" }}>Your starter checklist</h2>
         <p style={{ fontSize: 14, color: "rgba(244,241,236,0.6)", marginTop: 0, marginBottom: 18 }}>
-          Three small things and your store is real. Each one takes a few minutes — your operator helps you through it.
+          Six small things and your store is real. Most take a few minutes — your operator helps you through each one. You can do them in any order; revisit anything later.
         </p>
 
         <ChecklistCard

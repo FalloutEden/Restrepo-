@@ -2,14 +2,18 @@ import Link from "next/link";
 
 import { StripeConnect } from "@/components/setup/StripeConnect";
 
-// /setup/stripe — Stripe Connect deep-link flow. Fourth in the partner
-// setup series after Namecheap, Shopify, and Klaviyo. Same scaffold:
-// signup deep link → walkthrough → paste-back form → vault storage.
+// /setup/stripe — Stripe Connect OAuth flow. Fourth in the partner setup
+// series after Namecheap, Shopify, and Klaviyo. Different from the others:
+// Stripe handles signup + account configuration + credential handoff in a
+// single OAuth bounce. No "go sign up, then come back with a token" — one
+// click and Stripe owns the rest of the flow.
 //
-// Stripe Connect is how the tenant accepts customer payments under their
-// own Stripe account (not the founder's). Shopify has built-in payments,
-// but tenants who want Stripe for subscriptions, custom checkouts, or
-// non-Shopify channels need their own connected account on file.
+// Backend: lib/stripe-connect.ts (HMAC-signed state helpers),
+//          /api/stripe/connect/authorize (generates URL),
+//          /api/stripe/connect/callback (verifies state, exchanges code,
+//                                        writes stripeConnectAccountId).
+// The callback is in middleware's public allowlist because Stripe can't
+// carry our tenant bearer.
 
 export const dynamic = "force-dynamic";
 
@@ -47,16 +51,17 @@ export default function SetupStripePage() {
           Get paid with Stripe.
         </h1>
         <p style={{ fontSize: 15, color: "rgba(244,241,236,0.65)", marginTop: 0, marginBottom: 36, lineHeight: 1.55 }}>
-          Four short steps. Shopify has its own payment processor built in — Stripe is for when
-          you want subscriptions, custom checkouts, or to take payments outside of Shopify too.
-          You can skip this for now and come back when you need it.
+          One click. Stripe opens, you approve, you&apos;re back. Shopify already has its own
+          built-in checkout — Stripe is for subscriptions, custom payment links, or selling
+          outside of Shopify. Optional, but most operators want it.
         </p>
 
         <StripeConnect />
 
         <p style={{ fontSize: 12, color: "rgba(244,241,236,0.4)", marginTop: 36, textAlign: "center" }}>
-          Stripe is the most-used payment processor for SaaS + commerce. Nothing prevents you
-          from using it alongside Shopify Payments — pick whichever rails fit each product.
+          We never see your card data — Stripe holds that. We only store your account id so the
+          operator knows whose payments to reference. You can disconnect any time from your
+          Stripe dashboard.
         </p>
       </div>
     </main>
