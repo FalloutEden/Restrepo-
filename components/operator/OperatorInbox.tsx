@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { authedFetch } from "@/lib/client-auth";
 import type { HumanTask, Proposal } from "@/lib/operator-state";
 
 type Props = {
@@ -17,7 +18,7 @@ export function OperatorInbox({ proposals, tasks, onChange }: Props) {
     setBusyId(id);
     try {
       const notes = decision === "rejected" ? prompt("Rejection notes (optional):") || undefined : undefined;
-      await fetch(`/api/operator/proposals/${id}`, {
+      await authedFetch(`/api/operator/proposals/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision, notes })
@@ -31,7 +32,7 @@ export function OperatorInbox({ proposals, tasks, onChange }: Props) {
   const resolveTask = async (id: string, status: "done" | "dismissed") => {
     setBusyId(id);
     try {
-      await fetch(`/api/operator/tasks/${id}`, {
+      await authedFetch(`/api/operator/tasks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })

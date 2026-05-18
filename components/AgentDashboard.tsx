@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { authedFetch } from "@/lib/client-auth";
 import { AgentCard } from "@/components/AgentCard";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
 import { AgentHabitat } from "@/components/AgentHabitat";
@@ -677,7 +678,7 @@ export function AgentDashboard({ agents, isAdmin = true }: AgentDashboardProps) 
   useEffect(() => {
     const loadCatalogue = async () => {
       try {
-        const response = await fetch("/api/dataset-catalogue", { method: "GET" });
+        const response = await authedFetch("/api/dataset-catalogue", { method: "GET" });
         const payload = (await response.json()) as DatasetCatalogueResponse;
 
         if (!response.ok) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { authedFetch } from "@/lib/client-auth";
 import { ListingPreviewCard } from "@/components/ListingPreviewCard";
 import {
   downloadEditableProductInstructions,
@@ -136,7 +137,7 @@ export function MorningReportView({
       setMockupImageUrl("");
 
       try {
-        const response = await fetch("/api/generate-image", {
+        const response = await authedFetch("/api/generate-image", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -205,7 +206,7 @@ export function MorningReportView({
         setProductPageStatus(`Generating planner pages (${index + 1}/${productPageSpecs.length})...`);
 
         try {
-          const response = await fetch("/api/generate-image", {
+          const response = await authedFetch("/api/generate-image", {
             method: "POST",
             headers: {
               "Content-Type": "application/json"

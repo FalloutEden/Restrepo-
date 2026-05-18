@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
+import { authedFetch } from "@/lib/client-auth";
 import type { ContentDrop, MediaAsset, PlatformPost } from "@/lib/content-studio/types";
 import { PLATFORM_SPECS } from "@/lib/content-studio/types";
 
@@ -45,7 +46,7 @@ export function DropDetail({ drop, busy, setBusy, onChanged }: Props) {
       try {
         const fd = new FormData();
         Array.from(files).forEach((f) => fd.append("files", f));
-        const r = await fetch(`/api/content-studio/drops/${drop.id}/upload`, {
+        const r = await authedFetch(`/api/content-studio/drops/${drop.id}/upload`, {
           method: "POST",
           body: fd
         });
@@ -67,7 +68,7 @@ export function DropDetail({ drop, busy, setBusy, onChanged }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const r = await fetch(`/api/content-studio/drops/${drop.id}/generate`, {
+      const r = await authedFetch(`/api/content-studio/drops/${drop.id}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({})
@@ -86,7 +87,7 @@ export function DropDetail({ drop, busy, setBusy, onChanged }: Props) {
 
   const markPosted = useCallback(
     async (postId: string) => {
-      const r = await fetch(`/api/content-studio/drops/${drop.id}/posts/${postId}`, {
+      const r = await authedFetch(`/api/content-studio/drops/${drop.id}/posts/${postId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ posted: true })

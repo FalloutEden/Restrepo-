@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { authedFetch } from "@/lib/client-auth";
+
 type Props = {
   onCreated: (id: string) => void;
   disabled?: boolean;
@@ -23,7 +25,7 @@ export function CreateDropForm({ onCreated, disabled }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      const r = await fetch("/api/content-studio/drops", {
+      const r = await authedFetch("/api/content-studio/drops", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ productTitle: productTitle.trim(), brand })

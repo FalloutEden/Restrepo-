@@ -86,17 +86,18 @@ export default async function DashboardPage() {
             <span style={{ fontSize: 11, color: "#888", marginLeft: 2 }}>by Black Vault</span>
           </Link>
           <div style={{ display: "flex", gap: 8 }}>
-            {admin ? (
+            {/* Tenants get the full operator surface (BYOK-scoped, session-isolated
+                per project_tenant_full_surface_2026_05_14). Content studio is fully
+                tenant-scoped behind the scenes via lib/tenant-als.ts. /pipeline,
+                /launch, /admin/incidents are still founder-only inside (separate
+                phases queued) so they stay admin-gated for now. */}
+            <Link href="/content-studio" style={navLink}>Content studio →</Link>
+            {admin && (
               <>
                 <Link href="/launch" style={navLink}>Launch readiness →</Link>
-                <Link href="/content-studio" style={navLink}>Content studio →</Link>
                 <Link href="/pipeline" style={navLink}>View pipeline →</Link>
                 <Link href="/admin/incidents" style={navLink}>Incidents →</Link>
               </>
-            ) : (
-              <span style={{ fontSize: 12, color: "#888" }}>
-                Tenant view — admin tools hidden
-              </span>
             )}
           </div>
         </nav>

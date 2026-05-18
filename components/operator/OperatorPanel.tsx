@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { authedFetch } from "@/lib/client-auth";
 import type { ActivityEntry, HumanTask, Proposal } from "@/lib/operator-state";
 import type { OperatorState } from "@/lib/operator-state";
 import { OperatorChat } from "@/components/operator/OperatorChat";
@@ -25,7 +26,7 @@ export function OperatorPanel() {
 
   const refresh = useCallback(async () => {
     try {
-      const response = await fetch("/api/operator/state", { cache: "no-store" });
+      const response = await authedFetch("/api/operator/state", { cache: "no-store" });
       // 401 = unauthenticated dashboard view in production. Don't crash —
       // leave data null so the UI renders empty rather than reading
       // properties off an error envelope.
@@ -49,7 +50,7 @@ export function OperatorPanel() {
   const handleHuntNow = useCallback(async () => {
     setTickRunning(true);
     try {
-      const response = await fetch("/api/operator/tick", { method: "POST" });
+      const response = await authedFetch("/api/operator/tick", { method: "POST" });
       if (!response.ok) {
         const body = await response.json().catch(() => ({ error: "tick failed" }));
         alert(`Tick failed: ${body.error ?? response.status}`);

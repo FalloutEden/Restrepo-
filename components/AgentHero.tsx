@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { authedFetch } from "@/lib/client-auth";
 import type { Agent, AgentStatus } from "@/lib/mock-agents";
 import { mockAgents } from "@/lib/mock-agents";
 import { AgentCard } from "@/components/AgentCard";
@@ -170,7 +171,7 @@ export function AgentHero() {
     );
 
     try {
-      const res = await fetch("/api/autonomous-run/start", {
+      const res = await authedFetch("/api/autonomous-run/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ goal: goal.trim() || undefined })

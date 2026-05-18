@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { authedFetch } from "@/lib/client-auth";
+
 type SpendSummary = {
   totalUsd: number;
   byProvider: Record<string, number>;
@@ -43,7 +45,7 @@ export function SpendCard() {
 
   const refresh = useCallback(async () => {
     try {
-      const r = await fetch("/api/operator/spend", { cache: "no-store" });
+      const r = await authedFetch("/api/operator/spend", { cache: "no-store" });
       // Bail on auth failures + any non-2xx — keeps the loading state, never
       // crashes trying to read .budget from an error envelope
       if (!r.ok) return;
@@ -68,7 +70,7 @@ export function SpendCard() {
     setBusy(true);
     try {
       const cap = Number(capInput) || 0;
-      await fetch("/api/operator/spend", {
+      await authedFetch("/api/operator/spend", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ monthlyCapUsd: cap, warnAtPct: 80 })

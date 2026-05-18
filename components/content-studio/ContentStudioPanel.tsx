@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { authedFetch } from "@/lib/client-auth";
 import type { ContentDrop } from "@/lib/content-studio/types";
 import { DropList } from "@/components/content-studio/DropList";
 import { DropDetail } from "@/components/content-studio/DropDetail";
@@ -26,13 +27,13 @@ export function ContentStudioPanel() {
   const [busy, setBusy] = useState(false);
 
   const refreshList = useCallback(async () => {
-    const r = await fetch("/api/content-studio/drops", { cache: "no-store" });
+    const r = await authedFetch("/api/content-studio/drops", { cache: "no-store" });
     const data = (await r.json()) as { drops: DropSummary[] };
     setDrops(data.drops ?? []);
   }, []);
 
   const refreshSelected = useCallback(async (id: string) => {
-    const r = await fetch(`/api/content-studio/drops/${id}`, { cache: "no-store" });
+    const r = await authedFetch(`/api/content-studio/drops/${id}`, { cache: "no-store" });
     if (!r.ok) {
       setSelected(null);
       return;

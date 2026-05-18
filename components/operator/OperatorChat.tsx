@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { authedFetch } from "@/lib/client-auth";
 import { labelForTool } from "@/lib/operator-tool-labels";
 
 type Bubble =
@@ -42,7 +43,7 @@ export function OperatorChat({ onTurnComplete }: Props) {
     setBubbles((prev) => [...prev, { kind: "user", text: message }]);
 
     try {
-      const response = await fetch("/api/operator/chat", {
+      const response = await authedFetch("/api/operator/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId, message })
