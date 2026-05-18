@@ -173,6 +173,14 @@ function SuccessInner() {
 
         <ChecklistCard
           step={3}
+          title="Plug in Klaviyo (welcome emails)"
+          body="Optional but recommended — paste a Klaviyo private API key so the operator can build your welcome-email + abandoned-cart flows. Free tier covers your first 250 contacts."
+          ctaLabel="Set up Klaviyo →"
+          ctaHref="/setup/klaviyo"
+        />
+
+        <ChecklistCard
+          step={4}
           title="Drop in your first product photos"
           body="The content studio turns your photos into lifestyle images, short videos, and platform-native captions. You'll review everything before it ships."
           ctaLabel="Open content studio →"
@@ -180,7 +188,7 @@ function SuccessInner() {
         />
 
         <ChecklistCard
-          step={4}
+          step={5}
           title="Talk to your operator"
           body={
             stash.firstTask
