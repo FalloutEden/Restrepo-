@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const limit = Number(url.searchParams.get("limit") ?? "200");
-  const entries = readAudit(limit);
+  const entries = await readAudit(limit);
 
   // First, drop everything that isn't an incident.
   let incidents: AuditEntry[] = entries.filter(
