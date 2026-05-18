@@ -134,9 +134,19 @@ export default function OnboardPage() {
         return;
       }
       try {
+        // Stash everything the success page needs to render the agents-working
+        // experience without a backend roundtrip. Bearer + brandSlug are the
+        // auth/identity essentials; brandName + firstTask let the success page
+        // open with "{brandName}'s Operator is starting on: {firstTask}" instead
+        // of a generic "Welcome aboard."
         localStorage.setItem(
           `operator:tenant:${data.tenantId}`,
-          JSON.stringify({ bearerToken: data.bearerToken, brandSlug: data.brandSlug })
+          JSON.stringify({
+            bearerToken: data.bearerToken,
+            brandSlug: data.brandSlug,
+            brandName: form.brandName.trim(),
+            firstTask: form.firstTask.trim()
+          })
         );
       } catch {}
       if (data.stripe?.url) {
