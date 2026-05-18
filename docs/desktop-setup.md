@@ -97,7 +97,7 @@ dev (handled in `next.config.ts`, gated by `NODE_ENV === "development"`).
 ```bash
 cd C:/Agents/Restrepo-
 git pull
-npm install  # if package.json changed
+npm install  # always — cheap if no-op, painful when skipped after a dep bump
 bash scripts/cerebro-update.sh  # if you want the latest vault notes in the brain
 npm run dev
 ```
