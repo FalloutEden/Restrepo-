@@ -3,6 +3,8 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 
 import { assertValidId, resolveAssetPath } from "@/lib/content-studio/storage";
+import { resolveTenantContext } from "@/lib/tenant-context";
+import { runWithTenant } from "@/lib/tenant-als";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +20,7 @@ const MIME_BY_EXT: Record<string, string> = {
   mov: "video/quicktime"
 };
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string; path: string[] }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string; path: string[] }> }) {
   const { id: rawId, path: pathSegments } = await params;
   let id: string;
   try { id = assertValidId(rawId, "drop"); }
@@ -31,7 +33,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (joined.includes("..") || joined.includes("\\") || joined.includes("\0")) {
     return NextResponse.json({ error: "Invalid path" }, { status: 400 });
   }
-  const absolute = resolveAssetPath(id, joined);
+  const ctx = await resolveTenantContext(request);
+  // resolveAssetPath reads the tenant root via AsyncLocalStorage, so wrap.
+  const absolute = await runWithTenant(ctx.tenantId, () => resolveAssetPath(id, joined));
   try {
     const fileStat = await stat(absolute);
     if (!fileStat.isFile()) {

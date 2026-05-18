@@ -47,7 +47,12 @@ import { getTenant, getTenantByBearer, getTenantSecret, type Tenant, type Encryp
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const IS_VERCEL = process.env.VERCEL === "1";
+// Only count as "running on Vercel for filesystem purposes" when this is
+// actually a production runtime — not when .env.local was pulled from prod
+// and shipped VERCEL=1 to the developer's box. NODE_ENV === "development"
+// is the only reliable marker that we're in `next dev` (Next sets it itself
+// and .env.local can't override).
+const IS_VERCEL = process.env.VERCEL === "1" && process.env.NODE_ENV === "production";
 
 /** Sentinel tenant id for the founder / admin / unauthenticated dev context.
  *  Maps to the legacy `.openclaw/operator/` paths so the founder's existing

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { assertValidId, markPostPosted, readDrop } from "@/lib/content-studio/storage";
+import { resolveTenantContext } from "@/lib/tenant-context";
+import { runWithTenant } from "@/lib/tenant-als";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,10 +26,13 @@ export async function PATCH(
   } catch {
     body = {};
   }
-  if (body.posted) {
-    await markPostPosted(id, postId);
-  }
-  const updated = await readDrop(id);
-  if (!updated) return NextResponse.json({ error: "Drop not found" }, { status: 404 });
-  return NextResponse.json({ drop: updated });
+  const ctx = await resolveTenantContext(request);
+  return runWithTenant(ctx.tenantId, async () => {
+    if (body.posted) {
+      await markPostPosted(id, postId);
+    }
+    const updated = await readDrop(id);
+    if (!updated) return NextResponse.json({ error: "Drop not found" }, { status: 404 });
+    return NextResponse.json({ drop: updated });
+  });
 }

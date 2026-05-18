@@ -4,16 +4,25 @@ import { mkdir, readFile, writeFile, readdir, access } from "node:fs/promises";
 import path from "node:path";
 
 import type { ContentDrop, ContentDropStatus, MediaAsset, PlatformPost } from "@/lib/content-studio/types";
+import { buildTenantPaths } from "@/lib/tenant-context";
+import { getCurrentTenantId } from "@/lib/tenant-als";
 
-// All content-studio state lives under .openclaw/operator/content-studio/<dropId>/.
-// Drop manifest at <dropId>/drop.json. Source photos under sources/. Generated
-// images under generated/. Videos under videos/. Copy is embedded in posts[]
-// inside the manifest — no separate file.
+// All content-studio state lives under <tenant-root>/content-studio/<dropId>/.
+// The tenant root resolves via lib/tenant-context.ts → buildTenantPaths(tenantId).
+// FOUNDER context maps to the legacy .openclaw/operator/content-studio/ path
+// so existing founder drops survive the migration.
+//
+// Tenant id is read from AsyncLocalStorage (lib/tenant-als.ts). API routes wrap
+// their handler in runWithTenant(tenantId, …) so every storage call inside —
+// including pipelines fanning out from the route — picks up the right bucket.
+// No explicit threading needed.
 
-const ROOT = path.join(process.cwd(), ".openclaw", "operator", "content-studio");
+function rootDir(): string {
+  return buildTenantPaths(getCurrentTenantId()).contentStudioDir;
+}
 
 function dropDir(dropId: string) {
-  return path.join(ROOT, dropId);
+  return path.join(rootDir(), dropId);
 }
 
 async function fileExists(p: string) {
@@ -26,7 +35,7 @@ async function fileExists(p: string) {
 }
 
 export async function ensureContentStudioRoot() {
-  await mkdir(ROOT, { recursive: true });
+  await mkdir(rootDir(), { recursive: true });
 }
 
 function newId(prefix: string): string {
@@ -107,7 +116,7 @@ export async function readDrop(id: string): Promise<ContentDrop | null> {
 
 export async function listDrops(): Promise<ContentDrop[]> {
   await ensureContentStudioRoot();
-  const dirs = await readdir(ROOT).catch(() => [] as string[]);
+  const dirs = await readdir(rootDir()).catch(() => [] as string[]);
   const drops: ContentDrop[] = [];
   for (const d of dirs) {
     const drop = await readDrop(d);

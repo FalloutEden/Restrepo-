@@ -8,6 +8,8 @@ import {
   saveAssetFile
 } from "@/lib/content-studio/storage";
 import type { MediaAsset } from "@/lib/content-studio/types";
+import { resolveTenantContext } from "@/lib/tenant-context";
+import { runWithTenant } from "@/lib/tenant-als";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,9 +38,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } catch {
     return NextResponse.json({ error: "Invalid drop id" }, { status: 400 });
   }
-  const drop = await readDrop(id);
-  if (!drop) return NextResponse.json({ error: "Drop not found" }, { status: 404 });
 
+  // Parse multipart BEFORE wrapping the tenant scope. Parsing the body is
+  // tenant-independent; the only thing that's tenant-scoped is filesystem I/O
+  // against the drop directory. That keeps the AsyncLocalStorage scope tight
+  // around the storage calls, which is the right granularity.
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -52,29 +56,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: `Too many files: ${files.length} > ${MAX_FILES_PER_REQUEST}` }, { status: 400 });
   }
 
-  const saved: MediaAsset[] = [];
-  for (let i = 0; i < files.length; i += 1) {
-    const file = files[i];
-    if (!(file instanceof File)) continue;
-    if (file.size > MAX_BYTES_PER_FILE) {
-      return NextResponse.json({ error: `File too large: ${file.size} > ${MAX_BYTES_PER_FILE}` }, { status: 400 });
+  const ctx = await resolveTenantContext(request);
+  return runWithTenant(ctx.tenantId, async () => {
+    const drop = await readDrop(id);
+    if (!drop) return NextResponse.json({ error: "Drop not found" }, { status: 404 });
+
+    const saved: MediaAsset[] = [];
+    for (let i = 0; i < files.length; i += 1) {
+      const file = files[i];
+      if (!(file instanceof File)) continue;
+      if (file.size > MAX_BYTES_PER_FILE) {
+        return NextResponse.json({ error: `File too large: ${file.size} > ${MAX_BYTES_PER_FILE}` }, { status: 400 });
+      }
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const ext = inferExt(file.type, file.name);
+      if (!ALLOWED_EXTS.has(ext)) {
+        return NextResponse.json({ error: `Unsupported file type: ${ext}` }, { status: 400 });
+      }
+      const filename = `source-${Date.now()}-${i}.${ext}`;
+      const result = await saveAssetFile(id, "sources", filename, buffer);
+      const asset: MediaAsset = {
+        id: newAssetId(),
+        kind: "source_photo",
+        source: "user_upload",
+        filePath: result.relativePath,
+        createdAt: new Date().toISOString()
+      };
+      await addAssetToDrop(id, asset);
+      saved.push(asset);
     }
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const ext = inferExt(file.type, file.name);
-    if (!ALLOWED_EXTS.has(ext)) {
-      return NextResponse.json({ error: `Unsupported file type: ${ext}` }, { status: 400 });
-    }
-    const filename = `source-${Date.now()}-${i}.${ext}`;
-    const result = await saveAssetFile(id, "sources", filename, buffer);
-    const asset: MediaAsset = {
-      id: newAssetId(),
-      kind: "source_photo",
-      source: "user_upload",
-      filePath: result.relativePath,
-      createdAt: new Date().toISOString()
-    };
-    await addAssetToDrop(id, asset);
-    saved.push(asset);
-  }
-  return NextResponse.json({ uploaded: saved });
+    return NextResponse.json({ uploaded: saved });
+  });
 }

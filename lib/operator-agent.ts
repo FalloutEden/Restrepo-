@@ -4,6 +4,7 @@ import { claude, claudeForTenant } from "@/lib/claude";
 import { withClaudeRetry } from "@/lib/claude-retry";
 import { withSpendKind, withSpendTenant } from "@/lib/spend-tracker";
 import { FOUNDER_TENANT_ID, contextForTenantId } from "@/lib/tenant-context";
+import { runWithTenant } from "@/lib/tenant-als";
 import { readTenantProfile, summarizeProfileStatus } from "@/lib/tenant-profile";
 import { BRANDS } from "@/lib/brands";
 import {
@@ -460,12 +461,16 @@ export type AgentEvent =
 
 export async function runOperator(options: AgentRunOptions): Promise<{ finalText: string }> {
   const tenantId = options.tenantId ?? FOUNDER_TENANT_ID;
-  // Wrap with both spend-kind AND spend-tenant so every nested API call gets
-  // attributed correctly. The tenant tag drives the spend-ceiling cron's
-  // per-tenant pause logic.
-  return withSpendTenant(tenantId, () =>
-    withSpendKind(options.source === "tick" ? "operator_tick" : "operator_chat", () =>
-      runOperatorInner(options, tenantId)
+  // Wrap with spend-tenant + spend-kind + AsyncLocalStorage tenant so every
+  // nested call gets attributed correctly. runWithTenant exposes the tenant id
+  // to storage modules that read it via lib/tenant-als (currently the
+  // content-studio storage layer; future tenant-scoped surfaces inherit the
+  // same plumbing).
+  return runWithTenant(tenantId, () =>
+    withSpendTenant(tenantId, () =>
+      withSpendKind(options.source === "tick" ? "operator_tick" : "operator_chat", () =>
+        runOperatorInner(options, tenantId)
+      )
     )
   );
 }

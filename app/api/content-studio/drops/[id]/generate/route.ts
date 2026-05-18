@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { generateContentDrop } from "@/lib/content-studio/orchestrator";
 import { assertValidId, readDrop } from "@/lib/content-studio/storage";
 import type { Platform } from "@/lib/content-studio/types";
+import { resolveTenantContext } from "@/lib/tenant-context";
+import { runWithTenant } from "@/lib/tenant-als";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,14 +18,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   let id: string;
   try { id = assertValidId(rawId, "drop"); }
   catch { return NextResponse.json({ error: "Invalid drop id" }, { status: 400 }); }
-  const drop = await readDrop(id);
-  if (!drop) return NextResponse.json({ error: "Drop not found" }, { status: 404 });
-  if (drop.assets.filter((a) => a.kind === "source_photo").length === 0) {
-    return NextResponse.json(
-      { error: "Upload at least one source photo before generating" },
-      { status: 400 }
-    );
-  }
 
   let body: {
     lifestyleScenarios?: string[];
@@ -38,13 +32,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     body = {};
   }
 
-  try {
-    const result = await generateContentDrop(id, body);
-    return NextResponse.json({ drop: result });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Generation failed" },
-      { status: 500 }
-    );
-  }
+  const ctx = await resolveTenantContext(request);
+  return runWithTenant(ctx.tenantId, async () => {
+    const drop = await readDrop(id);
+    if (!drop) return NextResponse.json({ error: "Drop not found" }, { status: 404 });
+    if (drop.assets.filter((a) => a.kind === "source_photo").length === 0) {
+      return NextResponse.json(
+        { error: "Upload at least one source photo before generating" },
+        { status: 400 }
+      );
+    }
+    try {
+      const result = await generateContentDrop(id, body);
+      return NextResponse.json({ drop: result });
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Generation failed" },
+        { status: 500 }
+      );
+    }
+  });
 }
