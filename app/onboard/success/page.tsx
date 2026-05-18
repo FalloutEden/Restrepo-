@@ -157,6 +157,14 @@ function SuccessInner() {
 
         <ChecklistCard
           step={1}
+          title="Get your custom domain"
+          body="Your store needs a real web address. We'll suggest names and open Namecheap so you can buy one — takes about two minutes."
+          ctaLabel="Pick a domain →"
+          ctaHref="/setup/domain"
+        />
+
+        <ChecklistCard
+          step={2}
           title="Connect your Shopify store"
           body="Paste your Shopify admin API token and store domain. We encrypt them — your operator reads them only when it needs to."
           ctaLabel="Connect Shopify →"
@@ -164,7 +172,7 @@ function SuccessInner() {
         />
 
         <ChecklistCard
-          step={2}
+          step={3}
           title="Drop in your first product photos"
           body="The content studio turns your photos into lifestyle images, short videos, and platform-native captions. You'll review everything before it ships."
           ctaLabel="Open content studio →"
@@ -172,7 +180,7 @@ function SuccessInner() {
         />
 
         <ChecklistCard
-          step={3}
+          step={4}
           title="Talk to your operator"
           body={
             stash.firstTask

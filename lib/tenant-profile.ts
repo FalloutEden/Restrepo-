@@ -44,6 +44,12 @@ export type TenantBrandProfile = {
   fulfillment?: FulfillmentLane;
   shopifyStoreDomain?: string; // e.g. "pawvault.myshopify.com"
 
+  // Custom domain the merchant registered (Namecheap or similar). Captured
+  // by the /setup/domain deep-link flow. Distinct from shopifyStoreDomain —
+  // this is the consumer-facing brand URL (e.g. "yourstore.com"). DNS gets
+  // pointed at Shopify later as part of the launch flow.
+  domain?: string;
+
   // What the merchant has already done (Tier 1 footwork) — short notes
   // so the operator can avoid asking them to do it again.
   tierOneNotes?: string;
