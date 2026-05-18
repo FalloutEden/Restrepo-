@@ -1,43 +1,59 @@
 import { NextResponse } from "next/server";
 
 import { resolveTenantContext } from "@/lib/tenant-context";
-import { setTenantSecret, type EncryptedSecrets } from "@/lib/tenancy";
+import { getTenant, setTenantSecret, type EncryptedSecrets } from "@/lib/tenancy";
 import { audit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// POST /api/tenant/credentials — tenant pastes their third-party API tokens,
-// we encrypt them into the tenant vault via lib/tenancy.setTenantSecret.
-//
+// /api/tenant/credentials — tenant manages their own third-party API tokens.
 // This is the ONLY surface tenants use to enter credentials. They never see
 // .env.local, Vercel CLI, or any infrastructure. Form field → encrypted row
 // in Postgres → operator tools read back via tenantContext.requireSecret.
 //
-// Body shape (every field optional — tenants can stage their setup):
-//   {
-//     shopifyAdminToken?:   string  // shpat_…
-//     shopifyStoreDomain?:  string  // your-store.myshopify.com
-//     shopifyWebhookSecret?: string // shpss_…
-//     printfulApiKey?:      string
-//     printfulStoreId?:     string
-//   }
+// GET — returns which credentials are configured (presence only, never the
+//       values). Used by /settings to render "✓ Configured" indicators.
+// POST — writes one or more credentials to the encrypted vault. Each field
+//        is shape-validated before any write happens. Empty string = clear.
 //
-// Auth: tenant bearer required. Admin callers are rejected — they manage
-// their own credentials via .env / Vercel env vars, not through this surface.
+// Auth: tenant bearer required for both verbs. Admin callers are rejected —
+// they manage their own credentials via .env / Vercel env vars.
 
 const ALLOWED_KEYS: Array<keyof EncryptedSecrets> = [
   "shopifyAdminToken",
   "shopifyStoreDomain",
   "shopifyWebhookSecret",
   "printfulApiKey",
-  "printfulStoreId"
+  "printfulStoreId",
+  "klaviyoApiKey",
+  "anthropicApiKey",
+  "openaiApiKey"
 ];
 
 type RequestBody = Partial<Record<(typeof ALLOWED_KEYS)[number], string>>;
 
 function ipFromRequest(req: Request): string | undefined {
   return req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? undefined;
+}
+
+export async function GET(request: Request) {
+  const ctx = await resolveTenantContext(request);
+  if (ctx.isFounder || !ctx.tenant) {
+    return NextResponse.json(
+      { error: "Tenant bearer required." },
+      { status: 401 }
+    );
+  }
+  // Re-read the tenant so the response reflects whatever the latest write
+  // landed in Postgres. ctx.tenant could be slightly stale if a prior POST
+  // happened in the same request lifecycle.
+  const tenant = await getTenant(ctx.tenant.id);
+  const configured: Record<string, boolean> = {};
+  for (const key of ALLOWED_KEYS) {
+    configured[key] = Boolean(tenant?.secrets?.[key]);
+  }
+  return NextResponse.json({ tenantId: ctx.tenant.id, configured });
 }
 
 export async function POST(request: Request) {
@@ -72,8 +88,8 @@ export async function POST(request: Request) {
       cleaned[key] = "";
       continue;
     }
-    // Lightweight shape checks — better to reject obvious mispastes here
-    // than to fail at the Shopify/Printful API later with an opaque 401.
+    // Lightweight shape checks — better to reject obvious mispastes here than
+    // to fail at the third-party API later with an opaque 401.
     if (key === "shopifyAdminToken" && !/^shpat_[A-Za-z0-9]{20,}$/.test(trimmed)) {
       return NextResponse.json(
         { error: "shopifyAdminToken must look like shpat_… (admin API access token)" },
@@ -94,6 +110,24 @@ export async function POST(request: Request) {
     if (key === "shopifyWebhookSecret" && !/^shpss_[A-Za-z0-9]{16,}$/.test(trimmed)) {
       return NextResponse.json(
         { error: "shopifyWebhookSecret must look like shpss_… (Shopify webhook signing secret)" },
+        { status: 400 }
+      );
+    }
+    if (key === "anthropicApiKey" && !/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(trimmed)) {
+      return NextResponse.json(
+        { error: "anthropicApiKey must look like sk-ant-… (Anthropic console API key)" },
+        { status: 400 }
+      );
+    }
+    if (key === "openaiApiKey" && !/^sk-[A-Za-z0-9_-]{20,}$/.test(trimmed)) {
+      return NextResponse.json(
+        { error: "openaiApiKey must look like sk-… (OpenAI platform API key)" },
+        { status: 400 }
+      );
+    }
+    if (key === "klaviyoApiKey" && !/^pk_[A-Za-z0-9]{16,}$/.test(trimmed)) {
+      return NextResponse.json(
+        { error: "klaviyoApiKey must look like pk_… (Klaviyo private API key)" },
         { status: 400 }
       );
     }

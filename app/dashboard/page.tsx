@@ -98,6 +98,7 @@ export default async function DashboardPage() {
             <Link href="/pipeline" style={navLink}>Pipeline →</Link>
             <Link href="/launch" style={navLink}>Launch readiness →</Link>
             <Link href="/admin/incidents" style={navLink}>Incidents →</Link>
+            <Link href="/settings" style={navLink}>Settings →</Link>
           </div>
         </nav>
         <header className="operator-header">
