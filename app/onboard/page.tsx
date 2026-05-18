@@ -45,31 +45,36 @@ function slugify(s: string): string {
     .slice(0, 40);
 }
 
+// Copy is intentionally at a ~4th-grade reading level — short sentences,
+// simple words, no jargon. The wizard is the first thing every new tenant
+// sees; it needs to feel like a friendly checklist, not a corporate intake
+// form. Field shape is unchanged — the operator system prompt still gets
+// the same data it relied on before.
 const STEP_TITLES: Record<Step, { eyebrow: string; title: string; sub: string }> = {
   1: {
-    eyebrow: "STEP 1 OF 5",
-    title: "Brand basics",
-    sub: "Name the brand and pick a URL handle."
+    eyebrow: "STEP 1 OF 5 · LET'S START",
+    title: "Name your store",
+    sub: "Pick a name. Don't worry if it's not perfect — you can change it later."
   },
   2: {
-    eyebrow: "STEP 2 OF 5",
-    title: "Voice & feel",
-    sub: "How should the agent write for you? Optional — sharper briefs make sharper answers."
+    eyebrow: "STEP 2 OF 5 · THE LOOK",
+    title: "How should it feel?",
+    sub: "Tell us the vibe. If you're not sure, skip it — we can guess for you."
   },
   3: {
-    eyebrow: "STEP 3 OF 5",
-    title: "Audience & fulfillment",
-    sub: "Who buys this, and how do orders ship? The operator uses this in every product page and email it writes."
+    eyebrow: "STEP 3 OF 5 · YOUR PEOPLE",
+    title: "Who's it for?",
+    sub: "Tell us who's going to buy your stuff. One sentence is plenty."
   },
   4: {
-    eyebrow: "STEP 4 OF 5",
-    title: "First task",
-    sub: "What do you want the operator to do FIRST? It will start on this the moment you land on your dashboard."
+    eyebrow: "STEP 4 OF 5 · FIRST JOB",
+    title: "What should we do first?",
+    sub: "Your operator is ready to work. What's the first thing you want done?"
   },
   5: {
-    eyebrow: "STEP 5 OF 5",
-    title: "Review & launch",
-    sub: "Confirm everything, then we'll send you to Stripe."
+    eyebrow: "STEP 5 OF 5 · ALL SET",
+    title: "Last look — does this look right?",
+    sub: "Check your answers. If they look good, we'll set up your store."
   }
 };
 
@@ -214,6 +219,40 @@ export default function OnboardPage() {
       }}
     >
       <div style={{ maxWidth: 540, margin: "0 auto" }}>
+        {/* Progress bar — 5 chunky pills, the current step glows gold, prior
+            steps are solid. Reads at a glance: "I'm 2 of 5 done." */}
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            marginBottom: 28,
+            alignItems: "stretch"
+          }}
+        >
+          {[1, 2, 3, 4, 5].map((n) => {
+            const done = n < step;
+            const current = n === step;
+            return (
+              <div
+                key={n}
+                style={{
+                  flex: 1,
+                  height: 8,
+                  borderRadius: 999,
+                  background: done
+                    ? "#0F0E0C"
+                    : current
+                    ? "#A67843"
+                    : "#ebebeb",
+                  transition: "background 200ms ease",
+                  boxShadow: current ? "0 0 0 3px rgba(166, 120, 67, 0.15)" : "none"
+                }}
+                aria-label={`Step ${n}${done ? " complete" : current ? " in progress" : ""}`}
+              />
+            );
+          })}
+        </div>
+
         <p style={{ fontSize: 12, letterSpacing: "0.15em", color: "#A67843", marginBottom: 8, fontWeight: 600 }}>
           {stepCopy.eyebrow}
         </p>
@@ -250,10 +289,10 @@ export default function OnboardPage() {
         >
           {step === 1 && (
             <>
-              <label style={labelStyle}>Brand name</label>
+              <label style={labelStyle}>What's your store called?</label>
               <input
                 type="text"
-                placeholder="e.g. Stone & Steel Co"
+                placeholder="like Sunny's Shirts, or Stone & Steel"
                 value={form.brandName}
                 onChange={(e) => {
                   setField("brandName", e.target.value);
@@ -262,20 +301,20 @@ export default function OnboardPage() {
                 style={baseInput}
               />
 
-              <label style={labelStyle}>Brand handle / URL slug</label>
+              <label style={labelStyle}>Your store's nickname</label>
               <input
                 type="text"
-                placeholder="stoneandsteelco"
+                placeholder="like sunnyshirts"
                 value={form.brandSlug}
                 onChange={(e) => setField("brandSlug", e.target.value)}
                 style={baseInput}
               />
               <p style={{ fontSize: 12, color: "#888", marginTop: -8, marginBottom: 20 }}>
-                Lowercase letters, numbers, dashes. We&apos;ll use{" "}
+                This goes in your web link. Use small letters, numbers, and dashes. No spaces. We&apos;ll use{" "}
                 <code style={{ background: "#f4f1ec", padding: "2px 6px", borderRadius: 4 }}>
-                  {slugify(form.brandSlug || form.brandName) || "<your-slug>"}
-                </code>{" "}
-                as your operator handle.
+                  {slugify(form.brandSlug || form.brandName) || "<your-nickname>"}
+                </code>
+                .
               </p>
 
               <label style={labelStyle}>Your email</label>
@@ -291,22 +330,22 @@ export default function OnboardPage() {
 
           {step === 2 && (
             <>
-              <label style={labelStyle}>Vibe (3 words, optional)</label>
+              <label style={labelStyle}>Pick 3 words that describe your store</label>
               <input
                 type="text"
-                placeholder="dark, premium, masculine — or minimal, bright, playful"
+                placeholder="like fun, simple, bright — or dark, bold, premium"
                 value={form.voiceVibe}
                 onChange={(e) => setField("voiceVibe", e.target.value)}
                 style={baseInput}
               />
               <p style={{ fontSize: 12, color: "#888", marginTop: -8, marginBottom: 20 }}>
-                Guides the agent&apos;s tone in product copy and email flows. Skip if unsure.
+                This helps your operator write product pages and emails in your style. Skip if you&apos;re not sure.
               </p>
 
-              <label style={labelStyle}>Tagline (optional)</label>
+              <label style={labelStyle}>A short sentence about your store (skip if not ready)</label>
               <input
                 type="text"
-                placeholder="e.g. Built to be Kept"
+                placeholder="like 'Built to last forever' or 'Coffee for sleepy people'"
                 value={form.tagline}
                 onChange={(e) => setField("tagline", e.target.value)}
                 style={baseInput}
@@ -316,18 +355,18 @@ export default function OnboardPage() {
 
           {step === 3 && (
             <>
-              <label style={labelStyle}>Who buys this?</label>
+              <label style={labelStyle}>Who's going to buy your stuff?</label>
               <textarea
-                placeholder="e.g. design-conscious dog owners 28-50 who buy premium gear; or, builders and tradespeople in their 30s-50s who hate cheap merch"
+                placeholder="like 'dog owners who like nice things' — or 'people who fix old cars' — one sentence is plenty"
                 value={form.audience}
                 onChange={(e) => setField("audience", e.target.value)}
                 style={textareaInput}
               />
               <p style={{ fontSize: 12, color: "#888", marginTop: -8, marginBottom: 24 }}>
-                One short sentence. The operator uses this verbatim in product copy and ad targeting.
+                Just tell us who they are. The operator uses this to write product pages and ads.
               </p>
 
-              <label style={labelStyle}>Fulfillment</label>
+              <label style={labelStyle}>Who ships the stuff to customers?</label>
               <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
                 <div
                   role="button"
@@ -341,9 +380,9 @@ export default function OnboardPage() {
                   }}
                   style={radioCard(form.fulfillment === "printful")}
                 >
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Printful</div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Printful does it</div>
                   <div style={{ fontSize: 12, color: "#666" }}>
-                    Print-on-demand. Apparel, posters, accessories. Auto-ships from Printful warehouses.
+                    They print and ship for you. Just shirts, hats, posters, mugs. You never touch a box.
                   </div>
                 </div>
                 <div
@@ -358,29 +397,29 @@ export default function OnboardPage() {
                   }}
                   style={radioCard(form.fulfillment === "manual")}
                 >
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Manual</div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>I ship it myself</div>
                   <div style={{ fontSize: 12, color: "#666" }}>
-                    You ship orders yourself or use a non-integrated supplier. Operator skips fulfillment automation.
+                    You handle shipping. Or someone else who isn&apos;t Printful.
                   </div>
                 </div>
               </div>
               <p style={{ fontSize: 12, color: "#888", marginTop: 8, marginBottom: 0 }}>
-                You can connect Printful credentials later from your dashboard. Most merchants start here.
+                Most people pick the first one. You can hook up your Printful account later.
               </p>
             </>
           )}
 
           {step === 4 && (
             <>
-              <label style={labelStyle}>First task for the operator</label>
+              <label style={labelStyle}>What should your operator do first?</label>
               <textarea
-                placeholder="e.g. Build me 8 premium black t-shirt drafts ready for Shopify; or, audit my Shopify store and tell me the 3 highest-impact things to fix this week"
+                placeholder="like 'make me 8 cool black t-shirt designs for my store' — or 'look at my store and tell me what to fix this week'"
                 value={form.firstTask}
                 onChange={(e) => setField("firstTask", e.target.value)}
                 style={textareaInput}
               />
               <p style={{ fontSize: 12, color: "#888", marginTop: -8, marginBottom: 8 }}>
-                One concrete ask. The operator picks this up the moment you land on your dashboard — no idle screen.
+                Pick one thing. Your operator starts on it the second you log in. You can change your mind any time.
               </p>
               <div
                 style={{
@@ -394,13 +433,13 @@ export default function OnboardPage() {
                 }}
               >
                 <div style={{ fontWeight: 700, marginBottom: 6, color: "#0F0E0C" }}>
-                  Examples that work well
+                  Ideas you can copy
                 </div>
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
-                  <li>Build 6-10 product drafts in our brand voice and put them in my Shopify drafts.</li>
-                  <li>Audit my current product pages and rewrite the weakest 3.</li>
-                  <li>Set up a Klaviyo welcome flow + abandoned cart sequence.</li>
-                  <li>Find 5 print-on-demand niches I&apos;m a good fit for and rank them.</li>
+                  <li>Make 6 to 10 product designs in my style and add them to my store.</li>
+                  <li>Look at my product pages and fix the 3 worst ones.</li>
+                  <li>Build me an email that welcomes new customers.</li>
+                  <li>Find 5 product ideas I&apos;d be good at and rank them.</li>
                 </ul>
               </div>
             </>
@@ -409,18 +448,18 @@ export default function OnboardPage() {
           {step === 5 && (
             <div>
               {[
-                ["Brand name", form.brandName],
-                ["Brand handle", slugify(form.brandSlug || form.brandName)],
-                ["Owner email", form.ownerEmail],
+                ["Store name", form.brandName],
+                ["Store nickname", slugify(form.brandSlug || form.brandName)],
+                ["Your email", form.ownerEmail],
                 [
                   "Vibe",
                   form.voiceVibe ||
-                    "(not provided — agent will use neutral premium defaults)"
+                    "(skipped — we'll pick a clean default)"
                 ],
-                ["Tagline", form.tagline || "(not provided)"],
-                ["Audience", form.audience],
-                ["Fulfillment", form.fulfillment === "printful" ? "Printful (POD)" : "Manual"],
-                ["First task", form.firstTask]
+                ["Short sentence", form.tagline || "(skipped)"],
+                ["Who buys it", form.audience],
+                ["Who ships it", form.fulfillment === "printful" ? "Printful does it" : "I ship it myself"],
+                ["First job", form.firstTask]
               ].map(([k, v]) => (
                 <div key={k} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: "1px solid #f0f0f0" }}>
                   <div style={{ fontSize: 11, color: "#888", letterSpacing: "0.06em", fontWeight: 600, textTransform: "uppercase" }}>
@@ -430,9 +469,8 @@ export default function OnboardPage() {
                 </div>
               ))}
               <p style={{ fontSize: 13, color: "#666", marginTop: 16 }}>
-                Next: Stripe checkout for $499 setup + $99/month. After payment, your Operator
-                activates with all of this context already loaded — it picks up your first task
-                the moment you land on your dashboard.
+                Next up: we&apos;ll send you to a safe payment page ($499 to start, then $99 a month).
+                After you pay, your store opens up with your operator already working on your first job.
               </p>
             </div>
           )}
@@ -470,7 +508,7 @@ export default function OnboardPage() {
             </button>
           ) : (
             <button onClick={submit} style={button} type="button" disabled={submitting}>
-              {submitting ? "Setting up…" : "Pay & launch →"}
+              {submitting ? "Setting up your store…" : "Set up my store →"}
             </button>
           )}
         </div>
