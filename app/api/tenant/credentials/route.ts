@@ -28,7 +28,8 @@ const ALLOWED_KEYS: Array<keyof EncryptedSecrets> = [
   "printfulStoreId",
   "klaviyoApiKey",
   "anthropicApiKey",
-  "openaiApiKey"
+  "openaiApiKey",
+  "stripeConnectAccountId"
 ];
 
 type RequestBody = Partial<Record<(typeof ALLOWED_KEYS)[number], string>>;
@@ -128,6 +129,12 @@ export async function POST(request: Request) {
     if (key === "klaviyoApiKey" && !/^pk_[A-Za-z0-9]{16,}$/.test(trimmed)) {
       return NextResponse.json(
         { error: "klaviyoApiKey must look like pk_… (Klaviyo private API key)" },
+        { status: 400 }
+      );
+    }
+    if (key === "stripeConnectAccountId" && !/^acct_[A-Za-z0-9]{14,}$/.test(trimmed)) {
+      return NextResponse.json(
+        { error: "stripeConnectAccountId must look like acct_… (Stripe connected account id)" },
         { status: 400 }
       );
     }

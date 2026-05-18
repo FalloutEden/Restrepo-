@@ -93,6 +93,12 @@ export type EncryptedSecrets = {
   // CJ Dropshipping
   cjApiKey?: string;
   cjEmail?: string;
+  // Stripe Connect — tenant's CONNECTED account id (acct_…). Not encrypted
+  // (it's an identifier, not a secret) but stored here alongside everything
+  // else for a single source of truth on per-tenant third-party state. The
+  // tenant uses this to accept payments under their own Stripe account; the
+  // founder's Stripe is the platform, the tenant's is the connected account.
+  stripeConnectAccountId?: string;
   // LLM provider keys — BYOK. When set, the tenant's spend flows through
   // their own Anthropic/OpenAI billing account, not the founder's. When
   // unset, requests from that tenant should error (not silently fall back
