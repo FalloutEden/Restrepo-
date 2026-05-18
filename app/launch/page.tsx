@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { headers, cookies } from "next/headers";
 
 import { getLaunchStatusForAllBrands, type LaunchCheck } from "@/lib/launch-status";
+import { TenantLaunchView } from "@/components/launch/TenantLaunchView";
 import "../operator.css";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +19,58 @@ const STATUS_BADGE: Record<LaunchCheck["status"], string> = {
   fail: "✗ FAIL"
 };
 
+// Same admin gate pattern as /dashboard + /pipeline. Tenants reach this page
+// and get TenantLaunchView (a client component that fetches /api/launch-status
+// with authedFetch). Founder gets the all-brands cockpit server-rendered.
+async function isAdmin(): Promise<boolean> {
+  if (process.env.NODE_ENV === "development") return true;
+  const expected = process.env.OPERATOR_AUTH_SECRET?.trim();
+  if (!expected) return false;
+  const cookieStore = await cookies();
+  const cookieVal = cookieStore.get("x-operator-auth")?.value?.trim();
+  if (cookieVal === expected) return true;
+  const h = await headers();
+  const auth = h.get("authorization") ?? "";
+  const bearer = auth.toLowerCase().startsWith("bearer ")
+    ? auth.slice("bearer ".length).trim()
+    : "";
+  return bearer === expected;
+}
+
 export default async function LaunchPage() {
+  const admin = await isAdmin();
+
+  if (!admin) {
+    return (
+      <div className="page-shell">
+        <nav
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+            padding: "12px 16px 0",
+            fontSize: 13
+          }}
+        >
+          <Link href="/dashboard" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none" }}>
+            ← Back to operator
+          </Link>
+          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>your store</span>
+        </nav>
+        <header className="operator-header">
+          <span className="eyebrow">Launch</span>
+          <h1 className="operator-title">Launch readiness</h1>
+          <p className="operator-sub">
+            Live readiness check on your store. We connect to Shopify with the token you paste
+            below, run a few checks, and tell you what&apos;s blocking launch in plain language.
+          </p>
+        </header>
+        <TenantLaunchView />
+      </div>
+    );
+  }
+
   const reports = await getLaunchStatusForAllBrands();
 
   return (

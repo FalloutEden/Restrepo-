@@ -1,13 +1,22 @@
 import "server-only";
 
-import { listConfiguredShopifyCredentials, resolveShopifyCredentials } from "@/lib/shopify-credentials";
+import { listConfiguredShopifyCredentials, resolveShopifyCredentials, type ShopifyCredentials } from "@/lib/shopify-credentials";
 import { listShopifyDrafts } from "@/lib/shopify-service";
+import type { TenantContext } from "@/lib/tenant-context";
 
-// Read-only health probe for everything that needs to be true before BV (or
-// any tenant) can flip the launch switch. Each check returns ok/warn/fail
-// and a human-readable hint. The dashboard renders these as a checklist;
-// the operator tool returns them so the agent can answer "are we ready
-// to launch?" with grounded data instead of guessing.
+// Read-only health probe for everything that needs to be true before a store
+// can flip the launch switch. Two audiences:
+//
+//   - FOUNDER (admin context, no tenantCtx OR tenantCtx.isFounder === true):
+//     Runs every check across every configured brand. Includes deployment-
+//     level checks (operator auth secret, required env vars, Printful
+//     auto-confirm posture) that are about the platform itself.
+//
+//   - TENANT (real merchant, tenantCtx.isFounder === false): Runs only the
+//     four checks that apply to THEIR store (Shopify connection, password
+//     gate, products, drafts). Skips the deployment checks — those are about
+//     infrastructure they don't own. Credential resolution reads from the
+//     encrypted tenant vault via credsFromTenantContext; no env-var fallback.
 
 export type CheckStatus = "ok" | "warn" | "fail";
 
@@ -32,9 +41,12 @@ function pickWorst(statuses: CheckStatus[]): CheckStatus {
   return "ok";
 }
 
-async function checkShopifyConnection(brand: string): Promise<LaunchCheck> {
+// ── Shopify-shaped check helpers ──────────────────────────────────────────
+// These take pre-resolved credentials so the same logic can serve founder
+// (env-var creds) and tenant (vault creds) without re-resolving per check.
+
+async function shopifyConnectionCheck(creds: ShopifyCredentials, tenantCtx?: TenantContext): Promise<LaunchCheck> {
   try {
-    const creds = resolveShopifyCredentials(brand);
     const url = `https://${creds.storeDomain}/admin/api/${creds.apiVersion}/shop.json`;
     const r = await fetch(url, {
       headers: { "X-Shopify-Access-Token": creds.token, "Content-Type": "application/json" }
@@ -45,9 +57,11 @@ async function checkShopifyConnection(brand: string): Promise<LaunchCheck> {
         name: "Shopify admin token works",
         status: "fail",
         detail: `Shopify returned ${r.status}`,
-        fix: r.status === 401
-          ? "Token is invalid or revoked. Re-authorize the BV custom app and update SHOPIFY_BLACKVAULT_API_KEY."
-          : "Check store domain + API version in lib/shopify-credentials.ts."
+        fix: tenantCtx && !tenantCtx.isFounder
+          ? "Open Settings → Shopify and paste a fresh admin API token from your store's custom app."
+          : r.status === 401
+            ? "Token is invalid or revoked. Re-authorize the BV custom app and update SHOPIFY_BLACKVAULT_API_KEY."
+            : "Check store domain + API version in lib/shopify-credentials.ts."
       };
     }
     return {
@@ -62,14 +76,15 @@ async function checkShopifyConnection(brand: string): Promise<LaunchCheck> {
       name: "Shopify admin token works",
       status: "fail",
       detail: e instanceof Error ? e.message : "Unknown error",
-      fix: "Set SHOPIFY_BLACKVAULT_API_KEY and SHOPIFY_BLACKVAULT_STORE_DOMAIN in your env."
+      fix: tenantCtx && !tenantCtx.isFounder
+        ? "Connect your Shopify store from Settings to enable this check."
+        : "Set SHOPIFY_BLACKVAULT_API_KEY and SHOPIFY_BLACKVAULT_STORE_DOMAIN in your env."
     };
   }
 }
 
-async function checkPasswordProtection(brand: string): Promise<LaunchCheck> {
+async function passwordProtectionCheck(creds: ShopifyCredentials): Promise<LaunchCheck> {
   try {
-    const creds = resolveShopifyCredentials(brand);
     const r = await fetch(`https://${creds.storeDomain}/admin/api/${creds.apiVersion}/shop.json?fields=password_enabled`, {
       headers: { "X-Shopify-Access-Token": creds.token, "Content-Type": "application/json" }
     });
@@ -87,8 +102,8 @@ async function checkPasswordProtection(brand: string): Promise<LaunchCheck> {
         id: "password_protection",
         name: "Storefront reachable to customers",
         status: "fail",
-        detail: "Storefront is password-protected — customers see 'Welcome to the Vault' password gate, not the products.",
-        fix: "Open Shopify admin → Online Store → Preferences → Password protection → UNCHECK 'Restrict access to visitors with the password' → Save. Shopify deliberately walls this off from API; you have to flip it in the admin UI."
+        detail: "Storefront is password-protected — customers see a password gate, not products.",
+        fix: "Open Shopify admin → Online Store → Preferences → Password protection → UNCHECK 'Restrict access' → Save. Shopify walls this off from the API; flip it in the admin UI."
       };
     }
     return {
@@ -107,9 +122,8 @@ async function checkPasswordProtection(brand: string): Promise<LaunchCheck> {
   }
 }
 
-async function checkProductsActive(brand: string): Promise<LaunchCheck> {
+async function productsActiveCheck(creds: ShopifyCredentials): Promise<LaunchCheck> {
   try {
-    const creds = resolveShopifyCredentials(brand);
     const url = `https://${creds.storeDomain}/admin/api/${creds.apiVersion}/products/count.json?status=active`;
     const r = await fetch(url, {
       headers: { "X-Shopify-Access-Token": creds.token, "Content-Type": "application/json" }
@@ -129,7 +143,7 @@ async function checkProductsActive(brand: string): Promise<LaunchCheck> {
         name: "Active products on Online Store",
         status: "fail",
         detail: "No active products",
-        fix: "Run attach_all_to_online_store and publish_listing on each product, OR flip status=active in Shopify admin."
+        fix: "Ask the operator to build a few product drafts, then publish them — or flip status=active in Shopify admin."
       };
     }
     if (body.count < 5) {
@@ -157,7 +171,7 @@ async function checkProductsActive(brand: string): Promise<LaunchCheck> {
   }
 }
 
-async function checkUnreviewedDrafts(brand: string): Promise<LaunchCheck> {
+async function unreviewedDraftsCheck(brand: string): Promise<LaunchCheck> {
   try {
     const drafts = await listShopifyDrafts(50, brand);
     if (drafts.length === 0) {
@@ -173,7 +187,7 @@ async function checkUnreviewedDrafts(brand: string): Promise<LaunchCheck> {
       name: "No unreviewed drafts blocking launch",
       status: "warn",
       detail: `${drafts.length} drafts pending — they won't appear on the storefront until published.`,
-      fix: "Run scripts/store-cleanup.ts (P=publish, D=delete) or review them in Shopify admin."
+      fix: "Ask the operator to publish or delete the drafts, or review them in Shopify admin."
     };
   } catch (e) {
     return {
@@ -185,7 +199,11 @@ async function checkUnreviewedDrafts(brand: string): Promise<LaunchCheck> {
   }
 }
 
-function checkWebhookSecret(): LaunchCheck {
+// ── Founder-only deployment checks ────────────────────────────────────────
+// These probe the SaaS platform itself, not any particular store. Tenants
+// don't own the deployment, so they never run.
+
+function webhookSecretCheck(): LaunchCheck {
   const has =
     Boolean(process.env.SHOPIFY_BLACKVAULT_WEBHOOK_SECRET?.trim()) ||
     Boolean(process.env.SHOPIFY_WEBHOOK_SECRET?.trim());
@@ -198,12 +216,10 @@ function checkWebhookSecret(): LaunchCheck {
   };
 }
 
-async function checkOperatorAuthSecret(): Promise<LaunchCheck> {
-  const onVercel = Boolean(process.env.VERCEL);
+async function operatorAuthSecretCheck(): Promise<LaunchCheck> {
+  const onVercel = Boolean(process.env.VERCEL) && process.env.NODE_ENV === "production";
   const localHas = Boolean(process.env.OPERATOR_AUTH_SECRET?.trim());
 
-  // When running on Vercel itself, just read the local env (which is the
-  // Vercel runtime env).
   if (onVercel) {
     return {
       id: "operator_auth_secret",
@@ -216,9 +232,6 @@ async function checkOperatorAuthSecret(): Promise<LaunchCheck> {
     };
   }
 
-  // Running locally — the local env-var presence doesn't reflect production.
-  // Probe the deployed surface to determine the real state. /api/operator/state
-  // returns 401 when the secret is set, 503 when unset (per middleware.ts).
   try {
     const r = await fetch("https://restrepo.vercel.app/api/operator/state", {
       method: "GET",
@@ -257,7 +270,7 @@ async function checkOperatorAuthSecret(): Promise<LaunchCheck> {
   }
 }
 
-function checkRequiredEnvVars(): LaunchCheck {
+function requiredEnvVarsCheck(): LaunchCheck {
   const required = [
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
@@ -284,7 +297,7 @@ function checkRequiredEnvVars(): LaunchCheck {
   };
 }
 
-function checkPrintfulAutoConfirm(): LaunchCheck {
+function printfulAutoConfirmCheck(): LaunchCheck {
   const value = process.env.PRINTFUL_AUTO_CONFIRM?.trim().toLowerCase();
   const isOn = value === "true" || value === "1";
   return {
@@ -300,16 +313,40 @@ function checkPrintfulAutoConfirm(): LaunchCheck {
   };
 }
 
+// ── Public API ────────────────────────────────────────────────────────────
+
+/** Founder mode. Brand-keyed, env-var-credentialed, runs every check. */
 export async function getLaunchStatus(brand: string): Promise<LaunchStatusReport> {
+  let creds: ShopifyCredentials;
+  try {
+    creds = resolveShopifyCredentials(brand);
+  } catch (e) {
+    // No creds at all — return a single-check fail report rather than throwing.
+    return {
+      brand,
+      generatedAt: new Date().toISOString(),
+      overall: "fail",
+      checks: [
+        {
+          id: "shopify_connection",
+          name: "Shopify admin token works",
+          status: "fail",
+          detail: e instanceof Error ? e.message : "Unknown error",
+          fix: "Set SHOPIFY_BLACKVAULT_API_KEY and SHOPIFY_BLACKVAULT_STORE_DOMAIN in your env."
+        }
+      ]
+    };
+  }
+
   const checks = await Promise.all([
-    checkShopifyConnection(brand),
-    checkPasswordProtection(brand),
-    checkProductsActive(brand),
-    checkUnreviewedDrafts(brand),
-    checkOperatorAuthSecret()
+    shopifyConnectionCheck(creds),
+    passwordProtectionCheck(creds),
+    productsActiveCheck(creds),
+    unreviewedDraftsCheck(brand),
+    operatorAuthSecretCheck()
   ]);
-  // Sync checks
-  checks.push(checkWebhookSecret(), checkRequiredEnvVars(), checkPrintfulAutoConfirm());
+  checks.push(webhookSecretCheck(), requiredEnvVarsCheck(), printfulAutoConfirmCheck());
+
   return {
     brand,
     generatedAt: new Date().toISOString(),
@@ -321,4 +358,51 @@ export async function getLaunchStatus(brand: string): Promise<LaunchStatusReport
 export async function getLaunchStatusForAllBrands(): Promise<LaunchStatusReport[]> {
   const all = listConfiguredShopifyCredentials();
   return Promise.all(all.map((c) => getLaunchStatus(c.brandSlug)));
+}
+
+/** Tenant mode. Reads creds from the tenant's encrypted vault, runs only the
+ *  4 store-level checks (Shopify connection, password gate, products, drafts).
+ *  Skips deployment-infrastructure checks — those are not the tenant's concern.
+ *
+ *  If the tenant hasn't connected their Shopify, returns a single-check fail
+ *  report with a clear "open Settings → connect Shopify" fix string. The page
+ *  uses that signal to render the credential form. */
+export async function getTenantLaunchStatus(tenantCtx: TenantContext): Promise<LaunchStatusReport> {
+  if (tenantCtx.isFounder || !tenantCtx.tenant) {
+    throw new Error("getTenantLaunchStatus called without a real tenant context");
+  }
+  const brand = tenantCtx.tenant.brandSlug;
+  let creds: ShopifyCredentials;
+  try {
+    creds = resolveShopifyCredentials(brand, tenantCtx);
+  } catch (e) {
+    return {
+      brand,
+      generatedAt: new Date().toISOString(),
+      overall: "fail",
+      checks: [
+        {
+          id: "shopify_connection",
+          name: "Shopify admin token works",
+          status: "fail",
+          detail: e instanceof Error ? e.message : "Shopify not connected",
+          fix: "Connect your Shopify store from Settings to start the readiness checks."
+        }
+      ]
+    };
+  }
+
+  const checks = await Promise.all([
+    shopifyConnectionCheck(creds, tenantCtx),
+    passwordProtectionCheck(creds),
+    productsActiveCheck(creds),
+    unreviewedDraftsCheck(brand)
+  ]);
+
+  return {
+    brand,
+    generatedAt: new Date().toISOString(),
+    overall: pickWorst(checks.map((c) => c.status)),
+    checks
+  };
 }

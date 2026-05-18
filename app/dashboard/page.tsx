@@ -87,18 +87,17 @@ export default async function DashboardPage() {
           </Link>
           <div style={{ display: "flex", gap: 8 }}>
             {/* Tenants get the full operator surface (BYOK-scoped, session-isolated
-                per project_tenant_full_surface_2026_05_14). Content studio,
-                Incidents, and Pipeline are tenant-aware: content-studio scopes
-                drops via lib/tenant-als, incidents API filters to events touching
-                the tenant's id, pipeline AgentDashboard hides Data Catalogue + the
-                Settings Advanced block when isAdmin=false. /launch is still
-                founder-only inside (Phase C / BYOK service-lib) so stays gated. */}
+                per project_tenant_full_surface_2026_05_14). All four routes are
+                tenant-aware:
+                  - /content-studio scopes drops via lib/tenant-als
+                  - /pipeline AgentDashboard hides Data Catalogue + Settings Advanced
+                  - /admin/incidents filters audit feed to actor/target === tenant.id
+                  - /launch renders TenantLaunchView (creds form + store-only checks)
+                                                                                  */}
             <Link href="/content-studio" style={navLink}>Content studio →</Link>
             <Link href="/pipeline" style={navLink}>Pipeline →</Link>
+            <Link href="/launch" style={navLink}>Launch readiness →</Link>
             <Link href="/admin/incidents" style={navLink}>Incidents →</Link>
-            {admin && (
-              <Link href="/launch" style={navLink}>Launch readiness →</Link>
-            )}
           </div>
         </nav>
         <header className="operator-header">

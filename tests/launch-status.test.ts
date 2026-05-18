@@ -106,8 +106,15 @@ test("getLaunchStatus reports webhook secret as ok when env is set", async () =>
 
 test("operator_auth_secret check is fail on Vercel without secret", async () => {
   const prevVercel = process.env.VERCEL;
+  const prevNodeEnv = process.env.NODE_ENV;
   const prevSecret = process.env.OPERATOR_AUTH_SECRET;
+  // Both VERCEL=1 AND NODE_ENV=production are required to simulate the
+  // production Vercel runtime. VERCEL=1 alone also fires when .env.local
+  // was pulled from prod to a dev box, so launch-status / middleware /
+  // tenant-context / audit all gate on the pair to avoid that false
+  // positive.
   process.env.VERCEL = "1";
+  process.env.NODE_ENV = "production";
   delete process.env.OPERATOR_AUTH_SECRET;
   const restore = installMockFetch([
     { url: "/shop.json", status: 200, body: { shop: {} } },
@@ -123,6 +130,8 @@ test("operator_auth_secret check is fail on Vercel without secret", async () => 
   } finally {
     if (prevVercel === undefined) delete process.env.VERCEL;
     else process.env.VERCEL = prevVercel;
+    if (prevNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = prevNodeEnv;
     if (prevSecret !== undefined) process.env.OPERATOR_AUTH_SECRET = prevSecret;
     restore();
   }
