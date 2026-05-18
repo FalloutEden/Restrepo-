@@ -3,9 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-// /admin/incidents — founder-facing list of recent security + ops events
-// Pulls /api/admin/incidents every 30s. Light SaaS theme to match dashboard.
-// Requires admin auth (cookie set via /admin/login).
+import { authedFetch } from "@/lib/client-auth";
+
+// /admin/incidents — recent security + ops events. Two views:
+//
+//   - ADMIN (founder, cookie or admin bearer): every incident, every tenant.
+//     Columns: time, action, actor, target, IP.
+//   - TENANT (btk_ bearer in localStorage): incidents where the tenant is
+//     actor OR target. IP column hidden (tenants only ever see their own IP,
+//     and the actor column is always themselves so we hide that too).
+//
+// API resolves the viewer kind and returns it as `viewerKind` so the page
+// can switch labels + columns without a second roundtrip.
 
 type Incident = {
   ts: string;
@@ -15,6 +24,13 @@ type Incident = {
   ip?: string;
   ok?: boolean;
   detail?: Record<string, unknown>;
+};
+
+type IncidentsResponse = {
+  incidents: Incident[];
+  total: number;
+  fetchedAt: string;
+  viewerKind: "admin" | "tenant";
 };
 
 const ACTION_STYLES: Record<string, { color: string; label: string }> = {
@@ -49,21 +65,21 @@ function fmtTime(ts: string): string {
 }
 
 export default function IncidentsPage() {
-  const [data, setData] = useState<{ incidents: Incident[]; total: number; fetchedAt?: string } | null>(null);
+  const [data, setData] = useState<IncidentsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
     try {
-      const r = await fetch("/api/admin/incidents?limit=200", { cache: "no-store" });
+      const r = await authedFetch("/api/admin/incidents?limit=200", { cache: "no-store" });
       if (r.status === 401) {
-        setError("Not authenticated. Visit /admin/login first.");
+        setError("Not authenticated. Sign in to view your incidents.");
         return;
       }
       if (!r.ok) {
         setError(`Error ${r.status}`);
         return;
       }
-      const d = (await r.json()) as { incidents: Incident[]; total: number; fetchedAt: string };
+      const d = (await r.json()) as IncidentsResponse;
       setData(d);
       setError(null);
     } catch (e) {
@@ -99,13 +115,15 @@ export default function IncidentsPage() {
         </nav>
 
         <p style={{ fontSize: 12, letterSpacing: "0.18em", color: "#A67843", marginBottom: 8, fontWeight: 700 }}>
-          OWNER VIEW · INCIDENT LOG
+          {data?.viewerKind === "tenant" ? "YOUR ACCOUNT · INCIDENT LOG" : "OWNER VIEW · INCIDENT LOG"}
         </p>
         <h1 style={{ fontSize: 32, fontWeight: 800, margin: "0 0 12px", letterSpacing: "-0.01em" }}>
           Incidents
         </h1>
         <p style={{ fontSize: 15, color: "#666", marginBottom: 32 }}>
-          Security-relevant events and system actions across all tenants. Auto-refreshes every 30 seconds.
+          {data?.viewerKind === "tenant"
+            ? "Security-relevant events tied to your account — auth failures, subscription changes, token rotations. Auto-refreshes every 30 seconds."
+            : "Security-relevant events and system actions across all tenants. Auto-refreshes every 30 seconds."}
         </p>
 
         {error && (
@@ -150,15 +168,19 @@ export default function IncidentsPage() {
                   <th style={{ textAlign: "left", padding: "12px 16px", fontWeight: 700, color: "#666", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase" }}>
                     Action
                   </th>
-                  <th style={{ textAlign: "left", padding: "12px 16px", fontWeight: 700, color: "#666", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                    Actor
-                  </th>
+                  {data.viewerKind === "admin" && (
+                    <th style={{ textAlign: "left", padding: "12px 16px", fontWeight: 700, color: "#666", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                      Actor
+                    </th>
+                  )}
                   <th style={{ textAlign: "left", padding: "12px 16px", fontWeight: 700, color: "#666", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase" }}>
                     Target
                   </th>
-                  <th style={{ textAlign: "left", padding: "12px 16px", fontWeight: 700, color: "#666", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                    IP
-                  </th>
+                  {data.viewerKind === "admin" && (
+                    <th style={{ textAlign: "left", padding: "12px 16px", fontWeight: 700, color: "#666", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                      IP
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -190,13 +212,17 @@ export default function IncidentsPage() {
                           {meta.label}
                         </span>
                       </td>
-                      <td style={{ padding: "10px 16px", color: "#0F0E0C" }}>{inc.actor}</td>
+                      {data.viewerKind === "admin" && (
+                        <td style={{ padding: "10px 16px", color: "#0F0E0C" }}>{inc.actor}</td>
+                      )}
                       <td style={{ padding: "10px 16px", fontFamily: "'SF Mono', Menlo, monospace", color: "#555", fontSize: 12 }}>
                         {inc.target ?? "—"}
                       </td>
-                      <td style={{ padding: "10px 16px", fontFamily: "'SF Mono', Menlo, monospace", color: "#888", fontSize: 12 }}>
-                        {inc.ip ?? "—"}
-                      </td>
+                      {data.viewerKind === "admin" && (
+                        <td style={{ padding: "10px 16px", fontFamily: "'SF Mono', Menlo, monospace", color: "#888", fontSize: 12 }}>
+                          {inc.ip ?? "—"}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -206,8 +232,9 @@ export default function IncidentsPage() {
         )}
 
         <p style={{ marginTop: 24, fontSize: 12, color: "#888" }}>
-          Showing {data?.total ?? 0} incidents from the last 200 audit entries. For full audit
-          access, read <code style={{ background: "#fff", padding: "2px 6px", borderRadius: 4 }}>.openclaw/audit.jsonl</code>.
+          {data?.viewerKind === "tenant"
+            ? `Showing ${data?.total ?? 0} incidents from the last 200 events touching your account.`
+            : `Showing ${data?.total ?? 0} incidents from the last 200 audit entries. Full audit log: .openclaw/audit.jsonl.`}
         </p>
       </div>
     </main>

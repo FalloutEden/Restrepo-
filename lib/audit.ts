@@ -52,7 +52,10 @@ export type AuditEntry = {
 };
 
 const AUDIT_PATH = (() => {
-  const onVercel = Boolean(process.env.VERCEL);
+  // Only treat as Vercel-prod when this is genuinely the prod runtime — not
+  // when .env.local pulled VERCEL=1 from prod to the developer's box. Same
+  // poison pattern fixed in middleware.ts / tenant-context.ts / dashboard.
+  const onVercel = Boolean(process.env.VERCEL) && process.env.NODE_ENV === "production";
   const base = onVercel ? "/tmp/openclaw" : path.join(process.cwd(), ".openclaw");
   return path.join(base, "audit.jsonl");
 })();
