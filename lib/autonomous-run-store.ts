@@ -58,6 +58,10 @@ export type AutonomousRunEvent = {
 
 export type AutonomousRunRecord = {
   runId: string;
+  // Which tenant owns this run. FOUNDER_TENANT_ID for admin/founder runs;
+  // a tnt_* id for real merchants. Used by /api/autonomous-run/[runId] GET
+  // and the SSE stream to reject cross-tenant reads.
+  tenantId: string;
   status: AutonomousRunStatus;
   createdAt: string;
   updatedAt: string;
@@ -148,11 +152,16 @@ function appendEvent(record: AutonomousRunRecord, event: Omit<AutonomousRunEvent
   };
 }
 
-export async function createAutonomousRunRecord(request: AutonomousRunRequest, agentRuns: AgentRunTrace[]) {
+export async function createAutonomousRunRecord(
+  request: AutonomousRunRequest,
+  agentRuns: AgentRunTrace[],
+  tenantId: string
+) {
   const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const now = new Date().toISOString();
   const record: AutonomousRunRecord = {
     runId,
+    tenantId,
     status: "queued",
     createdAt: now,
     updatedAt: now,

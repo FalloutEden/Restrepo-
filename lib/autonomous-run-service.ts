@@ -5,6 +5,7 @@ import { AGENT_ROLE_DEFINITIONS, runAutonomousAgentRuntime, type AgentRunTrace }
 import { materializeProduct } from "@/lib/product-materialization";
 import { evaluateBrandFit } from "@/lib/brand-fit-filter";
 import { withSpendKind } from "@/lib/spend-tracker";
+import { runWithTenant } from "@/lib/tenant-als";
 import { buildRuntimeStartupReport } from "@/lib/runtime-health";
 import { loadLocalTrainingData } from "@/lib/local-training-data";
 import { estimateResearchExampleTokens } from "@/lib/token-batching";
@@ -97,14 +98,23 @@ function validateAutonomousRunRequest(body: AutonomousRunRequest) {
   };
 }
 
-export async function createAutonomousRun(body: AutonomousRunRequest) {
+export async function createAutonomousRun(body: AutonomousRunRequest, tenantId: string) {
   const validation = validateAutonomousRunRequest(body);
   if (validation.status !== 200) {
     return validation;
   }
 
-  const record = await createAutonomousRunRecord(body, createQueuedAgentRuns() as unknown as AgentRunTrace[]);
-  void executeAutonomousRun(record.runId, body, validation.goal, validation.startupCheck);
+  const record = await createAutonomousRunRecord(
+    body,
+    createQueuedAgentRuns() as unknown as AgentRunTrace[],
+    tenantId
+  );
+  // Wrap the fire-and-forget execution in runWithTenant so storage modules
+  // (content-studio, operator-state, audit, spend) all see the right tenant
+  // for any tool call made inside the pipeline.
+  void runWithTenant(tenantId, () =>
+    executeAutonomousRun(record.runId, body, validation.goal, validation.startupCheck)
+  );
 
   return {
     status: 202 as const,

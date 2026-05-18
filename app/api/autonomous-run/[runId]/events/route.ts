@@ -1,4 +1,5 @@
 import { getAutonomousRunEvents, getAutonomousRunRecord } from "@/lib/autonomous-run-store";
+import { resolveTenantContext } from "@/lib/tenant-context";
 
 export const runtime = "nodejs";
 // Keep the SSE connection alive for up to 5 minutes
@@ -13,9 +14,11 @@ export async function GET(request: Request, context: { params: Promise<{ runId: 
   const { searchParams } = new URL(request.url);
   let cursor = Number(searchParams.get("cursor") ?? "0");
 
-  // Verify run exists
+  // Verify run exists AND caller owns it. Cross-tenant reads return 404 to
+  // avoid disclosing runIds that exist for other tenants.
+  const ctx = await resolveTenantContext(request);
   const initial = await getAutonomousRunRecord(runId);
-  if (!initial) {
+  if (!initial || (!ctx.isFounder && initial.tenantId !== ctx.tenantId)) {
     return new Response(JSON.stringify({ error: `Run ${runId} not found` }), {
       status: 404,
       headers: { "Content-Type": "application/json" }

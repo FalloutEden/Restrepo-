@@ -50,11 +50,11 @@ export default async function PipelinePage() {
         </span>
       </nav>
       {/* AgentHero's "Hunt now" button kicks off /api/autonomous-run/start,
-          which still reads founder-scoped data + creds. Hide it from tenants
-          until that endpoint goes through the same tenant-context pass as
-          content-studio. Tenants still see AgentDashboard below — the agent
-          habitats + brain heartbeat are tenant-safe. */}
-      {admin && <AgentHero />}
+          which is tenant-aware: runs are tagged with the caller's tenantId
+          and the execution wrapped in runWithTenant so every storage call
+          inside the 11-agent pipeline routes to the right bucket. Reads of
+          /api/autonomous-run/[runId] + its SSE event stream check ownership. */}
+      <AgentHero />
       <AgentDashboard agents={mockAgents} isAdmin={admin} />
       <Memorial />
     </div>
