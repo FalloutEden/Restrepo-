@@ -53,19 +53,71 @@ body {
 }
 
 .app-background-media {
-  /* Dark gradient backdrop. Used to layer a background image here
-     (UmbrellaBackground.gif) but that asset was Capcom IP — removed
-     2026-05-14 as part of the BYOK customer-instance scrub. The
-     radial gradients alone give the same dark-cyberpunk mood. */
+  /* Dark gradient accent layer. Used to be an opaque #0a0b0d backdrop;
+     now sits ABOVE the cerebro layer at low opacity so the dots show
+     through. The red radial corners are kept as subtle accent — they
+     give the dark-cyberpunk warmth without smothering the cerebro
+     animation underneath. */
   background:
-    radial-gradient(circle at top left, rgba(179, 19, 27, 0.16), transparent 28%),
-    radial-gradient(circle at top right, rgba(90, 0, 0, 0.18), transparent 24%),
-    radial-gradient(ellipse at center, rgba(20, 22, 26, 0.4), rgba(8, 9, 11, 0.95) 70%),
-    #0a0b0d;
+    radial-gradient(circle at top left, rgba(179, 19, 27, 0.18), transparent 32%),
+    radial-gradient(circle at top right, rgba(90, 0, 0, 0.18), transparent 28%),
+    radial-gradient(ellipse at center, rgba(8, 9, 11, 0.55), rgba(4, 4, 5, 0.85) 80%);
 }
 
 .app-background-overlay {
-  background: rgba(6, 7, 9, 0.4);
+  /* Thinner vignette — was rgba(6, 7, 9, 0.4) which dimmed the cerebro
+     dots too much. 0.15 keeps the page feeling dark without burying the
+     animated background. */
+  background: rgba(6, 7, 9, 0.15);
+}
+
+/* ── Cerebro ambient background ─────────────────────────────────────────
+   Sits ABOVE .app-background (which was thinned so the dots show
+   through) and BELOW .app-shell content. Fixed across all pages via
+   app/layout.tsx. The dots pulse out-of-phase via the .cerebro-bg-dot
+   keyframes — a procedurally rendered echo of graphify's graph.html. */
+.cerebro-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0.7;
+  mix-blend-mode: screen;
+}
+
+.cerebro-bg-svg {
+  width: 120vmax;
+  height: 120vmax;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+@keyframes cerebro-bg-pulse {
+  0%, 100% {
+    opacity: 0.25;
+    filter: drop-shadow(0 0 1px currentColor);
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px currentColor) drop-shadow(0 0 10px currentColor);
+  }
+}
+
+.cerebro-bg-dot {
+  animation: cerebro-bg-pulse 6s ease-in-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+  will-change: opacity, filter;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cerebro-bg-dot {
+    animation: none;
+    opacity: 0.6;
+  }
 }
 
 .app-shell {
