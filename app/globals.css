@@ -2137,6 +2137,46 @@ a {
 
 /* ---- Agent grid ---- */
 
+.agent-hero-grid-toggle-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.agent-hero-grid-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: rgba(244, 241, 236, 0.6);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(166, 120, 67, 0.25);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 120ms ease;
+  font-family: inherit;
+}
+
+.agent-hero-grid-toggle:hover {
+  color: #A67843;
+  border-color: rgba(166, 120, 67, 0.5);
+  background: rgba(166, 120, 67, 0.08);
+}
+
+.agent-hero-grid-toggle-caret {
+  display: inline-block;
+  transition: transform 160ms ease;
+  font-size: 10px;
+}
+
+.agent-hero-grid-toggle-caret.is-collapsed {
+  transform: rotate(-90deg);
+}
+
 .agent-hero-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

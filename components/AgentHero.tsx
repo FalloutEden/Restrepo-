@@ -7,6 +7,11 @@ import { mockAgents } from "@/lib/mock-agents";
 import { AgentCard } from "@/components/AgentCard";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
 
+// localStorage key for the persistent agent-tile collapse preference.
+// The 11-tile grid is the visual centerpiece of /pipeline, but users
+// who only want the launcher + log can fold it away.
+const AGENTS_COLLAPSED_KEY = "agent-hero-collapsed";
+
 // Map pipeline role IDs → agent card IDs
 const ROLE_TO_AGENT_ID: Record<string, string> = {
   trend_research: "planner-01",
@@ -86,6 +91,7 @@ export function AgentHero() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [events, setEvents] = useState<PipelineEvent[]>([]);
+  const [agentsCollapsed, setAgentsCollapsed] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
   // Clean up EventSource on unmount
@@ -93,6 +99,27 @@ export function AgentHero() {
     return () => {
       esRef.current?.close();
     };
+  }, []);
+
+  // Hydrate the collapse preference from localStorage on mount. Kept in an
+  // effect (not lazy useState init) to stay SSR-safe — Next renders the
+  // initial expanded state on the server, then we sync on the client.
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(AGENTS_COLLAPSED_KEY) === "1") {
+        setAgentsCollapsed(true);
+      }
+    } catch {}
+  }, []);
+
+  const toggleAgentsCollapsed = useCallback(() => {
+    setAgentsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(AGENTS_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {}
+      return next;
+    });
   }, []);
 
   const updateAgentByRole = useCallback((roleId: string, patch: Partial<Agent>) => {
@@ -368,16 +395,34 @@ export function AgentHero() {
         )}
       </div>
 
-      {/* Agent Grid */}
-      <div className="agent-hero-grid">
-        {agents.map((agent) => (
-          <AgentCard
-            key={agent.id}
-            agent={agent}
-            onClick={() => setSelectedAgent(agent)}
-          />
-        ))}
+      {/* Agent Grid toggle — the 11 tiles are the visual anchor but some
+          users only want the launcher + log surface. Persisted preference
+          lives in localStorage (AGENTS_COLLAPSED_KEY). */}
+      <div className="agent-hero-grid-toggle-row">
+        <button
+          type="button"
+          className="agent-hero-grid-toggle"
+          onClick={toggleAgentsCollapsed}
+          aria-expanded={!agentsCollapsed}
+          aria-controls="agent-hero-grid"
+        >
+          <span className={`agent-hero-grid-toggle-caret ${agentsCollapsed ? "is-collapsed" : ""}`}>▾</span>
+          {agentsCollapsed ? `Show agents (${agents.length})` : "Hide agents"}
+        </button>
       </div>
+
+      {/* Agent Grid */}
+      {!agentsCollapsed && (
+        <div id="agent-hero-grid" className="agent-hero-grid">
+          {agents.map((agent) => (
+            <AgentCard
+              key={agent.id}
+              agent={agent}
+              onClick={() => setSelectedAgent(agent)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Detail modal */}
       {selectedAgent && (
