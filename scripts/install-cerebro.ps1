@@ -1,7 +1,7 @@
 ﻿# CEREBRO Bootstrap - Restrepo brand brain via Graphify
 #
-# Run from anywhere with elevated permissions:
-#   powershell -ExecutionPolicy Bypass -File C:\Agents\Restrepo-\scripts\install-cerebro.ps1
+# Run from the project root with elevated permissions:
+#   powershell -ExecutionPolicy Bypass -File .\scripts\install-cerebro.ps1
 #
 # Idempotent. Safe to re-run.
 
@@ -102,7 +102,7 @@ $next = @'
 1. RESTART your terminal so PATH picks up the graphify command.
 
 2. Build the initial graph - this takes 5 to 15 minutes for a typical repo:
-     cd C:\Agents\Restrepo-
+     cd <project-root>
      graphify .
 
    Output lands in graphify-out\:

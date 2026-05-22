@@ -12,10 +12,26 @@
 //   node --import tsx scripts/mirror-memory-to-obsidian.ts
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
-const SRC = "C:\\Users\\karli\\.claude\\projects\\c--Agents-Restrepo-\\memory";
-const VAULT = "C:\\Users\\karli\\Documents\\Restrepo-Vault\\Restrepo-_Vault";
+// Claude Code stores per-project memory under
+// ~/.claude/projects/<slugified-cwd>/memory — slug is the cwd with `:` and
+// path separators replaced with `-`. Compute from the live cwd so this
+// runs on any box.
+function projectMemoryDir(): string {
+  // Claude Code preserves case in its slug — keep the cwd as-is, only
+  // swap `:` and path separators for `-`. E.g. `C:\Users\test\Restrepo-`
+  // → `C--Users-test-Restrepo-`. On the live box this resolves to the
+  // exact folder under ~/.claude/projects/.
+  const slug = process.cwd().replace(/:/g, "-").replace(/[\\/]/g, "-");
+  return path.join(os.homedir(), ".claude", "projects", slug, "memory");
+}
+
+const SRC = process.env.RESTREPO_MEMORY_DIR ?? projectMemoryDir();
+const VAULT =
+  process.env.RESTREPO_VAULT ??
+  path.join(os.homedir(), "Documents", "Restrepo-Vault", "Restrepo-_Vault");
 
 // Folder buckets inside the vault
 const FOLDERS = {

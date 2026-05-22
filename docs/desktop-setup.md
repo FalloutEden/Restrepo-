@@ -21,12 +21,13 @@ own merged brain locally from the source markdown + code via
 # Auth gh CLI on this box
 gh auth login
 
-# Clone both repos to the expected paths
-gh repo clone FalloutEden/Restrepo- C:/Agents/Restrepo-
-gh repo clone FalloutEden/Restrepo-Vault "C:/Users/<your-windows-user>/Documents/Restrepo-Vault/Restrepo-_Vault"
+# Clone both repos. The project can live anywhere; the vault should sit
+# under your home dir so the scripts find it without env overrides.
+gh repo clone FalloutEden/Restrepo- "$HOME/Restrepo-"
+gh repo clone FalloutEden/Restrepo-Vault "$HOME/Documents/Restrepo-Vault/Restrepo-_Vault"
 
 # Install JS deps
-cd C:/Agents/Restrepo-
+cd "$HOME/Restrepo-"
 npm install
 
 # Install graphify (the CEREBRO graph builder) globally
@@ -49,8 +50,8 @@ npm run env:pull
 ```
 
 **Option B — manual copy.** Faster but stale the moment you rotate any
-key. Copy `C:/Agents/Restrepo-/.env.local` from the source machine via
-USB, OneDrive, or `scp`.
+key. Copy `.env.local` from the source machine's project root via USB,
+OneDrive, or `scp`.
 
 ## Build the merged brain
 
@@ -59,12 +60,12 @@ union of the project code graph + the Obsidian vault graph. The script
 does both rebuilds and the merge in one command.
 
 ```bash
-cd C:/Agents/Restrepo-
+cd "$HOME/Restrepo-"
 bash scripts/cerebro-update.sh
 ```
 
 If your vault clone lives somewhere other than the default path
-(`C:/Users/karli/Documents/Restrepo-Vault/Restrepo-_Vault`), override
+(`$HOME/Documents/Restrepo-Vault/Restrepo-_Vault`), override
 via env var:
 
 ```bash
@@ -95,7 +96,7 @@ dev (handled in `next.config.ts`, gated by `NODE_ENV === "development"`).
 ## Day-to-day
 
 ```bash
-cd C:/Agents/Restrepo-
+cd "$HOME/Restrepo-"
 git pull
 npm install  # always — cheap if no-op, painful when skipped after a dep bump
 bash scripts/cerebro-update.sh  # if you want the latest vault notes in the brain
@@ -115,7 +116,7 @@ git pull
 The vault is independent — same flow, just inside the vault dir:
 
 ```bash
-cd C:/Users/<you>/Documents/Restrepo-Vault/Restrepo-_Vault
+cd "$HOME/Documents/Restrepo-Vault/Restrepo-_Vault"
 git add <changed-notes>
 git commit -m "..."
 git push

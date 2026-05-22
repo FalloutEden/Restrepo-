@@ -12,7 +12,7 @@
 #   VAULT_PATH="/some/other/vault" scripts/cerebro-update.sh
 set -eu
 
-VAULT_PATH="${VAULT_PATH:-/c/Users/karli/Documents/Restrepo-Vault/Restrepo-_Vault}"
+VAULT_PATH="${VAULT_PATH:-$HOME/Documents/Restrepo-Vault/Restrepo-_Vault}"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT_GRAPH="$PROJECT_ROOT/graphify-out/graph.json"
 VAULT_GRAPH="$VAULT_PATH/graphify-out/graph.json"
