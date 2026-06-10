@@ -6,7 +6,14 @@ import type { TenantContext } from "@/lib/tenant-context";
 
 /** Which image generator to use. The operator offers the merchant the choice —
  *  we don't limit them to one. "openai" = gpt-image-1, "google" = Nano Banana 2
- *  (gemini-3.1-flash-image), which renders text far more reliably. */
+ *  (gemini-3.1-flash-image), which renders text far more reliably.
+ *
+ *  SAFETY ALLOWLIST: this union is the allowlist of permitted providers. Only
+ *  first-party APIs from major labs that enforce content moderation may be added
+ *  — never aggregators/proxies (kie.ai, grsai, Replicate-as-proxy), never
+ *  uncensored/jailbroken models, never a merchant-supplied endpoint. We are
+ *  liable for everything generated through the app; the provider's moderation is
+ *  the first line of defense. See knowledge/meta-rules/ai-provider-safety.md. */
 export type ImageProvider = "openai" | "google";
 
 export type GenerateImageOptions = {

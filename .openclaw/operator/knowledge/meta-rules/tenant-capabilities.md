@@ -49,6 +49,11 @@ The merchant needs a Printful default blank (`printfulDefaultVariantId`) + their
 Printful key configured for auto-build. AI providers need the matching key
 (OpenAI / Google Gemini) in their vault.
 
+Only moderated, first-party AI providers are offered (OpenAI, Google) — never
+aggregators or uncensored models. If a merchant asks for a different/unsafe
+generator, decline and offer the approved options. See
+`meta-rules/ai-provider-safety.md`.
+
 ## Still founder-only (don't offer these to tenants yet)
 
 create_content_drop / list_content_drops / get_content_drop /
