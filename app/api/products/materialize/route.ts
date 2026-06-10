@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { materializeProduct, type MaterializationInput } from "@/lib/product-materialization";
+import { resolveTenantContext } from "@/lib/tenant-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -11,8 +12,17 @@ type Body = {
 // Manual materialization — bypasses the multi-minute Claude research pipeline.
 // Use this to prove the Shopify draft + AI image path works, or to push a hand-curated
 // batch of listings without burning Claude tokens on the research stage.
+//
+// Founder-only: writes to a founder brand's Shopify store via the ?brand= slug
+// → founder credentials, and spends on image generation. A tenant materializes
+// to its own store through the tenant-scoped operator tools, never here.
 export async function POST(request: Request) {
   try {
+    const ctx = await resolveTenantContext(request);
+    if (!ctx.isFounder) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const body = (await request.json().catch(() => ({}))) as Body;
     const products = Array.isArray(body.products) ? body.products : [];
 

@@ -1,18 +1,23 @@
 import { NextResponse } from "next/server";
 
 import { decideProposal, logActivity, readProposal } from "@/lib/operator-state";
+import { resolveTenantContext } from "@/lib/tenant-context";
 
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const proposal = await readProposal(id);
+  // Scope the lookup to the caller's tenant. Reading by raw id without scoping
+  // let any tenant fetch (or, in PATCH, approve/reject) the founder's proposals.
+  const { tenantId } = await resolveTenantContext(request);
+  const proposal = await readProposal(id, tenantId);
   if (!proposal) return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
   return NextResponse.json({ proposal });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const { tenantId } = await resolveTenantContext(request);
   let body: { decision?: "approved" | "rejected"; notes?: string };
   try {
     body = (await request.json()) as typeof body;
@@ -25,14 +30,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       { status: 400 }
     );
   }
-  const updated = await decideProposal(id, body.decision, body.notes);
+  const updated = await decideProposal(id, body.decision, body.notes, tenantId);
   if (!updated) return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
 
-  await logActivity({
-    kind: "proposal_decided",
-    message: `Proposal ${id} ${body.decision}${body.notes ? `: ${body.notes}` : ""}`,
-    data: { proposalId: id, decision: body.decision }
-  });
+  await logActivity(
+    {
+      kind: "proposal_decided",
+      message: `Proposal ${id} ${body.decision}${body.notes ? `: ${body.notes}` : ""}`,
+      data: { proposalId: id, decision: body.decision }
+    },
+    tenantId
+  );
 
   return NextResponse.json({ proposal: updated });
 }

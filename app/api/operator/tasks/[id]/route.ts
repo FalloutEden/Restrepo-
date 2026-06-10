@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 
 import { logActivity, resolveHumanTask } from "@/lib/operator-state";
+import { resolveTenantContext } from "@/lib/tenant-context";
 
 export const runtime = "nodejs";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // Scope to caller's tenant so a tenant can't resolve the founder's tasks.
+  const { tenantId } = await resolveTenantContext(request);
   let body: { status?: "done" | "dismissed" };
   try {
     body = (await request.json()) as typeof body;
@@ -18,14 +21,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       { status: 400 }
     );
   }
-  const updated = await resolveHumanTask(id, body.status);
+  const updated = await resolveHumanTask(id, body.status, tenantId);
   if (!updated) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 
-  await logActivity({
-    kind: "task_resolved",
-    message: `Task ${id} marked ${body.status}`,
-    data: { taskId: id, status: body.status }
-  });
+  await logActivity(
+    {
+      kind: "task_resolved",
+      message: `Task ${id} marked ${body.status}`,
+      data: { taskId: id, status: body.status }
+    },
+    tenantId
+  );
 
   return NextResponse.json({ task: updated });
 }

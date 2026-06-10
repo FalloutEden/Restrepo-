@@ -7,20 +7,27 @@ import {
   listHumanTasks,
   listConversations
 } from "@/lib/operator-state";
+import { resolveTenantContext } from "@/lib/tenant-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    // Scope every read to the caller's tenant. A tenant bearer (btk_*) sees
+    // only its own state; founder/admin sees the legacy founder state. Without
+    // this, any tenant bearer would read the founder's proposals/tasks/log.
+    const { tenantId } = await resolveTenantContext(request);
     const [state, activity, pendingProposals, decidedProposals, openTasks, conversations] =
       await Promise.all([
-        readOperatorState(),
-        readActivity(80),
-        listProposals({ status: "pending" }),
-        listProposals().then((all) => all.filter((p) => p.status !== "pending").slice(0, 20)),
-        listHumanTasks({ status: "open" }),
-        listConversations()
+        readOperatorState(tenantId),
+        readActivity(80, tenantId),
+        listProposals({ status: "pending" }, tenantId),
+        listProposals(undefined, tenantId).then((all) =>
+          all.filter((p) => p.status !== "pending").slice(0, 20)
+        ),
+        listHumanTasks({ status: "open" }, tenantId),
+        listConversations(tenantId)
       ]);
 
     return NextResponse.json({
