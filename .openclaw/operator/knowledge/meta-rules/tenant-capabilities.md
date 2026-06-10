@@ -26,6 +26,13 @@ error):
 - **Sourcing:** search_cj_products (tenant's own CJ account)
 - **Email:** klaviyo_status, klaviyo_push_test_contact (tenant's own Klaviyo key)
 - **Product creation:** materialize_product (see the image menu below)
+- **Content studio:** create / list / get / mark content drops, AND
+  generate_content_drop_run. Generation degrades gracefully per phase: lifestyle
+  variants always run (deterministic), AI model shots run if the merchant has an
+  OpenAI key, captions run on their Anthropic key, video runs only if they've
+  configured a video provider — a missing key skips that phase, never fails the
+  drop. Branded monogram on model shots is founder/BV-only until a tenant brand
+  overlay exists.
 - **Always-on (no credentials):** record_note, propose_action,
   request_human_input, get_spend_summary, set_spend_budget
 
@@ -56,9 +63,9 @@ generator, decline and offer the approved options. See
 
 ## Still founder-only (don't offer these to tenants yet)
 
-create_content_drop / list_content_drops / get_content_drop /
-generate_content_drop_run / mark_content_post_posted (content studio),
-transparentize_brand_images, composite_on_bv_background,
-composite_all_brand_images, run_pipeline, cerebro_query. If a tenant asks for
-one, say it's coming and offer record_note / propose_action / request_human_input
-to capture the intent. (Update this list as tools are lifted.)
+composite_on_bv_background, composite_all_brand_images (composite onto the
+founder's BV mock-background asset — a tenant needs their own brand background
+first), run_pipeline (autonomous research — lifts last), cerebro_query
+(architectural: hosted graphify gap). If a tenant asks for one, say it's coming
+and offer record_note / propose_action / request_human_input to capture the
+intent. (Update this list as tools are lifted.)

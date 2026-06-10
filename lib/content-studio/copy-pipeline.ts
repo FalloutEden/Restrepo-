@@ -1,7 +1,8 @@
 import "server-only";
 
-import { claude } from "@/lib/claude";
+import { claudeForTenant } from "@/lib/claude";
 import { withClaudeRetry } from "@/lib/claude-retry";
+import type { TenantContext } from "@/lib/tenant-context";
 import { resolveBrand } from "@/lib/brands";
 import {
   addPostToDrop,
@@ -160,12 +161,13 @@ async function generateOneCaption(
   platform: Platform,
   drop: ContentDrop,
   postIndex: number,
-  total: number
+  total: number,
+  tenantCtx: TenantContext
 ): Promise<ParsedCopy> {
   const prompt = buildCopyPrompt(platform, drop, postIndex, total);
   const response = await withClaudeRetry(
     () =>
-      claude.messages.create({
+      claudeForTenant(tenantCtx).messages.create({
         model: COPY_MODEL,
         max_tokens: 1500,
         messages: [{ role: "user", content: prompt }]
@@ -181,7 +183,7 @@ async function generateOneCaption(
 
 // ── Public API ────────────────────────────────────────────────────────────
 
-export async function generatePlatformPosts(drop: ContentDrop, platforms: Platform[]): Promise<PlatformPost[]> {
+export async function generatePlatformPosts(drop: ContentDrop, platforms: Platform[], tenantCtx: TenantContext): Promise<PlatformPost[]> {
   const created: PlatformPost[] = [];
   for (const platform of platforms) {
     const groups = selectAssetsForPlatform(platform, drop);
@@ -191,7 +193,7 @@ export async function generatePlatformPosts(drop: ContentDrop, platforms: Platfo
     }
     for (let i = 0; i < groups.length; i += 1) {
       try {
-        const copy = await generateOneCaption(platform, drop, i, groups.length);
+        const copy = await generateOneCaption(platform, drop, i, groups.length, tenantCtx);
         const post: PlatformPost = {
           id: newPostId(),
           platform,

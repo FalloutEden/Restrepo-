@@ -91,12 +91,6 @@ const FOUNDER_ONLY_TOOLS = new Set<string>([
   // asset a tenant doesn't have — needs a per-tenant brand background first):
   "composite_on_bv_background",
   "composite_all_brand_images",
-  // Content studio GENERATION only. The storage tools (create/list/get/mark
-  // content drops) are lifted — they're tenant-scoped via AsyncLocalStorage.
-  // generate_content_drop_run runs the AI pipelines (gpt-image-1 model shots +
-  // Runway/Luma video + Claude copy); it needs the pipeline BYOK pass plus a
-  // video-provider "offer options" decision (like the image-provider menu).
-  "generate_content_drop_run",
   // Autonomous research pipeline (uses every credential type — lift last)
   "run_pipeline",
   // CEREBRO (architectural: gap 2, graphify not hosted on Vercel — not a BYOK fix)
@@ -1116,7 +1110,7 @@ const get_content_drop: OperatorTool = {
 const generate_content_drop_run: OperatorTool = {
   name: "generate_content_drop_run",
   description:
-    "Run the full content drop pipeline for a drop that already has source photos uploaded. Generates lifestyle images (gpt-image-1), videos (Runway/Luma if configured), and platform-specific captions (Claude). Long-running — typically 2–6 minutes depending on configuration. Costs roughly $0.50–$5 per drop depending on whether videos are enabled.",
+    "Run the full content drop pipeline for a drop that already has source photos uploaded. Generates lifestyle variants (deterministic crops/treatments), AI model shots (needs the merchant's OpenAI key — skipped if absent), videos (only if the merchant has a video provider configured — skipped otherwise), and platform captions (Claude). Each phase degrades gracefully: a missing key skips that phase, it doesn't fail the drop. Long-running — typically 2–6 minutes. Costs roughly $0.50–$5 per drop on the merchant's own keys.",
   input_schema: {
     type: "object",
     properties: {
@@ -1142,6 +1136,7 @@ const generate_content_drop_run: OperatorTool = {
     required: ["dropId"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const dropId = String(args.dropId);
     const drop = await readContentDrop(dropId);
     if (!drop) return { error: "drop not found" };
@@ -1154,7 +1149,7 @@ const generate_content_drop_run: OperatorTool = {
       targetPlatforms: Array.isArray(args.targetPlatforms) ? (args.targetPlatforms as Platform[]) : undefined,
       maxLifestyleImages: typeof args.maxLifestyleImages === "number" ? args.maxLifestyleImages : undefined,
       maxVideos: typeof args.maxVideos === "number" ? args.maxVideos : undefined
-    });
+    }, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `generate_content_drop_run → ${dropId} (${result?.posts.length ?? 0} posts generated)`,
