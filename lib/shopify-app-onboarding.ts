@@ -3,6 +3,7 @@ import "server-only";
 import {
   createTenant,
   getTenantByBrandSlug,
+  getTenantSecret,
   setTenantSecret,
   updateTenant,
   cancelTenant,
@@ -69,6 +70,22 @@ export async function onboardShopAsTenant(params: {
   // Re-read so the caller gets the token-laden record.
   const refreshed = await getTenantByBrandSlug(brandSlug);
   return refreshed ?? tenant;
+}
+
+/** Look up a connected shop's tenant + its stored OAuth token (for billing /
+ *  background calls that only have the shop domain). Returns null if the shop
+ *  isn't onboarded or has no token. */
+export async function getShopTenantToken(
+  shop: string
+): Promise<{ tenant: Tenant; token: string } | null> {
+  const tenant = await getTenantByBrandSlug(brandSlugFromShop(shop));
+  if (!tenant) return null;
+  try {
+    const token = getTenantSecret(tenant, "shopifyAdminToken");
+    return { tenant, token };
+  } catch {
+    return null;
+  }
 }
 
 /**

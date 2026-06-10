@@ -48,9 +48,9 @@ export async function GET(request: NextRequest) {
     const tenant = await onboardShopAsTenant({ shop, accessToken, scope });
     audit({ action: "auth.success", actor: "shopify-oauth", target: tenant.id, detail: { shop } });
 
-    // Land inside the embedded app. `host` is Shopify's base64 admin host param,
-    // needed by App Bridge to render inside admin.
-    const dest = new URL(`${cfg.appUrl}/dashboard`);
+    // Route through billing so a trial subscription is set up before the app
+    // loads. `host` is Shopify's base64 admin param, needed later by App Bridge.
+    const dest = new URL(`${cfg.appUrl}/api/shopify/billing`);
     dest.searchParams.set("shop", shop);
     if (typeof q.host === "string" && q.host) dest.searchParams.set("host", q.host);
 
