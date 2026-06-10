@@ -1,6 +1,7 @@
 import "server-only";
 
-import { openai, IMAGE_MODEL } from "@/lib/openai";
+import { resolveOpenAIClient, IMAGE_MODEL } from "@/lib/openai";
+import type { TenantContext } from "@/lib/tenant-context";
 
 /**
  * Generate a product image using OpenAI gpt-image-1.
@@ -9,13 +10,19 @@ import { openai, IMAGE_MODEL } from "@/lib/openai";
  * Pass `transparent: true` for print-on-demand artwork — Printful prints whatever
  * is in the PNG including any background, so apparel designs need a transparent
  * canvas so the shirt color shows through.
+ *
+ * Tenant-aware: pass tenantCtx so the call bills the merchant's own OpenAI key.
+ * Note (per the project's standing rule): gpt-image-1 corrupts small text and is
+ * not used for tenant catalog imagery — tenants upload print-ready art instead.
+ * This stays for the founder/BV path and internal previews.
  */
 export async function generateProductImage(
   prompt: string,
-  options: { transparent?: boolean } = {}
+  options: { transparent?: boolean } = {},
+  tenantCtx?: TenantContext
 ): Promise<{ buffer: Buffer; imageBase64: string }> {
   // gpt-image-1 always returns base64 — passing response_format is rejected with 400.
-  const response = await openai.images.generate({
+  const response = await resolveOpenAIClient(tenantCtx).images.generate({
     model: IMAGE_MODEL,
     prompt: prompt.slice(0, 4000),
     n: 1,

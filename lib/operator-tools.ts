@@ -91,9 +91,6 @@ const FOUNDER_ONLY_TOOLS = new Set<string>([
   "transparentize_brand_images",
   "composite_on_bv_background",
   "composite_all_brand_images",
-  // Printful — product-materialization.ts (1000+ lines: Printful + Shopify +
-  // OpenAI image gen) needs a careful migration pass.
-  "materialize_product",
   // Content studio (needs OpenAI BYOK + Printful for mockups)
   "create_content_drop",
   "list_content_drops",
@@ -350,7 +347,9 @@ const search_cj_products: OperatorTool = {
 const materialize_product: OperatorTool = {
   name: "materialize_product",
   description:
-    "Create a Shopify draft listing autonomously. Drafts are reversible and not customer-facing, so this does NOT need approval. For Printful/apparel, omit sourceProductId. For LockLayer/CJ, pass sourceProductId from search_cj_products. Brand defaults from fulfillmentType.",
+    "Create a Shopify draft listing. Drafts are reversible and not customer-facing, so this does NOT need approval. " +
+    "For a tenant's Printful/apparel product, ASK the merchant how they want to build it: (1) AUTO-build — they give you a print-ready transparent PNG (≥1800px); pass it as printFileUrl and warn them if it comes back low-res; or (2) MIRROR — they design the product in Printful's UI and you import it read-only (use the mirror flow, not this tool). Never AI-generate catalog art for a tenant. " +
+    "For dropship/CJ, pass sourceProductId from search_cj_products. Brand defaults from fulfillmentType.",
   input_schema: {
     type: "object",
     properties: {
@@ -361,11 +360,13 @@ const materialize_product: OperatorTool = {
       brand: { type: "string", enum: Object.keys(BRANDS) },
       niche: { type: "string" },
       sourceProductId: { type: "string", description: "CJ pid when fulfillmentType is 'zendrop'." },
-      imagePrompt: { type: "string", description: "Print-on-demand artwork direction (Printful only)." }
+      imagePrompt: { type: "string", description: "Print-on-demand artwork direction. Founder/BV path only — used to AI-generate art. Tenants must supply printFileUrl instead." },
+      printFileUrl: { type: "string", description: "Printful AUTO-build: URL of the merchant's print-ready transparent PNG (≥1800px on the long edge). REQUIRED for tenant Printful products — tenants supply their own art, never AI-generated. If the merchant would rather design in Printful, use the mirror flow instead of this tool." }
     },
     required: ["title", "description", "productType", "fulfillmentType"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const input: MaterializationInput = {
       runtimeId: newId("op"),
       title: String(args.title),
@@ -375,9 +376,10 @@ const materialize_product: OperatorTool = {
       brand: typeof args.brand === "string" ? args.brand : undefined,
       niche: typeof args.niche === "string" ? args.niche : undefined,
       sourceProductId: typeof args.sourceProductId === "string" ? args.sourceProductId : undefined,
-      imagePrompt: typeof args.imagePrompt === "string" ? args.imagePrompt : undefined
+      imagePrompt: typeof args.imagePrompt === "string" ? args.imagePrompt : undefined,
+      printFileUrl: typeof args.printFileUrl === "string" ? args.printFileUrl : undefined
     };
-    const result = await materializeProduct(input);
+    const result = await materializeProduct(input, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `materialize_product → ${result.status} "${result.title}"`,

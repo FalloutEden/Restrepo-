@@ -45,11 +45,8 @@ test("founder context with no tenantId also passes (defaults to founder)", () =>
 
 // ── Tenant context: credential-touching tools are blocked ────────────────
 
-test("tenant context blocks materialize_product (needs Printful BYOK on product-materialization.ts)", () => {
-  const gated = tenantSafetyGate("materialize_product", tenantCtx());
-  assert.ok(gated && gated.ok === false);
-  assert.equal(gated?.error, "tenant-byok-pending");
-  assert.match(gated?.message ?? "", /materialize_product/);
+test("tenant context ALLOWS materialize_product (lifted 2026-06-10 — product-materialization.ts tenant-aware, merchant-supplied art)", () => {
+  assert.equal(tenantSafetyGate("materialize_product", tenantCtx()), null);
 });
 
 test("tenant context ALLOWS bootstrap_store (lifted 2026-06-10 — store-bootstrap.ts threads tenantCtx)", () => {
@@ -150,7 +147,8 @@ test("unknown tool name is not gated (the dispatcher handles missing tools)", ()
 // ── Error message quality ────────────────────────────────────────────────
 
 test("blocked error message tells the user which tools DO work for tenants", () => {
-  const gated = tenantSafetyGate("materialize_product", tenantCtx());
+  // create_content_drop is still gated (content studio pending its BYOK pass).
+  const gated = tenantSafetyGate("create_content_drop", tenantCtx());
   const msg = gated?.message ?? "";
   assert.match(msg, /record_note/);
   assert.match(msg, /propose_action/);
@@ -158,7 +156,7 @@ test("blocked error message tells the user which tools DO work for tenants", () 
 });
 
 test("blocked error message names the platform that's pending BYOK migration", () => {
-  const gated = tenantSafetyGate("materialize_product", tenantCtx());
+  const gated = tenantSafetyGate("create_content_drop", tenantCtx());
   const msg = gated?.message ?? "";
   // Should mention at least one of: Shopify, Printful, CJ, Klaviyo, OpenAI
   assert.match(msg, /Shopify|Printful|CJ|Klaviyo|OpenAI/);

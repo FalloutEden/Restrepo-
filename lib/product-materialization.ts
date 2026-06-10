@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
+import sharp from "sharp";
 import {
   searchAndDetailCjProducts,
   findCjCategoryIds,
@@ -14,8 +15,10 @@ import {
 import { generateProductImage } from "@/lib/image-generation";
 import { resolveBrand, type Brand } from "@/lib/brands";
 import { resolveShopifyCredentials, type ShopifyCredentials } from "@/lib/shopify-credentials";
+import { resolvePrintfulCredentials } from "@/lib/printful-credentials";
 import { rewriteProductDescription } from "@/lib/copywriting";
 import { attachProductToOnlineStore } from "@/lib/shopify-service";
+import type { TenantContext } from "@/lib/tenant-context";
 
 export type FulfillmentType = "printful" | "zendrop" | "digital";
 
@@ -41,6 +44,8 @@ export type MaterializedProduct = {
   localArtifactPath?: string;
   imagePrompt?: string;
   error?: string;
+  /** Non-fatal advisories surfaced to the merchant (e.g. low-DPI print file). */
+  warnings?: string[];
 };
 
 export type MaterializationInput = {
@@ -62,6 +67,11 @@ export type MaterializationInput = {
   // copywriting voice and (eventually) which Shopify storefront receives the
   // listing. Defaults to "locklayer" when unset.
   brand?: string;
+  // Merchant-supplied print-ready artwork (transparent PNG) for the Printful
+  // auto-build path. When set, this image is used as the print file instead of
+  // AI-generating one — tenants always supply their own art (no gpt-image-1 for
+  // catalog), and we run a DPI/size check on it and warn if it's too low-res.
+  printFileUrl?: string;
 };
 
 type ShopifyProductResponse = {
@@ -127,23 +137,71 @@ function renderDescriptionHtml(description: string) {
   return escapeHtml(description).replace(/\r?\n/g, "<br />");
 }
 
-function loadPrintfulConfig() {
-  const token = process.env.PRINTFUL_API_KEY?.trim();
-  const storeId = process.env.PRINTFUL_STORE_ID?.trim();
-  const variantIdRaw = process.env.PRINTFUL_DEFAULT_VARIANT_ID?.trim() || "";
-  const variantId = Number(variantIdRaw);
-
-  if (!token || !storeId || !Number.isFinite(variantId) || variantId <= 0) {
+// Resolve the Printful blank for auto-build. Founder: env (token/store/variant).
+// Tenant: token + storeId from the encrypted vault, plus their chosen default
+// blank variant id (printfulDefaultVariantId). Returns null when anything is
+// missing so the caller can degrade gracefully instead of throwing.
+function loadPrintfulConfig(tenantCtx?: TenantContext): { token: string; storeId: string; variantId: number } | null {
+  try {
+    const creds = resolvePrintfulCredentials(tenantCtx);
+    let variantId = creds.defaultVariantId;
+    if (variantId == null) {
+      // Tenant default blank (founder falls back to env via the credential resolver).
+      const raw = tenantCtx?.getSecret("printfulDefaultVariantId");
+      if (raw && Number.isFinite(Number(raw))) variantId = Number(raw);
+    }
+    if (variantId == null || !Number.isFinite(variantId) || variantId <= 0) return null;
+    return { token: creds.token, storeId: creds.storeId, variantId };
+  } catch {
     return null;
   }
-
-  return { token, storeId, variantId };
 }
 
-function getDefaultRetailPrice() {
-  const raw = process.env.PRINTFUL_RETAIL_PRICE?.trim() || process.env.DEFAULT_RETAIL_PRICE?.trim() || "34.99";
+function getDefaultRetailPrice(tenantCtx?: TenantContext): string {
+  const tenantPrice = tenantCtx && !tenantCtx.isFounder ? tenantCtx.getSecret("printfulRetailPrice") : null;
+  const raw =
+    tenantPrice?.trim() ||
+    process.env.PRINTFUL_RETAIL_PRICE?.trim() ||
+    process.env.DEFAULT_RETAIL_PRICE?.trim() ||
+    "34.99";
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed.toFixed(2) : "34.99";
+}
+
+// Download a merchant-supplied print file and check it's high enough resolution
+// for crisp DTG. Returns the buffer + non-fatal warnings (we warn, never block).
+async function fetchPrintFileBuffer(url: string): Promise<Buffer> {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Could not download print file (${r.status}) from ${url}`);
+  return Buffer.from(await r.arrayBuffer());
+}
+
+export async function checkPrintFileQuality(buffer: Buffer): Promise<string[]> {
+  try {
+    const meta = await sharp(buffer).metadata();
+    const w = meta.width ?? 0;
+    const h = meta.height ?? 0;
+    const longEdge = Math.max(w, h);
+    const warnings: string[] = [];
+    // ~150 DPI across a standard ~12in front print ≈ 1800px on the long edge.
+    if (longEdge < 1800) {
+      warnings.push(
+        `Print file is ${w}×${h}px — below the ~1800px (≈150 DPI for a 12in print) recommended for crisp DTG output. It will still upload, but may look soft on the garment. Re-upload at higher resolution for best quality.`
+      );
+    }
+    if (meta.format !== "png") {
+      warnings.push(
+        `Print file is ${meta.format ?? "unknown"} format — a transparent PNG is strongly recommended so the garment color shows through the design.`
+      );
+    } else if (!meta.hasAlpha) {
+      warnings.push(
+        "Print file has no transparency — the design's background will print as a solid block on the garment. Use a PNG with a transparent background."
+      );
+    }
+    return warnings;
+  } catch {
+    return ["Could not read the print file to verify its resolution — make sure it's a valid PNG."];
+  }
 }
 
 // Convert upstream design direction (often phrased as "premium product photo of a t-shirt
@@ -675,13 +733,14 @@ async function createPrintfulSyncProduct(
   input: MaterializationInput,
   printFileUrl: string,
   variantSpecs: PrintfulVariantSpec[],
-  shopifyVariantIds: number[]
+  shopifyVariantIds: number[],
+  tenantCtx?: TenantContext
 ) {
-  const printful = loadPrintfulConfig();
+  const printful = loadPrintfulConfig(tenantCtx);
   if (!printful) {
     return null;
   }
-  const retailPrice = getDefaultRetailPrice();
+  const retailPrice = getDefaultRetailPrice(tenantCtx);
 
   // Pair each Printful variant with its Shopify counterpart (same index = same size).
   // shopifyVariantIds may be empty if Shopify draft creation hadn't yet wired multi-variant.
@@ -766,15 +825,22 @@ async function createSpreadsheetBuffer(title: string, description: string) {
   return Buffer.from(buffer);
 }
 
-async function writeLocalArtifact(filename: string, buffer: Buffer) {
-  await mkdir(MATERIALIZED_OUTPUT_DIR, { recursive: true });
-  const outputPath = path.join(MATERIALIZED_OUTPUT_DIR, filename);
-  await writeFile(outputPath, buffer);
-  return outputPath;
+// Best-effort local copy for debugging/inspection. The Shopify Files upload is
+// the real delivery, so a failure here (e.g. read-only FS on Vercel) must not
+// break materialization — return null and carry on.
+async function writeLocalArtifact(filename: string, buffer: Buffer): Promise<string | null> {
+  try {
+    await mkdir(MATERIALIZED_OUTPUT_DIR, { recursive: true });
+    const outputPath = path.join(MATERIALIZED_OUTPUT_DIR, filename);
+    await writeFile(outputPath, buffer);
+    return outputPath;
+  } catch {
+    return null;
+  }
 }
 
-async function materializeDigitalProduct(input: MaterializationInput): Promise<MaterializedProduct> {
-  const creds = resolveShopifyCredentials(input.brand);
+async function materializeDigitalProduct(input: MaterializationInput, tenantCtx?: TenantContext): Promise<MaterializedProduct> {
+  const creds = resolveShopifyCredentials(input.brand, tenantCtx);
   const slug = slugify(input.title || input.runtimeId);
   const isSpreadsheet = /spreadsheet|workbook|excel|tracker|dashboard/i.test(input.productType);
   const filename = `${slug}.${isSpreadsheet ? "xlsx" : "pdf"}`;
@@ -799,7 +865,7 @@ async function materializeDigitalProduct(input: MaterializationInput): Promise<M
     productType: input.productType,
     fulfillmentType: "digital",
     status: "created",
-    localArtifactPath,
+    localArtifactPath: localArtifactPath ?? undefined,
     shopifyFileUrl: file.url,
     shopifyProductId: product.id,
     shopifyProductHandle: product.handle,
@@ -807,27 +873,54 @@ async function materializeDigitalProduct(input: MaterializationInput): Promise<M
   };
 }
 
-async function materializePrintfulProduct(input: MaterializationInput): Promise<MaterializedProduct> {
-  const creds = resolveShopifyCredentials(input.brand);
-  const printfulConfig = loadPrintfulConfig();
+async function materializePrintfulProduct(input: MaterializationInput, tenantCtx?: TenantContext): Promise<MaterializedProduct> {
+  const creds = resolveShopifyCredentials(input.brand, tenantCtx);
+  const printfulConfig = loadPrintfulConfig(tenantCtx);
   const printfulConfigured = !!printfulConfig;
   const imagePrompt = buildPrintArtworkPrompt(input);
+  const isTenant = !!tenantCtx && !tenantCtx.isFounder;
+  const warnings: string[] = [];
 
-  // Run artwork generation and Printful catalog lookup in parallel — neither depends on the other.
-  const [generatedImage, variantInfo] = await Promise.all([
-    generateProductImage(imagePrompt, { transparent: true }),
-    printfulConfig
-      ? expandPrintfulSizeVariants(printfulConfig.token, printfulConfig.variantId)
-      : Promise.resolve({ productId: null as number | null, variants: [] as PrintfulVariantSpec[] })
-  ]);
+  // Acquire the print artwork. Two flows (the operator picks with the merchant):
+  // AUTO with a merchant-supplied print-ready PNG (the tenant path — never
+  // AI-generated, to avoid gpt-image-1 catalog slop), or the founder/BV path
+  // which may AI-generate. A tenant with no uploaded image is told to upload one
+  // (or use the mirror flow) instead of getting AI slop.
+  let artworkBuffer: Buffer;
+  let artworkBase64: string;
+  if (input.printFileUrl) {
+    artworkBuffer = await fetchPrintFileBuffer(input.printFileUrl);
+    artworkBase64 = artworkBuffer.toString("base64");
+    warnings.push(...(await checkPrintFileQuality(artworkBuffer)));
+  } else if (isTenant) {
+    return {
+      opportunityId: input.runtimeId,
+      title: input.title,
+      description: input.description,
+      productType: input.productType,
+      fulfillmentType: "printful",
+      status: "failed",
+      imagePrompt,
+      error:
+        "Auto-build needs a print-ready image. Upload your design as a transparent PNG (≥1800px on the long edge) and pass its URL as printFileUrl — or use the mirror flow to import a product you've already designed in Printful."
+    };
+  } else {
+    const generated = await generateProductImage(imagePrompt, { transparent: true }, tenantCtx);
+    artworkBuffer = generated.buffer;
+    artworkBase64 = generated.imageBase64;
+  }
 
-  // Upload the transparent print artwork to Shopify Files. We hand the resulting CDN URL
+  const variantInfo = printfulConfig
+    ? await expandPrintfulSizeVariants(printfulConfig.token, printfulConfig.variantId)
+    : { productId: null as number | null, variants: [] as PrintfulVariantSpec[] };
+
+  // Upload the print artwork to Shopify Files. We hand the resulting CDN URL
   // to Printful (both for mockup generation and as the print file on the sync product).
   const printFile = await uploadBufferToShopifyFiles(
     creds,
     `${slugify(input.title)}-print.png`,
     "image/png",
-    generatedImage.buffer
+    artworkBuffer
   );
   const printFileUrl = printFile.url;
   const sizes = variantInfo.variants.map((v) => v.size);
@@ -879,8 +972,8 @@ async function materializePrintfulProduct(input: MaterializationInput): Promise<
       }
     }
   }
-  if (!primaryImageUrl && generatedImage.imageBase64) {
-    const img = await attachShopifyProductImage(creds, shopifyProduct.id, input.title, generatedImage.imageBase64);
+  if (!primaryImageUrl && artworkBase64) {
+    const img = await attachShopifyProductImage(creds, shopifyProduct.id, input.title, artworkBase64);
     primaryImageUrl = img?.src;
   }
 
@@ -896,7 +989,8 @@ async function materializePrintfulProduct(input: MaterializationInput): Promise<
         input,
         printFileUrl,
         variantInfo.variants,
-        shopifyVariantIds
+        shopifyVariantIds,
+        tenantCtx
       );
       if (printfulProduct) {
         printfulSyncProductId = printfulProduct.syncProductId;
@@ -933,7 +1027,8 @@ async function materializePrintfulProduct(input: MaterializationInput): Promise<
     shopifyProductUrl: `https://${creds.storeDomain}/admin/products/${shopifyProduct.id}`,
     shopifyImageUrl: primaryImageUrl ?? printFileUrl ?? undefined,
     printfulSyncProductId,
-    printfulVariantId
+    printfulVariantId,
+    warnings: warnings.length ? warnings : undefined
   };
 }
 
@@ -942,8 +1037,8 @@ async function materializePrintfulProduct(input: MaterializationInput): Promise<
 // to a CJ category and let agents pick from category contents instead.
 const CJ_LOCKLAYER_CATEGORY_KEYWORDS = /smart|security|surveillance|camera|lock|sensor|alarm|doorbell|spy|monitor|hidden/i;
 
-async function pickCjCategoryForNiche(niche: string): Promise<string | null> {
-  const matches = await findCjCategoryIds(CJ_LOCKLAYER_CATEGORY_KEYWORDS);
+async function pickCjCategoryForNiche(niche: string, tenantCtx?: TenantContext): Promise<string | null> {
+  const matches = await findCjCategoryIds(CJ_LOCKLAYER_CATEGORY_KEYWORDS, tenantCtx);
   if (matches.length === 0) return null;
   // Prefer the explicit Security & Protection category (Computer & Office subtree)
   // — it's the most on-brand for LockLayer. Fall back to Smart Electronics for IoT.
@@ -958,23 +1053,23 @@ async function pickCjCategoryForNiche(niche: string): Promise<string | null> {
 // price. 3.5× covers shipping, ad spend, and target margin for impulse-buy IoT.
 const DROPSHIP_MARKUP = Number(process.env.DROPSHIP_MARKUP ?? "3.5");
 
-function computeRetailPriceFromCost(costMin: number, costMax: number): string {
+function computeRetailPriceFromCost(costMin: number, costMax: number, tenantCtx?: TenantContext): string {
   const cost = Number.isFinite(costMax) && costMax > 0 ? costMax : costMin;
-  if (!Number.isFinite(cost) || cost <= 0) return getDefaultRetailPrice();
+  if (!Number.isFinite(cost) || cost <= 0) return getDefaultRetailPrice(tenantCtx);
   const retail = cost * DROPSHIP_MARKUP;
   // Round to .99 for psych pricing.
   const dollars = Math.max(Math.floor(retail), 1);
   return `${dollars}.99`;
 }
 
-async function materializeDropshipProduct(input: MaterializationInput): Promise<MaterializedProduct> {
-  const creds = resolveShopifyCredentials(input.brand);
+async function materializeDropshipProduct(input: MaterializationInput, tenantCtx?: TenantContext): Promise<MaterializedProduct> {
+  const creds = resolveShopifyCredentials(input.brand, tenantCtx);
   let sourced: CjProductDetail | undefined;
 
   if (input.sourceProductId) {
     // Caller pinned a specific CJ pid (e.g. push-cj-listings.ts pre-picks 5).
     // Fetch detail directly — no search/category lookup needed.
-    const detail = await getCjProductDetail(input.sourceProductId);
+    const detail = await getCjProductDetail(input.sourceProductId, tenantCtx);
     if (!detail) {
       throw new Error(`CJ product ${input.sourceProductId} not found or has no detail.`);
     }
@@ -984,7 +1079,7 @@ async function materializeDropshipProduct(input: MaterializationInput): Promise<
     // the autonomous agent runtime hits; it produces ONE product per call so
     // the caller is responsible for varying niche to get variety.
     const niche = input.niche || input.title || "smart home security";
-    const categoryId = await pickCjCategoryForNiche(niche);
+    const categoryId = await pickCjCategoryForNiche(niche, tenantCtx);
     if (!categoryId) {
       throw new Error(`No CJ category matched the niche "${niche}".`);
     }
@@ -992,7 +1087,7 @@ async function materializeDropshipProduct(input: MaterializationInput): Promise<
       categoryId,
       pageSize: 10,
       detailLimit: 5
-    });
+    }, tenantCtx);
     sourced = candidates.find(
       (c) => c.images.length > 0 && (c.priceMin > 0 || c.variants.some((v) => v.variantSellPrice > 0))
     );
@@ -1001,7 +1096,7 @@ async function materializeDropshipProduct(input: MaterializationInput): Promise<
     }
   }
 
-  const retailPrice = computeRetailPriceFromCost(sourced.priceMin, sourced.priceMax);
+  const retailPrice = computeRetailPriceFromCost(sourced.priceMin, sourced.priceMax, tenantCtx);
   const brand: Brand = resolveBrand(input.brand);
 
   // Strip CJ's raw HTML / supplier-CDN <img> tags before anything else touches
@@ -1083,7 +1178,7 @@ function renderDropshipBodyHtml(description: string, sourced: CjProductDetail) {
   return renderDescriptionHtml(description || sourced.description || sourced.title);
 }
 
-export async function materializeProduct(input: MaterializationInput): Promise<MaterializedProduct> {
+export async function materializeProduct(input: MaterializationInput, tenantCtx?: TenantContext): Promise<MaterializedProduct> {
   const resolvedFulfillmentType = resolveFulfillmentType(input);
   const normalizedInput: MaterializationInput = {
     ...input,
@@ -1093,14 +1188,14 @@ export async function materializeProduct(input: MaterializationInput): Promise<M
 
   try {
     if (resolvedFulfillmentType === "printful") {
-      return await materializePrintfulProduct(normalizedInput);
+      return await materializePrintfulProduct(normalizedInput, tenantCtx);
     }
 
     if (resolvedFulfillmentType === "zendrop") {
-      return await materializeDropshipProduct(normalizedInput);
+      return await materializeDropshipProduct(normalizedInput, tenantCtx);
     }
 
-    return await materializeDigitalProduct(normalizedInput);
+    return await materializeDigitalProduct(normalizedInput, tenantCtx);
   } catch (error) {
     return {
       opportunityId: input.runtimeId,
