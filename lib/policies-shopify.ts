@@ -2,6 +2,7 @@ import "server-only";
 
 import { resolveShopifyCredentials, type ShopifyCredentials } from "@/lib/shopify-credentials";
 import type { GeneratedPolicy, ShopifyPolicyType } from "@/lib/policies-generator";
+import type { TenantContext } from "@/lib/tenant-context";
 
 // Push generated policies into Shopify's built-in policy slots via the
 // shopPolicyUpdate GraphQL mutation. The policies appear in the storefront
@@ -80,9 +81,10 @@ export type PolicyPushResult = {
 
 export async function pushPolicy(
   brandSlug: string,
-  policy: GeneratedPolicy
+  policy: GeneratedPolicy,
+  tenantCtx?: TenantContext
 ): Promise<PolicyPushResult> {
-  const creds = resolveShopifyCredentials(brandSlug);
+  const creds = resolveShopifyCredentials(brandSlug, tenantCtx);
   try {
     const data = await shopifyGraphQL<ShopPolicyUpdateResponse>(creds, SHOP_POLICY_UPDATE, {
       shopPolicy: { type: policy.type, body: policy.body }
@@ -114,14 +116,15 @@ export async function pushPolicy(
 
 export async function pushAllPolicies(
   brandSlug: string,
-  policies: GeneratedPolicy[]
+  policies: GeneratedPolicy[],
+  tenantCtx?: TenantContext
 ): Promise<PolicyPushResult[]> {
   const results: PolicyPushResult[] = [];
   // Sequential, not parallel: Shopify GraphQL has tight rate limits and
   // five sequential calls take ~3s total — not worth the complexity of
   // parallel + backoff.
   for (const policy of policies) {
-    results.push(await pushPolicy(brandSlug, policy));
+    results.push(await pushPolicy(brandSlug, policy, tenantCtx));
   }
   return results;
 }

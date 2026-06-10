@@ -52,14 +52,26 @@ test("tenant context blocks materialize_product (needs Printful BYOK on product-
   assert.match(gated?.message ?? "", /materialize_product/);
 });
 
-test("tenant context blocks bootstrap_store (needs Shopify BYOK on store-bootstrap.ts)", () => {
-  const gated = tenantSafetyGate("bootstrap_store", tenantCtx());
-  assert.ok(gated && gated.ok === false);
+test("tenant context ALLOWS bootstrap_store (lifted 2026-06-10 — store-bootstrap.ts threads tenantCtx)", () => {
+  assert.equal(tenantSafetyGate("bootstrap_store", tenantCtx()), null);
 });
 
-test("tenant context blocks delete_listing (gated overnight despite migration — destructive)", () => {
-  const gated = tenantSafetyGate("delete_listing", tenantCtx());
-  assert.ok(gated && gated.ok === false);
+test("tenant context ALLOWS delete_listing (lifted 2026-06-10 — shopify-service already tenant-aware)", () => {
+  assert.equal(tenantSafetyGate("delete_listing", tenantCtx()), null);
+});
+
+test("tenant context ALLOWS the Shopify-family tools lifted 2026-06-10", () => {
+  for (const tool of [
+    "list_menus",
+    "add_menu_item",
+    "remove_menu_item",
+    "summarize_drafts",
+    "launch_status",
+    "generate_policies",
+    "publish_policies"
+  ]) {
+    assert.equal(tenantSafetyGate(tool, tenantCtx()), null, `${tool} should be lifted for tenants`);
+  }
 });
 
 // ── Lifted tools (Shopify read + non-destructive write) — must pass through ─
