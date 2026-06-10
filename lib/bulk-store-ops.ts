@@ -106,9 +106,10 @@ async function alreadyTransparent(buffer: Buffer): Promise<boolean> {
 
 export async function transparentizeBrandImages(
   brand: string,
-  options: { edgeOnly?: boolean; productId?: number } = {}
+  options: { edgeOnly?: boolean; productId?: number } = {},
+  tenantCtx?: TenantContext
 ): Promise<TransparentizeResult> {
-  const creds = resolveShopifyCredentials(brand);
+  const creds = resolveShopifyCredentials(brand, tenantCtx);
   type ShopifyImage = { id: number; src: string; position: number };
   type ShopifyProduct = { id: number; title: string; tags: string; images: ShopifyImage[] };
 

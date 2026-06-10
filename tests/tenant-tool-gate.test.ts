@@ -147,8 +147,8 @@ test("unknown tool name is not gated (the dispatcher handles missing tools)", ()
 // ── Error message quality ────────────────────────────────────────────────
 
 test("blocked error message tells the user which tools DO work for tenants", () => {
-  // create_content_drop is still gated (content studio pending its BYOK pass).
-  const gated = tenantSafetyGate("create_content_drop", tenantCtx());
+  // generate_content_drop_run is still gated (AI pipelines pending their pass).
+  const gated = tenantSafetyGate("generate_content_drop_run", tenantCtx());
   const msg = gated?.message ?? "";
   assert.match(msg, /record_note/);
   assert.match(msg, /propose_action/);
@@ -156,8 +156,31 @@ test("blocked error message tells the user which tools DO work for tenants", () 
 });
 
 test("blocked error message names the platform that's pending BYOK migration", () => {
-  const gated = tenantSafetyGate("create_content_drop", tenantCtx());
+  const gated = tenantSafetyGate("generate_content_drop_run", tenantCtx());
   const msg = gated?.message ?? "";
   // Should mention at least one of: Shopify, Printful, CJ, Klaviyo, OpenAI
   assert.match(msg, /Shopify|Printful|CJ|Klaviyo|OpenAI/);
+});
+
+test("tenant context ALLOWS transparentize + content-drop storage tools (lifted 2026-06-10)", () => {
+  for (const tool of [
+    "transparentize_brand_images",
+    "create_content_drop",
+    "list_content_drops",
+    "get_content_drop",
+    "mark_content_post_posted"
+  ]) {
+    assert.equal(tenantSafetyGate(tool, tenantCtx()), null, `${tool} should be lifted for tenants`);
+  }
+});
+
+test("tenant context still BLOCKS AI generation + BV composites (pending pipeline pass)", () => {
+  for (const tool of [
+    "generate_content_drop_run",
+    "composite_on_bv_background",
+    "composite_all_brand_images"
+  ]) {
+    const gated = tenantSafetyGate(tool, tenantCtx());
+    assert.ok(gated && gated.ok === false, `${tool} should still be gated`);
+  }
 });

@@ -86,17 +86,17 @@ const FOUNDER_ONLY_TOOLS = new Set<string>([
   //               store-bootstrap.ts / policies-shopify.ts / launch-status.ts
   //               threaded with tenantCtx)
   //
-  // Still gated — each needs its service lib's BYOK pass first.
-  // Image compositing (OpenAI singleton + founder brand-asset paths):
-  "transparentize_brand_images",
+  // Still gated — each needs more than a credential thread.
+  // Composites onto the founder's BV mock-background asset (OpenAI + a brand
+  // asset a tenant doesn't have — needs a per-tenant brand background first):
   "composite_on_bv_background",
   "composite_all_brand_images",
-  // Content studio (needs OpenAI BYOK + Printful for mockups)
-  "create_content_drop",
-  "list_content_drops",
-  "get_content_drop",
+  // Content studio GENERATION only. The storage tools (create/list/get/mark
+  // content drops) are lifted — they're tenant-scoped via AsyncLocalStorage.
+  // generate_content_drop_run runs the AI pipelines (gpt-image-1 model shots +
+  // Runway/Luma video + Claude copy); it needs the pipeline BYOK pass plus a
+  // video-provider "offer options" decision (like the image-provider menu).
   "generate_content_drop_run",
-  "mark_content_post_posted",
   // Autonomous research pipeline (uses every credential type — lift last)
   "run_pipeline",
   // CEREBRO (architectural: gap 2, graphify not hosted on Vercel — not a BYOK fix)
@@ -658,11 +658,12 @@ const transparentize_brand_images: OperatorTool = {
     required: ["brand"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const brand = String(args.brand);
     const result = await transparentizeBrandImages(brand, {
       edgeOnly: args.edgeOnly === true,
       productId: typeof args.productId === "number" ? args.productId : undefined
-    });
+    }, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `transparentize_brand_images → ${brand} (${result.processed}/${result.total})`,
