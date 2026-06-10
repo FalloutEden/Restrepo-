@@ -91,14 +91,9 @@ const FOUNDER_ONLY_TOOLS = new Set<string>([
   "transparentize_brand_images",
   "composite_on_bv_background",
   "composite_all_brand_images",
-  // CJ Dropshipping (needs lib/cj-service.ts BYOK refactor)
-  "search_cj_products",
   // Printful — product-materialization.ts (1000+ lines: Printful + Shopify +
   // OpenAI image gen) needs a careful migration pass.
   "materialize_product",
-  // Klaviyo (needs lib/klaviyo.ts BYOK refactor)
-  "klaviyo_status",
-  "klaviyo_push_test_contact",
   // Content studio (needs OpenAI BYOK + Printful for mockups)
   "create_content_drop",
   "list_content_drops",
@@ -324,16 +319,17 @@ const search_cj_products: OperatorTool = {
     },
     required: ["categoryKeywords"]
   },
-  async run(args) {
+  async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const kw = String(args.categoryKeywords || "");
     const pageSize = typeof args.pageSize === "number" ? args.pageSize : 20;
     const regex = new RegExp(kw, "i");
-    const categories = await findCjCategoryIds(regex);
+    const categories = await findCjCategoryIds(regex, tenantCtx);
     if (categories.length === 0) {
       return { categories: [], products: [] };
     }
     const primary = categories[0];
-    const products = await searchCjProducts({ categoryId: primary.id, pageSize });
+    const products = await searchCjProducts({ categoryId: primary.id, pageSize }, tenantCtx);
     return {
       categories: categories.slice(0, 5),
       pickedCategory: primary,
@@ -1453,11 +1449,12 @@ const klaviyo_status: OperatorTool = {
   description:
     "Read-only health check on the Klaviyo integration. Verifies the KLAVIYO_API_KEY is live, returns the connected account name, lists configured, and recent campaigns. Use to confirm Klaviyo is wired before recommending any flows or sends.",
   input_schema: { type: "object", properties: {} },
-  async run() {
-    const health = await klaviyoHealthCheck();
+  async run(_args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
+    const health = await klaviyoHealthCheck(tenantCtx);
     if (!health.ok) return { ok: false, detail: health.detail };
-    const lists = await klaviyoListLists().catch(() => []);
-    const campaigns = await klaviyoListCampaigns().catch(() => []);
+    const lists = await klaviyoListLists(tenantCtx).catch(() => []);
+    const campaigns = await klaviyoListCampaigns(tenantCtx).catch(() => []);
     return {
       ok: true,
       account: { id: health.accountId, organization: health.organizationName },
@@ -1488,6 +1485,7 @@ const klaviyo_push_test_contact: OperatorTool = {
     required: ["email", "listId"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const email = String(args.email);
     const listId = String(args.listId);
     const upsert = await klaviyoUpsertProfile({
@@ -1495,11 +1493,11 @@ const klaviyo_push_test_contact: OperatorTool = {
       firstName: typeof args.firstName === "string" ? args.firstName : undefined,
       lastName: typeof args.lastName === "string" ? args.lastName : undefined,
       properties: { source: "operator-test", testedAt: new Date().toISOString() }
-    });
+    }, tenantCtx);
     if (!upsert.ok || !upsert.profileId) {
       return { ok: false, step: "profile_upsert", detail: upsert.detail };
     }
-    const sub = await klaviyoSubscribeProfileToList(upsert.profileId, listId);
+    const sub = await klaviyoSubscribeProfileToList(upsert.profileId, listId, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `klaviyo_push_test_contact → ${email} → list ${listId} (profile ${upsert.profileId})`,

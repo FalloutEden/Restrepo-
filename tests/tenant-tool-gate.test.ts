@@ -100,14 +100,13 @@ test("tenant context ALLOWS relink_printful_variants (lifted after printful-link
   assert.equal(tenantSafetyGate("relink_printful_variants", tenantCtx()), null);
 });
 
-test("tenant context blocks search_cj_products (needs CJ BYOK)", () => {
-  const gated = tenantSafetyGate("search_cj_products", tenantCtx());
-  assert.ok(gated && gated.ok === false);
+test("tenant context ALLOWS search_cj_products (lifted 2026-06-10 — cj-service.ts tenant-aware)", () => {
+  assert.equal(tenantSafetyGate("search_cj_products", tenantCtx()), null);
 });
 
-test("tenant context blocks klaviyo_status (needs Klaviyo BYOK)", () => {
-  const gated = tenantSafetyGate("klaviyo_status", tenantCtx());
-  assert.ok(gated && gated.ok === false);
+test("tenant context ALLOWS klaviyo tools (lifted 2026-06-10 — klaviyo.ts tenant-aware)", () => {
+  assert.equal(tenantSafetyGate("klaviyo_status", tenantCtx()), null);
+  assert.equal(tenantSafetyGate("klaviyo_push_test_contact", tenantCtx()), null);
 });
 
 test("tenant context blocks run_pipeline (uses every credential type)", () => {
