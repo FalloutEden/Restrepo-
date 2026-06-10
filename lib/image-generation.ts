@@ -1,27 +1,41 @@
 import "server-only";
 
 import { resolveOpenAIClient, IMAGE_MODEL } from "@/lib/openai";
+import { generateGeminiImage } from "@/lib/gemini-image";
 import type { TenantContext } from "@/lib/tenant-context";
 
+/** Which image generator to use. The operator offers the merchant the choice —
+ *  we don't limit them to one. "openai" = gpt-image-1, "google" = Nano Banana 2
+ *  (gemini-3.1-flash-image), which renders text far more reliably. */
+export type ImageProvider = "openai" | "google";
+
+export type GenerateImageOptions = {
+  transparent?: boolean;
+  /** Defaults to "openai" to preserve existing founder/BV behavior. */
+  provider?: ImageProvider;
+};
+
 /**
- * Generate a product image using OpenAI gpt-image-1.
+ * Generate a product image with the chosen provider.
  * Returns a Buffer containing the PNG image data.
  *
  * Pass `transparent: true` for print-on-demand artwork — Printful prints whatever
- * is in the PNG including any background, so apparel designs need a transparent
- * canvas so the shirt color shows through.
+ * is in the PNG, so apparel designs need a transparent canvas.
  *
- * Tenant-aware: pass tenantCtx so the call bills the merchant's own OpenAI key.
- * Note (per the project's standing rule): gpt-image-1 corrupts small text and is
- * not used for tenant catalog imagery — tenants upload print-ready art instead.
- * This stays for the founder/BV path and internal previews.
+ * Tenant-aware: pass tenantCtx so the call bills the merchant's own key for the
+ * chosen provider. AI generators can still mangle fine detail/text — callers
+ * should surface a "review before publishing" warning to the merchant.
  */
 export async function generateProductImage(
   prompt: string,
-  options: { transparent?: boolean } = {},
+  options: GenerateImageOptions = {},
   tenantCtx?: TenantContext
 ): Promise<{ buffer: Buffer; imageBase64: string }> {
-  // gpt-image-1 always returns base64 — passing response_format is rejected with 400.
+  if (options.provider === "google") {
+    return generateGeminiImage(prompt, { transparent: options.transparent }, tenantCtx);
+  }
+
+  // Default: OpenAI gpt-image-1. Always returns base64 — passing response_format is rejected with 400.
   const response = await resolveOpenAIClient(tenantCtx).images.generate({
     model: IMAGE_MODEL,
     prompt: prompt.slice(0, 4000),

@@ -201,6 +201,7 @@ test("listing every CredentialName has a definition (compile-time + runtime sani
     "printfulDefaultVariantId",
     "printfulRetailPrice",
     "klaviyoApiKey",
+    "googleApiKey",
     "cjApiKey",
     "cjEmail"
   ];

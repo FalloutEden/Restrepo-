@@ -348,7 +348,9 @@ const materialize_product: OperatorTool = {
   name: "materialize_product",
   description:
     "Create a Shopify draft listing. Drafts are reversible and not customer-facing, so this does NOT need approval. " +
-    "For a tenant's Printful/apparel product, ASK the merchant how they want to build it: (1) AUTO-build — they give you a print-ready transparent PNG (≥1800px); pass it as printFileUrl and warn them if it comes back low-res; or (2) MIRROR — they design the product in Printful's UI and you import it read-only (use the mirror flow, not this tool). Never AI-generate catalog art for a tenant. " +
+    "For a Printful/apparel product, ASK the merchant how they want the artwork — offer all options, don't pick for them: " +
+    "(1) UPLOAD their own print-ready transparent PNG (≥1800px) → pass printFileUrl; (2) GENERATE with imageProvider 'openai' (gpt-image-1) or 'google' (Nano Banana 2 — better at text); or (3) MIRROR a product they designed in Printful (use the mirror flow, not this tool). " +
+    "Surface any warnings the result returns (low-res upload, or 'review AI art before publishing'). " +
     "For dropship/CJ, pass sourceProductId from search_cj_products. Brand defaults from fulfillmentType.",
   input_schema: {
     type: "object",
@@ -360,8 +362,9 @@ const materialize_product: OperatorTool = {
       brand: { type: "string", enum: Object.keys(BRANDS) },
       niche: { type: "string" },
       sourceProductId: { type: "string", description: "CJ pid when fulfillmentType is 'zendrop'." },
-      imagePrompt: { type: "string", description: "Print-on-demand artwork direction. Founder/BV path only — used to AI-generate art. Tenants must supply printFileUrl instead." },
-      printFileUrl: { type: "string", description: "Printful AUTO-build: URL of the merchant's print-ready transparent PNG (≥1800px on the long edge). REQUIRED for tenant Printful products — tenants supply their own art, never AI-generated. If the merchant would rather design in Printful, use the mirror flow instead of this tool." }
+      imagePrompt: { type: "string", description: "Artwork direction for AI generation (used when imageProvider is set and no printFileUrl)." },
+      printFileUrl: { type: "string", description: "Printful AUTO-build: URL of the merchant's own print-ready transparent PNG (≥1800px on the long edge). Use when the merchant supplies their own art." },
+      imageProvider: { type: "string", enum: ["openai", "google"], description: "Generate the artwork instead of uploading: 'openai' (gpt-image-1) or 'google' (Nano Banana 2, gemini-3.1-flash-image — renders text far better). Ignored when printFileUrl is given. Each carries a 'review before publishing' warning." }
     },
     required: ["title", "description", "productType", "fulfillmentType"]
   },
@@ -377,7 +380,9 @@ const materialize_product: OperatorTool = {
       niche: typeof args.niche === "string" ? args.niche : undefined,
       sourceProductId: typeof args.sourceProductId === "string" ? args.sourceProductId : undefined,
       imagePrompt: typeof args.imagePrompt === "string" ? args.imagePrompt : undefined,
-      printFileUrl: typeof args.printFileUrl === "string" ? args.printFileUrl : undefined
+      printFileUrl: typeof args.printFileUrl === "string" ? args.printFileUrl : undefined,
+      imageProvider:
+        args.imageProvider === "openai" || args.imageProvider === "google" ? args.imageProvider : undefined
     };
     const result = await materializeProduct(input, tenantCtx);
     await logActivity({

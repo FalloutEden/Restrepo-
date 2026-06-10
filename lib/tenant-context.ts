@@ -75,6 +75,7 @@ export type CredentialName =
   | "printfulDefaultVariantId"
   | "printfulRetailPrice"
   | "klaviyoApiKey"
+  | "googleApiKey"
   | "cjApiKey"
   | "cjEmail";
 
@@ -137,6 +138,11 @@ const CREDENTIAL_DEFS: Record<CredentialName, CredentialDef> = {
     secretKey: "klaviyoApiKey",
     envFallback: ["KLAVIYO_API_KEY"],
     label: "Klaviyo API key"
+  },
+  googleApiKey: {
+    secretKey: "googleApiKey",
+    envFallback: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+    label: "Google Gemini API key (Nano Banana 2 image generation)"
   },
   cjApiKey: {
     secretKey: "cjApiKey",

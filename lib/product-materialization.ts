@@ -12,7 +12,7 @@ import {
   cleanCjDescription,
   type CjProductDetail
 } from "@/lib/cj-service";
-import { generateProductImage } from "@/lib/image-generation";
+import { generateProductImage, type ImageProvider } from "@/lib/image-generation";
 import { resolveBrand, type Brand } from "@/lib/brands";
 import { resolveShopifyCredentials, type ShopifyCredentials } from "@/lib/shopify-credentials";
 import { resolvePrintfulCredentials } from "@/lib/printful-credentials";
@@ -68,10 +68,14 @@ export type MaterializationInput = {
   // listing. Defaults to "locklayer" when unset.
   brand?: string;
   // Merchant-supplied print-ready artwork (transparent PNG) for the Printful
-  // auto-build path. When set, this image is used as the print file instead of
-  // AI-generating one — tenants always supply their own art (no gpt-image-1 for
-  // catalog), and we run a DPI/size check on it and warn if it's too low-res.
+  // auto-build path. When set, this image is used as the print file as-is, and
+  // we run a DPI/size check and warn if it's too low-res.
   printFileUrl?: string;
+  // Image source choice for the auto-build path when NO printFileUrl is given:
+  // generate the art with this provider ("openai" = gpt-image-1, "google" =
+  // Nano Banana 2). We don't limit the merchant — upload, OpenAI, or Google are
+  // all offered; each AI option carries a "review before publishing" warning.
+  imageProvider?: ImageProvider;
 };
 
 type ShopifyProductResponse = {
@@ -174,6 +178,12 @@ async function fetchPrintFileBuffer(url: string): Promise<Buffer> {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`Could not download print file (${r.status}) from ${url}`);
   return Buffer.from(await r.arrayBuffer());
+}
+
+function aiArtworkWarning(provider: ImageProvider): string {
+  return provider === "google"
+    ? "Artwork was AI-generated with Nano Banana 2 (gemini-3.1-flash-image). It renders text well, but still review the design for misspellings or distorted detail before you publish."
+    : "Artwork was AI-generated with gpt-image-1, which can corrupt small text and fine detail. Review the design carefully before publishing — or upload your own print-ready art instead.";
 }
 
 export async function checkPrintFileQuality(buffer: Buffer): Promise<string[]> {
@@ -881,17 +891,26 @@ async function materializePrintfulProduct(input: MaterializationInput, tenantCtx
   const isTenant = !!tenantCtx && !tenantCtx.isFounder;
   const warnings: string[] = [];
 
-  // Acquire the print artwork. Two flows (the operator picks with the merchant):
-  // AUTO with a merchant-supplied print-ready PNG (the tenant path — never
-  // AI-generated, to avoid gpt-image-1 catalog slop), or the founder/BV path
-  // which may AI-generate. A tenant with no uploaded image is told to upload one
-  // (or use the mirror flow) instead of getting AI slop.
+  // Acquire the print artwork. The operator offers the merchant the full menu —
+  // we don't limit them: (1) UPLOAD their own print-ready PNG, (2) generate with
+  // OpenAI gpt-image-1, (3) generate with Google Nano Banana 2, or (4) MIRROR a
+  // product they designed in Printful (handled outside this tool). Each AI
+  // option carries a "review before publishing" warning.
   let artworkBuffer: Buffer;
   let artworkBase64: string;
   if (input.printFileUrl) {
     artworkBuffer = await fetchPrintFileBuffer(input.printFileUrl);
     artworkBase64 = artworkBuffer.toString("base64");
     warnings.push(...(await checkPrintFileQuality(artworkBuffer)));
+  } else if (input.imageProvider) {
+    const generated = await generateProductImage(
+      imagePrompt,
+      { transparent: true, provider: input.imageProvider },
+      tenantCtx
+    );
+    artworkBuffer = generated.buffer;
+    artworkBase64 = generated.imageBase64;
+    warnings.push(aiArtworkWarning(input.imageProvider));
   } else if (isTenant) {
     return {
       opportunityId: input.runtimeId,
@@ -902,9 +921,10 @@ async function materializePrintfulProduct(input: MaterializationInput, tenantCtx
       status: "failed",
       imagePrompt,
       error:
-        "Auto-build needs a print-ready image. Upload your design as a transparent PNG (≥1800px on the long edge) and pass its URL as printFileUrl — or use the mirror flow to import a product you've already designed in Printful."
+        "Auto-build needs artwork. Pick one: upload a print-ready transparent PNG (≥1800px) as printFileUrl; or set imageProvider to 'openai' (gpt-image-1) or 'google' (Nano Banana 2 — better at text) to generate it; or use the mirror flow to import a product you designed in Printful."
     };
   } else {
+    // Founder/BV path with no explicit choice — default to OpenAI generation.
     const generated = await generateProductImage(imagePrompt, { transparent: true }, tenantCtx);
     artworkBuffer = generated.buffer;
     artworkBase64 = generated.imageBase64;

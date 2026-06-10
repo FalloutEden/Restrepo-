@@ -95,6 +95,8 @@ export type EncryptedSecrets = {
   printfulRetailPrice?: string;
   // Klaviyo
   klaviyoApiKey?: string;
+  // Google Gemini (Nano Banana 2 image generation)
+  googleApiKey?: string;
   // CJ Dropshipping
   cjApiKey?: string;
   cjEmail?: string;
