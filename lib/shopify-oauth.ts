@@ -106,3 +106,45 @@ export async function exchangeCodeForToken(
 export function brandSlugFromShop(shop: string): string {
   return shop.replace(/\.myshopify\.com$/, "").replace(/[^a-z0-9-]/g, "-");
 }
+
+// ── App configuration (from env / Partner dashboard) ────────────────────────
+
+export type ShopifyAppConfig = {
+  apiKey: string;
+  apiSecret: string;
+  appUrl: string; // public base URL, no trailing slash
+  scopes: string;
+};
+
+export function getShopifyAppConfig(): ShopifyAppConfig {
+  return {
+    apiKey: process.env.SHOPIFY_APP_API_KEY?.trim() ?? "",
+    apiSecret: process.env.SHOPIFY_APP_API_SECRET?.trim() ?? "",
+    appUrl: (process.env.SHOPIFY_APP_URL?.trim() ?? "").replace(/\/+$/, ""),
+    // Least-privilege default; tune in the Partner dashboard + here together.
+    scopes: process.env.SHOPIFY_APP_SCOPES?.trim() || "read_products,write_products,read_orders"
+  };
+}
+
+/** True only when the app credentials are configured — routes 503 otherwise so
+ *  a half-configured deploy fails loudly instead of bouncing merchants into a
+ *  broken install. */
+export function shopifyAppConfigured(): boolean {
+  const c = getShopifyAppConfig();
+  return Boolean(c.apiKey && c.apiSecret && c.appUrl);
+}
+
+/**
+ * Verify a Shopify WEBHOOK HMAC. Webhooks are signed differently from the OAuth
+ * callback: HMAC-SHA256 of the RAW request body, base64-encoded, in the
+ * `X-Shopify-Hmac-Sha256` header. App-level (GDPR/compliance) webhooks are
+ * signed with the app's API secret. Timing-safe.
+ */
+export function verifyWebhookHmac(rawBody: string, hmacHeader: string | null, secret: string): boolean {
+  if (!hmacHeader || !secret) return false;
+  const digest = crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
+  const a = Buffer.from(digest);
+  const b = Buffer.from(hmacHeader);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}

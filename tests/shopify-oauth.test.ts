@@ -13,6 +13,7 @@ import {
   validateShopDomain,
   buildInstallUrl,
   verifyShopifyHmac,
+  verifyWebhookHmac,
   brandSlugFromShop
 } from "../lib/shopify-oauth";
 
@@ -96,6 +97,27 @@ test("ignores the legacy signature param when computing the digest", () => {
   // Adding a `signature` param must not invalidate an otherwise-correct hmac.
   (q as Record<string, string>).signature = "legacy-should-be-ignored";
   assert.equal(verifyShopifyHmac(q, SECRET), true);
+});
+
+// ── verifyWebhookHmac (base64, raw body — GDPR/lifecycle webhooks) ──────────
+
+test("accepts a correctly-signed webhook body", () => {
+  const body = JSON.stringify({ shop_domain: "cool-store.myshopify.com" });
+  const sig = crypto.createHmac("sha256", SECRET).update(body, "utf8").digest("base64");
+  assert.equal(verifyWebhookHmac(body, sig, SECRET), true);
+});
+
+test("rejects a tampered webhook body", () => {
+  const body = JSON.stringify({ shop_domain: "cool-store.myshopify.com" });
+  const sig = crypto.createHmac("sha256", SECRET).update(body, "utf8").digest("base64");
+  assert.equal(verifyWebhookHmac(JSON.stringify({ shop_domain: "evil.myshopify.com" }), sig, SECRET), false);
+});
+
+test("rejects webhook with missing header or wrong secret", () => {
+  const body = "{}";
+  const sig = crypto.createHmac("sha256", SECRET).update(body, "utf8").digest("base64");
+  assert.equal(verifyWebhookHmac(body, null, SECRET), false);
+  assert.equal(verifyWebhookHmac(body, sig, "wrong"), false);
 });
 
 // ── brandSlugFromShop ───────────────────────────────────────────────────────
