@@ -1,0 +1,16 @@
+{
+  "title": "Black Vault — Insignia Tee",
+  "blankMatch": "3001",
+  "color": "Black",
+  "price": "44.00",
+  "sku": "BV-INSIGNIA",
+  "tags": "Black Vault, monogram, insignia, premium",
+  "vendor": "Black Vault",
+  "productType": "T-Shirt",
+  "body": "<p>Premium black tee with the Black Vault crest at the left chest and the BLACK VAULT insignia across the back. Gold on black. Printed to order.</p>",
+  "placements": [
+    { "design": ".openclaw/bv-designs/print/emblem-flat-a-5000.png", "placement": "front", "mode": "chest-left", "widthFactor": 0.26, "vectorize": true, "color": "#C9A24B" },
+    { "design": ".openclaw/bv-designs/print/backprint-flat-5000.png", "placement": "back", "mode": "center", "widthFactor": 0.9, "vectorize": true, "color": "#C9A24B" }
+  ],
+  "publish": false
+}
