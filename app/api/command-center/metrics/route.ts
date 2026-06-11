@@ -12,9 +12,27 @@ export async function GET() {
   const out: { shopify: Block; earnings: Block; etsy: Block; imageGen: Block } = {
     shopify: { status: "pending" },
     earnings: { status: "pending" },
-    etsy: { status: "pending", note: "Etsy API approval pending" },
+    etsy: { status: "pending" },
     imageGen: { status: "pending" }
   };
+
+  // Etsy — GthicPrintables public shop stats (x-api-key MUST be keystring:shared_secret).
+  const ekey = process.env.ETSY_API_KEYSTRING?.trim();
+  const esec = process.env.ETSY_SHARED_SECRET?.trim();
+  if (ekey && esec) {
+    try {
+      const r = await fetch("https://api.etsy.com/v3/application/shops?shop_name=GthicPrintables", {
+        headers: { "x-api-key": `${ekey}:${esec}` },
+        cache: "no-store"
+      });
+      if (r.ok) {
+        const s = ((await r.json()).results ?? [])[0] as Record<string, number> | undefined;
+        if (s) out.etsy = { status: "live", listings: s.listing_active_count ?? 0, sold: s.transaction_sold_count ?? 0, favorers: s.num_favorers ?? 0, shopId: s.shop_id };
+      }
+    } catch {
+      // leave pending
+    }
+  }
 
   const dom = process.env.SHOPIFY_BLACKVAULT_STORE_DOMAIN?.trim();
   const tok = process.env.SHOPIFY_BLACKVAULT_API_KEY?.trim();

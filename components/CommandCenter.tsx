@@ -70,13 +70,14 @@ export default function CommandCenter() {
   const num = (n: unknown) => (n == null || typeof n !== "number" ? "—" : n.toLocaleString());
   const pct = (n: unknown) => (n == null || typeof n !== "number" ? "—" : (n >= 0 ? "+" : "") + n + "%");
   const footBtn = (color: string, strong: boolean): React.CSSProperties => ({ background: strong ? `${color}1a` : "transparent", border: `1px solid ${strong ? color + "66" : "rgba(255,255,255,0.12)"}`, color, borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: strong ? 800 : 600, letterSpacing: 1.1, cursor: "pointer" });
-  const sh = m?.shopify ?? {}, ea = m?.earnings ?? {};
+  const sh = m?.shopify ?? {}, ea = m?.earnings ?? {}, et = m?.etsy ?? {};
   const shStatus: Live = sh.status === "live" ? "live" : "pending";
   const eaStatus: Live = ea.status === "live" ? "live" : "pending";
+  const etStatus: Live = et.status === "live" ? "live" : "pending";
   const activeCount = mockAgents.filter((a) => a.status === "Running" || a.status === "Retrying").length;
   const queued = mockAgents.reduce((s, a) => s + (a.queueDepth || 0), 0);
   const panels: { icon: string; title: string; accent: string; status: Live; metrics: Metric[]; desk: React.CSSProperties; href: string }[] = [
-    { icon: "🛒", title: "ETSY STORE", accent: NEON.orange, status: "pending", metrics: [{ label: "Sales", value: "—" }, { label: "Traffic", value: "—" }, { label: "Conversion", value: "—" }], desk: { top: 72, left: 18 }, href: "/operator" },
+    { icon: "🛒", title: "ETSY STORE", accent: NEON.orange, status: etStatus, metrics: [{ label: "Listings", value: num(et.listings) }, { label: "Sold", value: num(et.sold) }, { label: "Favorers", value: num(et.favorers) }], desk: { top: 72, left: 18 }, href: "/operator" },
     { icon: "🟢", title: "SHOPIFY", accent: NEON.green, status: shStatus, metrics: [{ label: "Orders", value: num(sh.orders) }, { label: "Revenue", value: money(sh.revenue) }, { label: "Growth", value: pct(sh.growth) }], desk: { top: 72, right: 18 }, href: "/pipeline" },
     { icon: "💲", title: "GROSS EARNINGS", accent: NEON.amber, status: eaStatus, metrics: [{ label: "Total", value: money(ea.total) }, { label: "Net", value: money(ea.net) }, { label: "Monthly", value: money(ea.monthly) }], desk: { top: "44%", left: "50%", transform: "translateX(-50%)", width: 260 }, href: "/dashboard" },
     { icon: "💡", title: "NEW IDEAS", accent: NEON.cyan, status: "live", metrics: [{ label: "Agents", value: String(mockAgents.length) }, { label: "Active", value: String(activeCount) }, { label: "Queued", value: String(queued) }], desk: { bottom: 22, left: 18 }, href: "/pipeline" },
@@ -133,7 +134,7 @@ export default function CommandCenter() {
         <button onClick={() => router.push("/admin/incidents")} style={footBtn(errorCount ? NEON.orange : "rgba(180,195,225,0.55)", !!errorCount)}>⚠ ERRORS{errorCount ? ` (${errorCount})` : ""}</button>
         <button onClick={() => router.push("/settings")} style={footBtn("rgba(180,195,225,0.55)", false)}>SETTINGS</button>
         <button onClick={() => router.push("/docs")} style={footBtn("rgba(180,195,225,0.55)", false)}>HELP</button>
-        <span style={{ marginLeft: "auto", fontSize: 11, letterSpacing: 1, color: m?.shopify?.status === "live" ? NEON.green : NEON.amber }}>● {m?.shopify?.status === "live" ? "Shopify LIVE" : "connecting…"}</span>
+        <span style={{ marginLeft: "auto", fontSize: 11, letterSpacing: 1, color: shStatus === "live" || etStatus === "live" ? NEON.green : NEON.amber }}>● {[shStatus === "live" ? "Shopify" : null, etStatus === "live" ? "Etsy" : null].filter(Boolean).join(" + ") || "connecting"}{shStatus === "live" || etStatus === "live" ? " LIVE" : "…"}</span>
       </div>
 
       {selectedAgent && <AgentDetailModal agent={selectedAgent} onClose={() => setSelectedAgent(null)} />}
