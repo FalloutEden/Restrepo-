@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import CerebroBrain from "@/components/CerebroBrain";
+import NotificationLayer from "@/components/NotificationLayer";
 import { mockAgents } from "@/lib/mock-agents";
 
 type Metric = { label: string; value: string };
@@ -83,9 +84,12 @@ export default function CommandCenter() {
       <HudPanel icon="🎨" title="IMAGE GEN" accent={NEON.magenta} status="pending" style={{ bottom: 22, right: 18 }}
         metrics={[{ label: "Prompts", value: "—" }, { label: "Styles", value: "—" }, { label: "Output", value: "—" }]} />
 
+      {/* orange completion notifications */}
+      <NotificationLayer />
+
       {/* footer */}
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, display: "flex", gap: 22, padding: "8px 16px", fontSize: 11, letterSpacing: 1.5, color: "rgba(180,195,225,0.45)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <span>SETTINGS</span><span>NOTIFICATIONS</span><span>HELP</span>
+        <span>SETTINGS</span><span>HELP</span>
         <span style={{ marginLeft: "auto", color: m?.shopify?.status === "live" ? NEON.green : NEON.amber }}>● {m?.shopify?.status === "live" ? "Shopify LIVE · Etsy pending" : "connecting…"}</span>
       </div>
     </div>
