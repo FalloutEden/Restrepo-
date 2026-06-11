@@ -61,7 +61,7 @@ export function AgentDetailModal({ agent, onClose }: AgentDetailModalProps) {
 
         <div className="modal-header">
           <div className="modal-identity">
-            <span className="modal-room-tag">Live room render</span>
+            <span className="modal-room-tag">Live neural render</span>
             <span className="agent-meta">Updated {agent.updatedAt}</span>
           </div>
         </div>

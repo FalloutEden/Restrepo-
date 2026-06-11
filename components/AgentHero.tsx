@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { authedFetch } from "@/lib/client-auth";
 import type { Agent, AgentStatus } from "@/lib/mock-agents";
 import { mockAgents } from "@/lib/mock-agents";
-import { AgentCard } from "@/components/AgentCard";
+import CerebroBrain from "@/components/CerebroBrain";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
 
 // Map pipeline role IDs → agent card IDs
@@ -368,15 +368,14 @@ export function AgentHero() {
         )}
       </div>
 
-      {/* Agent Grid */}
-      <div className="agent-hero-grid">
-        {agents.map((agent) => (
-          <AgentCard
-            key={agent.id}
-            agent={agent}
-            onClick={() => setSelectedAgent(agent)}
-          />
-        ))}
+      {/* The fleet as one living brain — no tiles. Neurons fire as agents work;
+          click a region for analytics, a neuron to open the agent. */}
+      <div style={{ marginTop: 18 }}>
+        <CerebroBrain
+          agents={agents}
+          height={600}
+          onSelect={(id) => { const a = agents.find((x) => x.id === id); if (a) setSelectedAgent(a); }}
+        />
       </div>
 
       {/* Detail modal */}
