@@ -7,11 +7,14 @@
 // can't yet (Etsy API approval). Live data + orange completion alerts land in the
 // next iterations.
 
+import { useEffect, useState } from "react";
 import CerebroBrain from "@/components/CerebroBrain";
 import { mockAgents } from "@/lib/mock-agents";
 
 type Metric = { label: string; value: string };
 type Live = "live" | "pending" | "demo";
+type Block = { status?: "live" | "pending"; [k: string]: unknown };
+type Metrics = { shopify?: Block; earnings?: Block; etsy?: Block; imageGen?: Block };
 
 const NEON = { orange: "#ff7a18", amber: "#ffb347", cyan: "#2de2e6", magenta: "#ff2e97", green: "#3ef0a0", violet: "#b98bff" };
 
@@ -35,6 +38,20 @@ function HudPanel({ icon, title, accent, metrics, status, style }: { icon: strin
 }
 
 export default function CommandCenter() {
+  const [m, setM] = useState<Metrics | null>(null);
+  useEffect(() => {
+    let on = true;
+    const load = () => fetch("/api/command-center/metrics", { cache: "no-store" }).then((r) => r.json()).then((d) => on && setM(d)).catch(() => {});
+    load();
+    const id = setInterval(load, 60000);
+    return () => { on = false; clearInterval(id); };
+  }, []);
+  const money = (n: unknown) => (n == null || typeof n !== "number" ? "—" : "$" + n.toLocaleString());
+  const num = (n: unknown) => (n == null || typeof n !== "number" ? "—" : n.toLocaleString());
+  const pct = (n: unknown) => (n == null || typeof n !== "number" ? "—" : (n >= 0 ? "+" : "") + n + "%");
+  const sh = m?.shopify ?? {}, ea = m?.earnings ?? {};
+  const shStatus: Live = sh.status === "live" ? "live" : "pending";
+  const eaStatus: Live = ea.status === "live" ? "live" : "pending";
   return (
     <div style={{ position: "relative", width: "100%", minHeight: 760, background: "radial-gradient(130% 110% at 50% 35%, #0a0e18 0%, #04050a 70%, #020308 100%)", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(45,226,230,0.18)", fontFamily: "ui-sans-serif, system-ui, sans-serif" }}>
       {/* circuit-grid backdrop */}
@@ -57,10 +74,10 @@ export default function CommandCenter() {
       {/* floating HUD panels */}
       <HudPanel icon="🛒" title="ETSY STORE" accent={NEON.orange} status="pending" style={{ top: 72, left: 18 }}
         metrics={[{ label: "Sales", value: "—" }, { label: "Traffic", value: "—" }, { label: "Conversion", value: "—" }]} />
-      <HudPanel icon="🟢" title="SHOPIFY" accent={NEON.green} status="pending" style={{ top: 72, right: 18 }}
-        metrics={[{ label: "Orders", value: "…" }, { label: "Revenue", value: "…" }, { label: "Growth", value: "…" }]} />
-      <HudPanel icon="💲" title="GROSS EARNINGS" accent={NEON.amber} status="pending" style={{ top: "44%", left: "50%", transform: "translateX(-50%)", width: 260 }}
-        metrics={[{ label: "Total", value: "…" }, { label: "Net", value: "…" }, { label: "Monthly", value: "…" }]} />
+      <HudPanel icon="🟢" title="SHOPIFY" accent={NEON.green} status={shStatus} style={{ top: 72, right: 18 }}
+        metrics={[{ label: "Orders", value: num(sh.orders) }, { label: "Revenue", value: money(sh.revenue) }, { label: "Growth", value: pct(sh.growth) }]} />
+      <HudPanel icon="💲" title="GROSS EARNINGS" accent={NEON.amber} status={eaStatus} style={{ top: "44%", left: "50%", transform: "translateX(-50%)", width: 260 }}
+        metrics={[{ label: "Total", value: money(ea.total) }, { label: "Net", value: money(ea.net) }, { label: "Monthly", value: money(ea.monthly) }]} />
       <HudPanel icon="💡" title="NEW IDEAS" accent={NEON.cyan} status="live" style={{ bottom: 22, left: 18 }}
         metrics={[{ label: "Agents", value: String(mockAgents.length) }, { label: "Active", value: String(mockAgents.filter((a) => a.status === "Running" || a.status === "Retrying").length) }, { label: "Queued", value: String(mockAgents.reduce((s, a) => s + (a.queueDepth || 0), 0)) }]} />
       <HudPanel icon="🎨" title="IMAGE GEN" accent={NEON.magenta} status="pending" style={{ bottom: 22, right: 18 }}
@@ -69,7 +86,7 @@ export default function CommandCenter() {
       {/* footer */}
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, display: "flex", gap: 22, padding: "8px 16px", fontSize: 11, letterSpacing: 1.5, color: "rgba(180,195,225,0.45)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
         <span>SETTINGS</span><span>NOTIFICATIONS</span><span>HELP</span>
-        <span style={{ marginLeft: "auto", color: NEON.amber }}>● live data wiring in progress</span>
+        <span style={{ marginLeft: "auto", color: m?.shopify?.status === "live" ? NEON.green : NEON.amber }}>● {m?.shopify?.status === "live" ? "Shopify LIVE · Etsy pending" : "connecting…"}</span>
       </div>
     </div>
   );
