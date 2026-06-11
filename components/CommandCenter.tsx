@@ -47,14 +47,30 @@ export default function CommandCenter() {
     const id = setInterval(load, 60000);
     return () => { on = false; clearInterval(id); };
   }, []);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const f = () => setNarrow(window.innerWidth < 900);
+    f();
+    window.addEventListener("resize", f);
+    return () => window.removeEventListener("resize", f);
+  }, []);
   const money = (n: unknown) => (n == null || typeof n !== "number" ? "—" : "$" + n.toLocaleString());
   const num = (n: unknown) => (n == null || typeof n !== "number" ? "—" : n.toLocaleString());
   const pct = (n: unknown) => (n == null || typeof n !== "number" ? "—" : (n >= 0 ? "+" : "") + n + "%");
   const sh = m?.shopify ?? {}, ea = m?.earnings ?? {};
   const shStatus: Live = sh.status === "live" ? "live" : "pending";
   const eaStatus: Live = ea.status === "live" ? "live" : "pending";
+  const activeCount = mockAgents.filter((a) => a.status === "Running" || a.status === "Retrying").length;
+  const queued = mockAgents.reduce((s, a) => s + (a.queueDepth || 0), 0);
+  const panels: { icon: string; title: string; accent: string; status: Live; metrics: Metric[]; desk: React.CSSProperties }[] = [
+    { icon: "🛒", title: "ETSY STORE", accent: NEON.orange, status: "pending", metrics: [{ label: "Sales", value: "—" }, { label: "Traffic", value: "—" }, { label: "Conversion", value: "—" }], desk: { top: 72, left: 18 } },
+    { icon: "🟢", title: "SHOPIFY", accent: NEON.green, status: shStatus, metrics: [{ label: "Orders", value: num(sh.orders) }, { label: "Revenue", value: money(sh.revenue) }, { label: "Growth", value: pct(sh.growth) }], desk: { top: 72, right: 18 } },
+    { icon: "💲", title: "GROSS EARNINGS", accent: NEON.amber, status: eaStatus, metrics: [{ label: "Total", value: money(ea.total) }, { label: "Net", value: money(ea.net) }, { label: "Monthly", value: money(ea.monthly) }], desk: { top: "44%", left: "50%", transform: "translateX(-50%)", width: 260 } },
+    { icon: "💡", title: "NEW IDEAS", accent: NEON.cyan, status: "live", metrics: [{ label: "Agents", value: String(mockAgents.length) }, { label: "Active", value: String(activeCount) }, { label: "Queued", value: String(queued) }], desk: { bottom: 22, left: 18 } },
+    { icon: "🎨", title: "IMAGE GEN", accent: NEON.magenta, status: "pending", metrics: [{ label: "Prompts", value: "—" }, { label: "Styles", value: "—" }, { label: "Output", value: "—" }], desk: { bottom: 22, right: 18 } }
+  ];
   return (
-    <div style={{ position: "relative", width: "100%", minHeight: 760, background: "radial-gradient(130% 110% at 50% 35%, #0a0e18 0%, #04050a 70%, #020308 100%)", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(45,226,230,0.18)", fontFamily: "ui-sans-serif, system-ui, sans-serif" }}>
+    <div style={{ position: "relative", width: "100%", minHeight: narrow ? 0 : 760, background: "radial-gradient(130% 110% at 50% 35%, #0a0e18 0%, #04050a 70%, #020308 100%)", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(45,226,230,0.18)", fontFamily: "ui-sans-serif, system-ui, sans-serif" }}>
       {/* circuit-grid backdrop */}
       <div aria-hidden style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(45,226,230,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(45,226,230,0.04) 1px, transparent 1px)", backgroundSize: "44px 44px", maskImage: "radial-gradient(120% 100% at 50% 40%, #000 35%, transparent 80%)" }} />
 
@@ -67,22 +83,27 @@ export default function CommandCenter() {
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: NEON.green, display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: NEON.green, boxShadow: `0 0 8px ${NEON.green}` }} />ACTIVE SESSION</span>
       </div>
 
-      {/* the brain (centerpiece) */}
-      <div style={{ position: "absolute", top: "8%", left: "50%", transform: "translateX(-50%)", width: "min(62%, 720px)" }}>
-        <CerebroBrain agents={mockAgents} height={640} />
-      </div>
-
-      {/* floating HUD panels */}
-      <HudPanel icon="🛒" title="ETSY STORE" accent={NEON.orange} status="pending" style={{ top: 72, left: 18 }}
-        metrics={[{ label: "Sales", value: "—" }, { label: "Traffic", value: "—" }, { label: "Conversion", value: "—" }]} />
-      <HudPanel icon="🟢" title="SHOPIFY" accent={NEON.green} status={shStatus} style={{ top: 72, right: 18 }}
-        metrics={[{ label: "Orders", value: num(sh.orders) }, { label: "Revenue", value: money(sh.revenue) }, { label: "Growth", value: pct(sh.growth) }]} />
-      <HudPanel icon="💲" title="GROSS EARNINGS" accent={NEON.amber} status={eaStatus} style={{ top: "44%", left: "50%", transform: "translateX(-50%)", width: 260 }}
-        metrics={[{ label: "Total", value: money(ea.total) }, { label: "Net", value: money(ea.net) }, { label: "Monthly", value: money(ea.monthly) }]} />
-      <HudPanel icon="💡" title="NEW IDEAS" accent={NEON.cyan} status="live" style={{ bottom: 22, left: 18 }}
-        metrics={[{ label: "Agents", value: String(mockAgents.length) }, { label: "Active", value: String(mockAgents.filter((a) => a.status === "Running" || a.status === "Retrying").length) }, { label: "Queued", value: String(mockAgents.reduce((s, a) => s + (a.queueDepth || 0), 0)) }]} />
-      <HudPanel icon="🎨" title="IMAGE GEN" accent={NEON.magenta} status="pending" style={{ bottom: 22, right: 18 }}
-        metrics={[{ label: "Prompts", value: "—" }, { label: "Styles", value: "—" }, { label: "Output", value: "—" }]} />
+      {narrow ? (
+        /* stacked layout for small screens */
+        <div style={{ padding: "10px 12px 46px" }}>
+          <CerebroBrain agents={mockAgents} height={380} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 14 }}>
+            {panels.map((p) => (
+              <HudPanel key={p.title} icon={p.icon} title={p.title} accent={p.accent} status={p.status} metrics={p.metrics} style={{ position: "static", width: "auto" }} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* desktop cockpit — brain centered, panels floating */
+        <>
+          <div style={{ position: "absolute", top: "8%", left: "50%", transform: "translateX(-50%)", width: "min(62%, 720px)" }}>
+            <CerebroBrain agents={mockAgents} height={640} />
+          </div>
+          {panels.map((p) => (
+            <HudPanel key={p.title} icon={p.icon} title={p.title} accent={p.accent} status={p.status} metrics={p.metrics} style={p.desk} />
+          ))}
+        </>
+      )}
 
       {/* orange completion notifications */}
       <NotificationLayer />
