@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { authedFetch } from "@/lib/client-auth";
 import { AgentCard } from "@/components/AgentCard";
 import { AgentDetailModal } from "@/components/AgentDetailModal";
-import { AgentHabitat } from "@/components/AgentHabitat";
+import CerebroBrain from "@/components/CerebroBrain";
 import { AutonomousQueueBoard } from "@/components/AutonomousQueueBoard";
 import { CerebroHeartbeat } from "@/components/CerebroHeartbeat";
 import { DatasetCatalogue } from "@/components/DatasetCatalogue";
@@ -1189,29 +1189,18 @@ export function AgentDashboard({ agents, isAdmin = true }: AgentDashboardProps) 
       <section className="archive-shell">
         <div className="status-header">
           <div>
-            <span className="eyebrow">Agents · Habitats</span>
-            <h2 className="section-title">Autonomous agent roster and latest runtime summaries</h2>
+            <span className="eyebrow">Agents · CEREBRO</span>
+            <h2 className="section-title">The fleet as one living brain — neurons fire as agents work</h2>
           </div>
         </div>
         {/*
-          Sparser 2-3 across habitat grid (vs. the AgentCard 4-across
-          tile grid in AgentHero). Each habitat is a full cyberpunk room
-          with the agent's synapse running behind a readable foreground
-          plate. The "alive ecosystem" feel — each agent is a habitat,
-          not a cramped tile.
+          One unified brain (top view): every agent is a neuron placed in a named
+          brain region, wired into a connectome, signals firing along the pathways
+          as they work. Replaces the per-agent habitat grid with a single living
+          image. Click a neuron to open that agent.
         */}
-        <div
-          aria-label="Agent dashboard"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-            gap: 20,
-            marginTop: 4
-          }}
-        >
-          {liveAgents.map((agent) => (
-            <AgentHabitat key={agent.id} agent={agent} onClick={() => setSelectedAgentId(agent.id)} />
-          ))}
+        <div aria-label="CEREBRO agent brain" style={{ marginTop: 4 }}>
+          <CerebroBrain agents={liveAgents} onSelect={(id) => setSelectedAgentId(id)} height={560} />
         </div>
       </section>
 
