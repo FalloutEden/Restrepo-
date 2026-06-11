@@ -2,6 +2,20 @@
 
 _2026-06-11. The founder's dormant Etsy shop (gothic niche) being revived._
 
+## ✅ ETSY API IS LIVE (2026-06-11) — auth format gotcha (CRITICAL)
+The Etsy app was APPROVED. Creds in `.env.local`: `ETSY_API_KEYSTRING` + `ETSY_SHARED_SECRET`.
+**The `x-api-key` header MUST be `keystring:shared_secret`, NOT the keystring alone** —
+every prior 403 ("shared secret is required in x-api-key header") was this. Verified:
+`openapi-ping` → 200, application_id 1492614155004.
+- **GthicPrintables shop_id = 40775757.** Public stats (active listings, transaction_sold_count,
+  num_favorers) come from `GET /v3/application/shops?shop_name=GthicPrintables` — app-level,
+  NO OAuth needed. Wired into `/api/command-center/metrics` (Etsy panel LIVE; currently 0/0/0
+  because the shop is dormant — numbers populate as we relist).
+- **OAuth (PKCE) is still needed** for PRIVATE data + listing management/creation (the
+  "AI drafts → founder activates" automation). Authorize: `etsy.com/oauth/connect`; token:
+  `POST api.etsy.com/v3/public/oauth/token` (client_id = keystring, code_verifier/challenge,
+  redirect must be whitelisted in the Etsy app). Access token format: `{user_id}.{token}`.
+
 ## The hard constraint (don't re-derive this)
 **GthicPrintables is an Etsy-platform store in Printful (Printful store 10020261).**
 The Printful API CANNOT manage it — `/store/products` returns 400
