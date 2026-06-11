@@ -40,9 +40,13 @@ function HudPanel({ icon, title, accent, metrics, status, style }: { icon: strin
 
 export default function CommandCenter() {
   const [m, setM] = useState<Metrics | null>(null);
+  const [graph, setGraph] = useState<{ nodes?: number; edges?: number; communities?: number } | null>(null);
   useEffect(() => {
     let on = true;
-    const load = () => fetch("/api/command-center/metrics", { cache: "no-store" }).then((r) => r.json()).then((d) => on && setM(d)).catch(() => {});
+    const load = () => {
+      fetch("/api/command-center/metrics", { cache: "no-store" }).then((r) => r.json()).then((d) => on && setM(d)).catch(() => {});
+      fetch("/api/cerebro/heartbeat", { cache: "no-store" }).then((r) => r.json()).then((d) => on && setGraph(d.graph)).catch(() => {});
+    };
     load();
     const id = setInterval(load, 60000);
     return () => { on = false; clearInterval(id); };
@@ -81,6 +85,12 @@ export default function CommandCenter() {
         <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 2.4, color: NEON.cyan, textShadow: `0 0 10px ${NEON.cyan}88` }}>AI ECOSYSTEM</span>
         <span style={{ color: "rgba(180,195,225,0.4)" }}>|</span>
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: NEON.green, display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: NEON.green, boxShadow: `0 0 8px ${NEON.green}` }} />ACTIVE SESSION</span>
+        {graph?.nodes != null && (
+          <>
+            <span style={{ color: "rgba(180,195,225,0.4)" }}>|</span>
+            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.4, color: "rgba(185,139,255,0.9)", textShadow: "0 0 8px rgba(185,139,255,0.5)" }}>{graph.nodes!.toLocaleString()} NODES · {(graph.edges ?? 0).toLocaleString()} SYNAPSES</span>
+          </>
+        )}
       </div>
 
       {narrow ? (
