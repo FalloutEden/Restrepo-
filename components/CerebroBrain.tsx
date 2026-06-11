@@ -43,7 +43,7 @@ export default function CerebroBrain({ agents, onSelect, height = 600 }: Props) 
     const ctx = canvas.getContext("2d"); if (!ctx) return;
     let W = 0, H = height, dpr = Math.min(window.devicePixelRatio || 1, 2);
     let cx = 0, cy = 0, rx = 0, ry = 0;
-    let nodes: Node[] = [], edges: Edge[] = [], signals: Signal[] = [], hots: Hot[] = [];
+    let nodes: Node[] = [], edges: Edge[] = [], signals: Signal[] = [], hots: Hot[] = [], dust: { x: number; y: number; ph: number; c: 0 | 1 }[] = [];
     const timers: number[] = [];
     let hoverIdx = -1, raf = 0, last = 0;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
@@ -70,20 +70,32 @@ export default function CerebroBrain({ agents, onSelect, height = 600 }: Props) 
       const core = nodes.findIndex((n) => n.front === FRONTS.length - 1);
       nodes.forEach((n, i) => { const ds = nodes.map((m, j) => ({ j, d: Math.hypot(n.x - m.x, n.y - m.y) })).filter((o) => o.j !== i).sort((a, b) => a.d - b.d); add(i, ds[0]?.j ?? i); add(i, ds[1]?.j ?? i); if (core >= 0 && hash(n.agent.id + "c") > 0.4) add(i, core); });
       signals = []; timers.length = edges.length; timers.fill(0);
+      // dense background synapse field (twinkling micro-nodes inside the brain)
+      dust = [];
+      for (let i = 0; i < 170; i++) {
+        const a = hash("d" + i) * 6.283, rr = Math.sqrt(hash("dr" + i)) * 0.82;
+        dust.push({ x: cx + Math.cos(a) * rr * rx, y: cy + Math.sin(a) * rr * ry, ph: hash("dp" + i) * 6.283, c: (hash("dc" + i) > 0.5 ? 1 : 0) as 0 | 1 });
+      }
     }
 
     function frame(ts: number) {
       const dt = Math.min(48, ts - (last || ts)); last = ts; const t = ts / 1000;
       ctx!.clearRect(0, 0, W, H);
       // body glow (monochrome)
-      const g = ctx!.createRadialGradient(cx, cy, 10, cx, cy, Math.max(rx, ry) * 1.25);
-      g.addColorStop(0, "rgba(34,40,54,0.5)"); g.addColorStop(0.6, "rgba(16,18,26,0.28)"); g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx!.fillStyle = g; ctx!.beginPath(); ctx!.ellipse(cx, cy, rx * 1.2, ry * 1.2, 0, 0, 6.283); ctx!.fill();
-      const outline = (sc: number, al: number, lw: number) => { ctx!.beginPath(); const steps = 130; for (let i = 0; i <= steps; i++) { const a = (i / steps) * 6.283; const bump = 1 + Math.sin(a * 7 + t * 0.5) * 0.024 + Math.sin(a * 13 - t * 0.35) * 0.014; const px = cx + Math.cos(a) * rx * sc * bump, py = cy + Math.sin(a) * ry * sc * bump * (a < Math.PI ? 1 : 1.03); if (i === 0) ctx!.moveTo(px, py); else ctx!.lineTo(px, py); } ctx!.closePath(); ctx!.strokeStyle = `rgba(190,200,220,${al})`; ctx!.lineWidth = lw; ctx!.stroke(); };
-      outline(1, 0.34, 1.4); outline(0.9, 0.12, 1); outline(0.78, 0.08, 1);
+      // twin neon glow — magenta on the left, blue on the right (cyberpunk brain)
+      const gm = ctx!.createRadialGradient(cx - rx * 0.4, cy, 10, cx - rx * 0.4, cy, rx * 1.05);
+      gm.addColorStop(0, "rgba(180,50,150,0.32)"); gm.addColorStop(0.55, "rgba(120,40,140,0.16)"); gm.addColorStop(1, "rgba(0,0,0,0)");
+      ctx!.fillStyle = gm; ctx!.beginPath(); ctx!.ellipse(cx, cy, rx * 1.2, ry * 1.2, 0, 0, 6.283); ctx!.fill();
+      const gb = ctx!.createRadialGradient(cx + rx * 0.4, cy, 10, cx + rx * 0.4, cy, rx * 1.05);
+      gb.addColorStop(0, "rgba(50,110,210,0.30)"); gb.addColorStop(0.55, "rgba(40,80,180,0.15)"); gb.addColorStop(1, "rgba(0,0,0,0)");
+      ctx!.fillStyle = gb; ctx!.beginPath(); ctx!.ellipse(cx, cy, rx * 1.2, ry * 1.2, 0, 0, 6.283); ctx!.fill();
+      const outline = (sc: number, al: number, lw: number, col: string) => { ctx!.beginPath(); const steps = 130; for (let i = 0; i <= steps; i++) { const a = (i / steps) * 6.283; const bump = 1 + Math.sin(a * 7 + t * 0.5) * 0.024 + Math.sin(a * 13 - t * 0.35) * 0.014; const px = cx + Math.cos(a) * rx * sc * bump, py = cy + Math.sin(a) * ry * sc * bump * (a < Math.PI ? 1 : 1.03); if (i === 0) ctx!.moveTo(px, py); else ctx!.lineTo(px, py); } ctx!.closePath(); ctx!.strokeStyle = `rgba(${col},${al})`; ctx!.lineWidth = lw; ctx!.stroke(); };
+      outline(1.02, 0.22, 3, "255,60,170"); outline(1.005, 0.3, 1.6, "120,180,255"); outline(1, 0.4, 1, "230,240,255"); outline(0.88, 0.1, 1, "150,170,210");
       ctx!.beginPath(); ctx!.moveTo(cx, cy - ry * 0.92); ctx!.bezierCurveTo(cx + 14, cy - ry * 0.3, cx - 14, cy + ry * 0.3, cx, cy + ry * 0.92); ctx!.strokeStyle = "rgba(170,180,200,0.16)"; ctx!.lineWidth = 1.3; ctx!.stroke();
       ctx!.strokeStyle = "rgba(170,180,200,0.07)"; ctx!.lineWidth = 1;
       for (let s = -1; s <= 1; s += 2) for (let gi = 0; gi < 4; gi++) { const yy = cy + (gi - 1.5) * ry * 0.34; ctx!.beginPath(); ctx!.moveTo(cx + s * rx * 0.12, yy); ctx!.quadraticCurveTo(cx + s * rx * 0.45, yy + ry * 0.12, cx + s * rx * 0.74, yy); ctx!.stroke(); }
+      // synapse dust — dense twinkling neural field behind the agent neurons
+      dust.forEach((d) => { const tw = 0.5 + 0.5 * Math.sin(t * 1.7 + d.ph); ctx!.fillStyle = d.c ? `rgba(120,185,255,${0.06 + tw * 0.22})` : `rgba(255,80,185,${0.06 + tw * 0.22})`; ctx!.beginPath(); ctx!.arc(d.x, d.y, 1 + tw * 0.6, 0, 6.283); ctx!.fill(); });
       // edges
       ctx!.lineWidth = 1; edges.forEach((e) => { const A = nodes[e.a], B = nodes[e.b]; ctx!.strokeStyle = `rgba(170,180,200,${0.04 + Math.max(A.level, B.level) * 0.05})`; ctx!.beginPath(); ctx!.moveTo(A.x, A.y); ctx!.lineTo(B.x, B.y); ctx!.stroke(); });
       // signals
