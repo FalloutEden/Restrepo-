@@ -18,7 +18,9 @@ import { FOUNDER_TENANT_ID, type TenantContext } from "@/lib/tenant-context";
 //   image bytes at candidates[0].content.parts[].inlineData.data (base64 PNG)
 
 const GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image";
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_IMAGE_MODEL}:generateContent`;
+// Image-generation models live on the v1beta endpoint (verified 2026-06-11:
+// v1 404s for this model, v1beta returns the image).
+const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent`;
 
 function resolveGeminiKey(tenantCtx?: TenantContext): string {
   if (tenantCtx && !tenantCtx.isFounder) return tenantCtx.requireSecret("googleApiKey");
