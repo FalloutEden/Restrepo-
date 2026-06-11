@@ -114,7 +114,7 @@ test("operator_auth_secret check is fail on Vercel without secret", async () => 
   // tenant-context / audit all gate on the pair to avoid that false
   // positive.
   process.env.VERCEL = "1";
-  process.env.NODE_ENV = "production";
+  (process.env as Record<string, string | undefined>).NODE_ENV = "production";
   delete process.env.OPERATOR_AUTH_SECRET;
   const restore = installMockFetch([
     { url: "/shop.json", status: 200, body: { shop: {} } },
@@ -130,8 +130,8 @@ test("operator_auth_secret check is fail on Vercel without secret", async () => 
   } finally {
     if (prevVercel === undefined) delete process.env.VERCEL;
     else process.env.VERCEL = prevVercel;
-    if (prevNodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = prevNodeEnv;
+    if (prevNodeEnv === undefined) delete (process.env as Record<string, string | undefined>).NODE_ENV;
+    else (process.env as Record<string, string | undefined>).NODE_ENV = prevNodeEnv;
     if (prevSecret !== undefined) process.env.OPERATOR_AUTH_SECRET = prevSecret;
     restore();
   }

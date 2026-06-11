@@ -931,7 +931,7 @@ const run_pipeline: OperatorTool = {
     if (!goal) return { error: "goal is required" };
 
     // createAutonomousRun returns 202 + payload {runId} when accepted.
-    const result = await createAutonomousRun({ goal });
+    const result = await createAutonomousRun({ goal }, ctx.tenantId ?? FOUNDER_TENANT_ID);
     await logActivity({
       kind: "tool_call",
       message: `run_pipeline → "${goal}" (status ${result.status})`,
