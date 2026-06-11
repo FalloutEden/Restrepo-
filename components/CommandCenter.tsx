@@ -8,9 +8,12 @@
 // next iterations.
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import CerebroBrain from "@/components/CerebroBrain";
 import NotificationLayer from "@/components/NotificationLayer";
+import { AgentDetailModal } from "@/components/AgentDetailModal";
 import { mockAgents } from "@/lib/mock-agents";
+import type { Agent } from "@/lib/mock-agents";
 
 type Metric = { label: string; value: string };
 type Live = "live" | "pending" | "demo";
@@ -19,10 +22,12 @@ type Metrics = { shopify?: Block; earnings?: Block; etsy?: Block; imageGen?: Blo
 
 const NEON = { orange: "#ff7a18", amber: "#ffb347", cyan: "#2de2e6", magenta: "#ff2e97", green: "#3ef0a0", violet: "#b98bff" };
 
-function HudPanel({ icon, title, accent, metrics, status, style }: { icon: string; title: string; accent: string; metrics: Metric[]; status: Live; style: React.CSSProperties }) {
+function HudPanel({ icon, title, accent, metrics, status, style, onClick }: { icon: string; title: string; accent: string; metrics: Metric[]; status: Live; style: React.CSSProperties; onClick?: () => void }) {
   const badge = status === "live" ? { t: "LIVE", c: NEON.green } : status === "pending" ? { t: "PENDING", c: NEON.amber } : { t: "DEMO", c: "#7c8aa5" };
+  const [hov, setHov] = useState(false);
   return (
-    <div style={{ position: "absolute", width: 232, padding: "12px 14px", background: "linear-gradient(160deg, rgba(10,14,22,0.92), rgba(6,8,14,0.92))", border: `1px solid ${accent}`, clipPath: "polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px))", boxShadow: `0 0 18px ${accent}33, inset 0 0 24px ${accent}14`, ...style }}>
+    <div onClick={onClick} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ position: "absolute", width: 232, padding: "12px 14px", background: "linear-gradient(160deg, rgba(10,14,22,0.92), rgba(6,8,14,0.92))", border: `1px solid ${accent}`, clipPath: "polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px))", boxShadow: hov ? `0 0 30px ${accent}66, inset 0 0 26px ${accent}22` : `0 0 18px ${accent}33, inset 0 0 24px ${accent}14`, cursor: onClick ? "pointer" : "default", transform: hov && onClick ? "translateY(-2px)" : "none", transition: "transform 0.15s, box-shadow 0.15s", ...style }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <span style={{ fontSize: 18, filter: `drop-shadow(0 0 5px ${accent})` }}>{icon}</span>
         <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.4, color: accent, textShadow: `0 0 8px ${accent}99` }}>{title}</span>
@@ -39,13 +44,16 @@ function HudPanel({ icon, title, accent, metrics, status, style }: { icon: strin
 }
 
 export default function CommandCenter() {
+  const router = useRouter();
   const [m, setM] = useState<Metrics | null>(null);
   const [graph, setGraph] = useState<{ nodes?: number; edges?: number; communities?: number } | null>(null);
+  const [errorCount, setErrorCount] = useState(0);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   useEffect(() => {
     let on = true;
     const load = () => {
       fetch("/api/command-center/metrics", { cache: "no-store" }).then((r) => r.json()).then((d) => on && setM(d)).catch(() => {});
-      fetch("/api/cerebro/heartbeat", { cache: "no-store" }).then((r) => r.json()).then((d) => on && setGraph(d.graph)).catch(() => {});
+      fetch("/api/cerebro/heartbeat", { cache: "no-store" }).then((r) => r.json()).then((d) => { if (!on) return; setGraph(d.graph); setErrorCount((Array.isArray(d.activity) ? d.activity : []).filter((e: { kind?: string }) => /error|warn|fail/i.test(e.kind || "")).length); }).catch(() => {});
     };
     load();
     const id = setInterval(load, 60000);
@@ -61,17 +69,18 @@ export default function CommandCenter() {
   const money = (n: unknown) => (n == null || typeof n !== "number" ? "—" : "$" + n.toLocaleString());
   const num = (n: unknown) => (n == null || typeof n !== "number" ? "—" : n.toLocaleString());
   const pct = (n: unknown) => (n == null || typeof n !== "number" ? "—" : (n >= 0 ? "+" : "") + n + "%");
+  const footBtn = (color: string, strong: boolean): React.CSSProperties => ({ background: strong ? `${color}1a` : "transparent", border: `1px solid ${strong ? color + "66" : "rgba(255,255,255,0.12)"}`, color, borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: strong ? 800 : 600, letterSpacing: 1.1, cursor: "pointer" });
   const sh = m?.shopify ?? {}, ea = m?.earnings ?? {};
   const shStatus: Live = sh.status === "live" ? "live" : "pending";
   const eaStatus: Live = ea.status === "live" ? "live" : "pending";
   const activeCount = mockAgents.filter((a) => a.status === "Running" || a.status === "Retrying").length;
   const queued = mockAgents.reduce((s, a) => s + (a.queueDepth || 0), 0);
-  const panels: { icon: string; title: string; accent: string; status: Live; metrics: Metric[]; desk: React.CSSProperties }[] = [
-    { icon: "🛒", title: "ETSY STORE", accent: NEON.orange, status: "pending", metrics: [{ label: "Sales", value: "—" }, { label: "Traffic", value: "—" }, { label: "Conversion", value: "—" }], desk: { top: 72, left: 18 } },
-    { icon: "🟢", title: "SHOPIFY", accent: NEON.green, status: shStatus, metrics: [{ label: "Orders", value: num(sh.orders) }, { label: "Revenue", value: money(sh.revenue) }, { label: "Growth", value: pct(sh.growth) }], desk: { top: 72, right: 18 } },
-    { icon: "💲", title: "GROSS EARNINGS", accent: NEON.amber, status: eaStatus, metrics: [{ label: "Total", value: money(ea.total) }, { label: "Net", value: money(ea.net) }, { label: "Monthly", value: money(ea.monthly) }], desk: { top: "44%", left: "50%", transform: "translateX(-50%)", width: 260 } },
-    { icon: "💡", title: "NEW IDEAS", accent: NEON.cyan, status: "live", metrics: [{ label: "Agents", value: String(mockAgents.length) }, { label: "Active", value: String(activeCount) }, { label: "Queued", value: String(queued) }], desk: { bottom: 22, left: 18 } },
-    { icon: "🎨", title: "IMAGE GEN", accent: NEON.magenta, status: "pending", metrics: [{ label: "Prompts", value: "—" }, { label: "Styles", value: "—" }, { label: "Output", value: "—" }], desk: { bottom: 22, right: 18 } }
+  const panels: { icon: string; title: string; accent: string; status: Live; metrics: Metric[]; desk: React.CSSProperties; href: string }[] = [
+    { icon: "🛒", title: "ETSY STORE", accent: NEON.orange, status: "pending", metrics: [{ label: "Sales", value: "—" }, { label: "Traffic", value: "—" }, { label: "Conversion", value: "—" }], desk: { top: 72, left: 18 }, href: "/operator" },
+    { icon: "🟢", title: "SHOPIFY", accent: NEON.green, status: shStatus, metrics: [{ label: "Orders", value: num(sh.orders) }, { label: "Revenue", value: money(sh.revenue) }, { label: "Growth", value: pct(sh.growth) }], desk: { top: 72, right: 18 }, href: "/pipeline" },
+    { icon: "💲", title: "GROSS EARNINGS", accent: NEON.amber, status: eaStatus, metrics: [{ label: "Total", value: money(ea.total) }, { label: "Net", value: money(ea.net) }, { label: "Monthly", value: money(ea.monthly) }], desk: { top: "44%", left: "50%", transform: "translateX(-50%)", width: 260 }, href: "/dashboard" },
+    { icon: "💡", title: "NEW IDEAS", accent: NEON.cyan, status: "live", metrics: [{ label: "Agents", value: String(mockAgents.length) }, { label: "Active", value: String(activeCount) }, { label: "Queued", value: String(queued) }], desk: { bottom: 22, left: 18 }, href: "/pipeline" },
+    { icon: "🎨", title: "IMAGE GEN", accent: NEON.magenta, status: "pending", metrics: [{ label: "Prompts", value: "—" }, { label: "Styles", value: "—" }, { label: "Output", value: "—" }], desk: { bottom: 22, right: 18 }, href: "/content-studio" }
   ];
   return (
     <div style={{ position: "relative", width: "100%", minHeight: narrow ? 0 : 760, background: "radial-gradient(130% 110% at 50% 35%, #0a0e18 0%, #04050a 70%, #020308 100%)", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(45,226,230,0.18)", fontFamily: "ui-sans-serif, system-ui, sans-serif" }}>
@@ -96,10 +105,10 @@ export default function CommandCenter() {
       {narrow ? (
         /* stacked layout for small screens */
         <div style={{ padding: "10px 12px 46px" }}>
-          <CerebroBrain agents={mockAgents} height={380} />
+          <CerebroBrain agents={mockAgents} height={380} onSelect={(id) => { const a = mockAgents.find((x) => x.id === id); if (a) setSelectedAgent(a); }} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 14 }}>
             {panels.map((p) => (
-              <HudPanel key={p.title} icon={p.icon} title={p.title} accent={p.accent} status={p.status} metrics={p.metrics} style={{ position: "static", width: "auto" }} />
+              <HudPanel key={p.title} icon={p.icon} title={p.title} accent={p.accent} status={p.status} metrics={p.metrics} onClick={() => router.push(p.href)} style={{ position: "static", width: "auto" }} />
             ))}
           </div>
         </div>
@@ -107,10 +116,10 @@ export default function CommandCenter() {
         /* desktop cockpit — brain centered, panels floating */
         <>
           <div style={{ position: "absolute", top: "8%", left: "50%", transform: "translateX(-50%)", width: "min(62%, 720px)" }}>
-            <CerebroBrain agents={mockAgents} height={640} />
+            <CerebroBrain agents={mockAgents} height={640} onSelect={(id) => { const a = mockAgents.find((x) => x.id === id); if (a) setSelectedAgent(a); }} />
           </div>
           {panels.map((p) => (
-            <HudPanel key={p.title} icon={p.icon} title={p.title} accent={p.accent} status={p.status} metrics={p.metrics} style={p.desk} />
+            <HudPanel key={p.title} icon={p.icon} title={p.title} accent={p.accent} status={p.status} metrics={p.metrics} onClick={() => router.push(p.href)} style={p.desk} />
           ))}
         </>
       )}
@@ -118,11 +127,16 @@ export default function CommandCenter() {
       {/* orange completion notifications */}
       <NotificationLayer />
 
-      {/* footer */}
-      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, display: "flex", gap: 22, padding: "8px 16px", fontSize: 11, letterSpacing: 1.5, color: "rgba(180,195,225,0.45)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <span>SETTINGS</span><span>HELP</span>
-        <span style={{ marginLeft: "auto", color: m?.shopify?.status === "live" ? NEON.green : NEON.amber }}>● {m?.shopify?.status === "live" ? "Shopify LIVE · Etsy pending" : "connecting…"}</span>
+      {/* footer — operational actions */}
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, display: "flex", alignItems: "center", gap: 12, padding: "8px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.45)", zIndex: 5 }}>
+        <button onClick={() => router.push("/operator")} style={footBtn(NEON.cyan, true)}>⌘ AI OPERATOR</button>
+        <button onClick={() => router.push("/admin/incidents")} style={footBtn(errorCount ? NEON.orange : "rgba(180,195,225,0.55)", !!errorCount)}>⚠ ERRORS{errorCount ? ` (${errorCount})` : ""}</button>
+        <button onClick={() => router.push("/settings")} style={footBtn("rgba(180,195,225,0.55)", false)}>SETTINGS</button>
+        <button onClick={() => router.push("/docs")} style={footBtn("rgba(180,195,225,0.55)", false)}>HELP</button>
+        <span style={{ marginLeft: "auto", fontSize: 11, letterSpacing: 1, color: m?.shopify?.status === "live" ? NEON.green : NEON.amber }}>● {m?.shopify?.status === "live" ? "Shopify LIVE" : "connecting…"}</span>
       </div>
+
+      {selectedAgent && <AgentDetailModal agent={selectedAgent} onClose={() => setSelectedAgent(null)} />}
     </div>
   );
 }
