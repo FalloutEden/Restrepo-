@@ -16,6 +16,7 @@ import {
   type Platform
 } from "@/lib/content-studio/types";
 import { withSpendKind } from "@/lib/spend-tracker";
+import { FOUNDER_TENANT_ID, contextForTenantId, type TenantContext } from "@/lib/tenant-context";
 
 // Orchestrator — runs the full content drop generation pipeline.
 //
@@ -44,14 +45,18 @@ export type GenerateOptions = {
 
 export async function generateContentDrop(
   dropId: string,
-  options: GenerateOptions = {}
+  options: GenerateOptions = {},
+  tenantCtx?: TenantContext
 ): Promise<ContentDrop | null> {
-  return withSpendKind("content_studio", () => generateContentDropInner(dropId, options));
+  // Resolve a context so per-tenant AI keys are used (founder falls back to env).
+  const ctx = tenantCtx ?? (await contextForTenantId(FOUNDER_TENANT_ID));
+  return withSpendKind("content_studio", () => generateContentDropInner(dropId, options, ctx));
 }
 
 async function generateContentDropInner(
   dropId: string,
-  options: GenerateOptions = {}
+  options: GenerateOptions = {},
+  tenantCtx: TenantContext
 ): Promise<ContentDrop | null> {
   const drop = await readDrop(dropId);
   if (!drop) return null;
@@ -96,7 +101,7 @@ async function generateContentDropInner(
     if (refreshedModels) {
       await generateModelShots(refreshedModels, BV_DEFAULT_MODEL_SCENARIOS, {
         maxShots: options.maxModelShots
-      });
+      }, tenantCtx);
     }
   }
 
@@ -114,7 +119,7 @@ async function generateContentDropInner(
   await appendDropLog(dropId, "info", "Phase 4: platform caption generation");
   const refreshed3 = await readDrop(dropId);
   if (refreshed3) {
-    await generatePlatformPosts(refreshed3, platforms);
+    await generatePlatformPosts(refreshed3, platforms, tenantCtx);
   }
 
   await setDropStatus(dropId, "ready");

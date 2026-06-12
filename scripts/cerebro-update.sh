@@ -12,6 +12,12 @@
 #   VAULT_PATH="/some/other/vault" scripts/cerebro-update.sh
 set -eu
 
+# Force UTF-8 for all Python I/O. graphify's merge/report steps default to the
+# Windows cp1252 charmap, which crashes on unicode in notes (→, ✅, em-dash, etc.)
+# with UnicodeEncodeError. PYTHONUTF8=1 makes those steps handle unicode cleanly.
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 VAULT_PATH="${VAULT_PATH:-/c/Users/karli/Documents/Restrepo-Vault/Restrepo-_Vault}"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT_GRAPH="$PROJECT_ROOT/graphify-out/graph.json"

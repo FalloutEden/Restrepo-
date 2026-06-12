@@ -45,21 +45,30 @@ test("founder context with no tenantId also passes (defaults to founder)", () =>
 
 // ── Tenant context: credential-touching tools are blocked ────────────────
 
-test("tenant context blocks materialize_product (needs Printful BYOK on product-materialization.ts)", () => {
-  const gated = tenantSafetyGate("materialize_product", tenantCtx());
-  assert.ok(gated && gated.ok === false);
-  assert.equal(gated?.error, "tenant-byok-pending");
-  assert.match(gated?.message ?? "", /materialize_product/);
+test("tenant context ALLOWS materialize_product (lifted 2026-06-10 — product-materialization.ts tenant-aware, merchant-supplied art)", () => {
+  assert.equal(tenantSafetyGate("materialize_product", tenantCtx()), null);
 });
 
-test("tenant context blocks bootstrap_store (needs Shopify BYOK on store-bootstrap.ts)", () => {
-  const gated = tenantSafetyGate("bootstrap_store", tenantCtx());
-  assert.ok(gated && gated.ok === false);
+test("tenant context ALLOWS bootstrap_store (lifted 2026-06-10 — store-bootstrap.ts threads tenantCtx)", () => {
+  assert.equal(tenantSafetyGate("bootstrap_store", tenantCtx()), null);
 });
 
-test("tenant context blocks delete_listing (gated overnight despite migration — destructive)", () => {
-  const gated = tenantSafetyGate("delete_listing", tenantCtx());
-  assert.ok(gated && gated.ok === false);
+test("tenant context ALLOWS delete_listing (lifted 2026-06-10 — shopify-service already tenant-aware)", () => {
+  assert.equal(tenantSafetyGate("delete_listing", tenantCtx()), null);
+});
+
+test("tenant context ALLOWS the Shopify-family tools lifted 2026-06-10", () => {
+  for (const tool of [
+    "list_menus",
+    "add_menu_item",
+    "remove_menu_item",
+    "summarize_drafts",
+    "launch_status",
+    "generate_policies",
+    "publish_policies"
+  ]) {
+    assert.equal(tenantSafetyGate(tool, tenantCtx()), null, `${tool} should be lifted for tenants`);
+  }
 });
 
 // ── Lifted tools (Shopify read + non-destructive write) — must pass through ─
@@ -88,14 +97,13 @@ test("tenant context ALLOWS relink_printful_variants (lifted after printful-link
   assert.equal(tenantSafetyGate("relink_printful_variants", tenantCtx()), null);
 });
 
-test("tenant context blocks search_cj_products (needs CJ BYOK)", () => {
-  const gated = tenantSafetyGate("search_cj_products", tenantCtx());
-  assert.ok(gated && gated.ok === false);
+test("tenant context ALLOWS search_cj_products (lifted 2026-06-10 — cj-service.ts tenant-aware)", () => {
+  assert.equal(tenantSafetyGate("search_cj_products", tenantCtx()), null);
 });
 
-test("tenant context blocks klaviyo_status (needs Klaviyo BYOK)", () => {
-  const gated = tenantSafetyGate("klaviyo_status", tenantCtx());
-  assert.ok(gated && gated.ok === false);
+test("tenant context ALLOWS klaviyo tools (lifted 2026-06-10 — klaviyo.ts tenant-aware)", () => {
+  assert.equal(tenantSafetyGate("klaviyo_status", tenantCtx()), null);
+  assert.equal(tenantSafetyGate("klaviyo_push_test_contact", tenantCtx()), null);
 });
 
 test("tenant context blocks run_pipeline (uses every credential type)", () => {
@@ -139,7 +147,8 @@ test("unknown tool name is not gated (the dispatcher handles missing tools)", ()
 // ── Error message quality ────────────────────────────────────────────────
 
 test("blocked error message tells the user which tools DO work for tenants", () => {
-  const gated = tenantSafetyGate("materialize_product", tenantCtx());
+  // run_pipeline is still gated (uses every credential — lifted last).
+  const gated = tenantSafetyGate("run_pipeline", tenantCtx());
   const msg = gated?.message ?? "";
   assert.match(msg, /record_note/);
   assert.match(msg, /propose_action/);
@@ -147,8 +156,28 @@ test("blocked error message tells the user which tools DO work for tenants", () 
 });
 
 test("blocked error message names the platform that's pending BYOK migration", () => {
-  const gated = tenantSafetyGate("materialize_product", tenantCtx());
+  const gated = tenantSafetyGate("run_pipeline", tenantCtx());
   const msg = gated?.message ?? "";
   // Should mention at least one of: Shopify, Printful, CJ, Klaviyo, OpenAI
   assert.match(msg, /Shopify|Printful|CJ|Klaviyo|OpenAI/);
+});
+
+test("tenant context ALLOWS transparentize + all content-drop tools (storage + generation, lifted 2026-06-10)", () => {
+  for (const tool of [
+    "transparentize_brand_images",
+    "create_content_drop",
+    "list_content_drops",
+    "get_content_drop",
+    "mark_content_post_posted",
+    "generate_content_drop_run"
+  ]) {
+    assert.equal(tenantSafetyGate(tool, tenantCtx()), null, `${tool} should be lifted for tenants`);
+  }
+});
+
+test("tenant context still BLOCKS BV composites (need a per-tenant brand background)", () => {
+  for (const tool of ["composite_on_bv_background", "composite_all_brand_images"]) {
+    const gated = tenantSafetyGate(tool, tenantCtx());
+    assert.ok(gated && gated.ok === false, `${tool} should still be gated`);
+  }
 });

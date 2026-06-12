@@ -3,7 +3,8 @@ import "server-only";
 import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 
-import { openai, IMAGE_MODEL } from "@/lib/openai";
+import { resolveOpenAIClient, IMAGE_MODEL } from "@/lib/openai";
+import type { TenantContext } from "@/lib/tenant-context";
 import {
   addAssetToDrop,
   appendDropLog,
@@ -137,7 +138,8 @@ function safeFilename(scenarioId: string, idx: number): string {
 export async function generateModelShots(
   drop: ContentDrop,
   scenarios: ModelScenario[] = BV_DEFAULT_MODEL_SCENARIOS,
-  options: { maxShots?: number; applyMonogramComposite?: boolean } = {}
+  options: { maxShots?: number; applyMonogramComposite?: boolean } = {},
+  tenantCtx?: TenantContext
 ): Promise<MediaAsset[]> {
   const cap = options.maxShots ?? scenarios.length;
   const limited = scenarios.slice(0, cap);
@@ -148,7 +150,7 @@ export async function generateModelShots(
   for (let i = 0; i < limited.length; i += 1) {
     const scenario = limited[i];
     try {
-      const response = await openai.images.generate({
+      const response = await resolveOpenAIClient(tenantCtx).images.generate({
         model: IMAGE_MODEL,
         prompt: scenario.prompt.slice(0, 4000),
         n: 1,

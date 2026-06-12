@@ -3,6 +3,8 @@ import "server-only";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import type { TenantContext } from "@/lib/tenant-context";
+
 // CJ Dropshipping integration — REST API at developers.cjdropshipping.com.
 //
 // Auth model (a quirk worth knowing):
@@ -13,8 +15,20 @@ import path from "node:path";
 //     refresh automatically (1 day before expiry, or on a 401 from any call).
 
 const CJ_BASE = "https://developers.cjdropshipping.com/api2.0/v1";
-const TOKEN_CACHE_DIR = path.join(process.cwd(), ".openclaw");
-const TOKEN_CACHE_PATH = path.join(TOKEN_CACHE_DIR, "cj-token.json");
+
+// Token cache is per-account. The founder keeps the legacy cj-token.json path
+// (gitignored); a tenant gets a scoped path so two merchants never share a CJ
+// session. On Vercel prod the only writable base is /tmp.
+function cjCacheBase(): string {
+  return process.env.VERCEL === "1" && process.env.NODE_ENV === "production"
+    ? path.join("/tmp", "openclaw")
+    : path.join(process.cwd(), ".openclaw");
+}
+
+function tokenCachePath(tenantCtx?: TenantContext): string {
+  if (!tenantCtx || tenantCtx.isFounder) return path.join(cjCacheBase(), "cj-token.json");
+  return path.join(cjCacheBase(), "tenants", tenantCtx.tenantId, "cj-token.json");
+}
 
 // CJ enforces a hard 1 request/second limit per account. Gating ALL outbound
 // calls through a serial queue with ≥1200ms spacing keeps us under the cap
@@ -77,7 +91,14 @@ export type CjVariant = {
   variantWeight?: number;
 };
 
-function loadCjCredentials(): { email: string; apiKey: string } {
+function loadCjCredentials(tenantCtx?: TenantContext): { email: string; apiKey: string } {
+  // Tenant: encrypted vault, no env fallback (billing safety). Founder: env.
+  if (tenantCtx && !tenantCtx.isFounder) {
+    return {
+      email: tenantCtx.requireSecret("cjEmail"),
+      apiKey: tenantCtx.requireSecret("cjApiKey")
+    };
+  }
   const email = process.env.CJ_EMAIL?.trim();
   const apiKey = (process.env.CJ_API_KEY || process.env.CJ_ACCESS_TOKEN)?.trim();
   if (!email) throw new Error("Missing CJ_EMAIL in server environment.");
@@ -85,9 +106,9 @@ function loadCjCredentials(): { email: string; apiKey: string } {
   return { email, apiKey };
 }
 
-async function readCachedToken(): Promise<CachedToken | null> {
+async function readCachedToken(tenantCtx?: TenantContext): Promise<CachedToken | null> {
   try {
-    const raw = await readFile(TOKEN_CACHE_PATH, "utf8");
+    const raw = await readFile(tokenCachePath(tenantCtx), "utf8");
     const parsed = JSON.parse(raw) as CachedToken;
     if (!parsed.accessToken || !parsed.expiresAt) return null;
     return parsed;
@@ -96,9 +117,10 @@ async function readCachedToken(): Promise<CachedToken | null> {
   }
 }
 
-async function writeCachedToken(token: CachedToken): Promise<void> {
-  await mkdir(TOKEN_CACHE_DIR, { recursive: true });
-  await writeFile(TOKEN_CACHE_PATH, JSON.stringify(token, null, 2), "utf8");
+async function writeCachedToken(token: CachedToken, tenantCtx?: TenantContext): Promise<void> {
+  const cachePath = tokenCachePath(tenantCtx);
+  await mkdir(path.dirname(cachePath), { recursive: true });
+  await writeFile(cachePath, JSON.stringify(token, null, 2), "utf8");
 }
 
 function isTokenFresh(token: CachedToken): boolean {
@@ -109,8 +131,8 @@ function isTokenFresh(token: CachedToken): boolean {
   return expiry - now > 24 * 60 * 60 * 1000;
 }
 
-async function mintAccessToken(): Promise<CachedToken> {
-  const { email, apiKey } = loadCjCredentials();
+async function mintAccessToken(tenantCtx?: TenantContext): Promise<CachedToken> {
+  const { email, apiKey } = loadCjCredentials(tenantCtx);
   const response = await cjRateLimited(() =>
     fetch(`${CJ_BASE}/authentication/getAccessToken`, {
       method: "POST",
@@ -132,28 +154,28 @@ async function mintAccessToken(): Promise<CachedToken> {
     accessToken: body.data.accessToken,
     expiresAt: body.data.accessTokenExpiryDate ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
   };
-  await writeCachedToken(cached);
+  await writeCachedToken(cached, tenantCtx);
   return cached;
 }
 
-async function getAccessToken(forceRefresh = false): Promise<string> {
+async function getAccessToken(forceRefresh = false, tenantCtx?: TenantContext): Promise<string> {
   if (!forceRefresh) {
-    const cached = await readCachedToken();
+    const cached = await readCachedToken(tenantCtx);
     if (cached && isTokenFresh(cached)) return cached.accessToken;
   }
-  const fresh = await mintAccessToken();
+  const fresh = await mintAccessToken(tenantCtx);
   return fresh.accessToken;
 }
 
 // Wrap a CJ API call with auto-retry on 401: refresh token once and re-attempt.
-async function cjFetch(input: string, init: RequestInit = {}): Promise<Response> {
-  const token = await getAccessToken();
+async function cjFetch(input: string, init: RequestInit = {}, tenantCtx?: TenantContext): Promise<Response> {
+  const token = await getAccessToken(false, tenantCtx);
   const headers = new Headers(init.headers);
   headers.set("CJ-Access-Token", token);
   headers.set("Accept", "application/json");
   let response = await cjRateLimited(() => fetch(input, { ...init, headers }));
   if (response.status === 401) {
-    const fresh = await getAccessToken(true);
+    const fresh = await getAccessToken(true, tenantCtx);
     headers.set("CJ-Access-Token", fresh);
     response = await cjRateLimited(() => fetch(input, { ...init, headers }));
   }
@@ -199,14 +221,14 @@ export type CjSearchQuery = {
 // Search the CJ catalog. Pass productNameEn for free-text or categoryId for
 // category browsing — categoryId returns much more relevant results than
 // free-text (CJ's free-text search matches each word independently).
-export async function searchCjProducts(query: CjSearchQuery): Promise<CjProduct[]> {
+export async function searchCjProducts(query: CjSearchQuery, tenantCtx?: TenantContext): Promise<CjProduct[]> {
   const params = new URLSearchParams();
   params.set("pageNum", String(query.pageNum ?? 1));
   params.set("pageSize", String(Math.min(query.pageSize ?? 20, 50)));
   if (query.productNameEn) params.set("productNameEn", query.productNameEn);
   if (query.categoryId) params.set("categoryId", query.categoryId);
 
-  const response = await cjFetch(`${CJ_BASE}/product/list?${params.toString()}`);
+  const response = await cjFetch(`${CJ_BASE}/product/list?${params.toString()}`, {}, tenantCtx);
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`CJ product/list failed (${response.status}): ${body.slice(0, 300)}`);
@@ -218,8 +240,8 @@ export async function searchCjProducts(query: CjSearchQuery): Promise<CjProduct[
 }
 
 // Pull full detail for a product (variants, full images, description).
-export async function getCjProductDetail(pid: string): Promise<CjProductDetail | null> {
-  const response = await cjFetch(`${CJ_BASE}/product/query?pid=${encodeURIComponent(pid)}`);
+export async function getCjProductDetail(pid: string, tenantCtx?: TenantContext): Promise<CjProductDetail | null> {
+  const response = await cjFetch(`${CJ_BASE}/product/query?pid=${encodeURIComponent(pid)}`, {}, tenantCtx);
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`CJ product/query failed (${response.status}): ${body.slice(0, 300)}`);
@@ -300,12 +322,12 @@ export function cleanCjDescription(html: string | undefined | null): string {
 // Convenience: search then immediately fetch full detail for the top N hits.
 // Useful for the materialization pipeline which wants variants + image gallery.
 // Calls are serialised through the 1 QPS rate limiter — N=5 takes ~6s minimum.
-export async function searchAndDetailCjProducts(query: CjSearchQuery & { detailLimit?: number }): Promise<CjProductDetail[]> {
-  const list = await searchCjProducts(query);
+export async function searchAndDetailCjProducts(query: CjSearchQuery & { detailLimit?: number }, tenantCtx?: TenantContext): Promise<CjProductDetail[]> {
+  const list = await searchCjProducts(query, tenantCtx);
   const topN = list.slice(0, query.detailLimit ?? 5);
   const results: CjProductDetail[] = [];
   for (const p of topN) {
-    const detail = await getCjProductDetail(p.pid);
+    const detail = await getCjProductDetail(p.pid, tenantCtx);
     if (detail) results.push(detail);
   }
   return results;
@@ -326,8 +348,8 @@ export type CjCategoryFirst = {
 // Pull CJ's full category tree. Used by the agents to translate a niche like
 // "home security IoT" into one or more categoryIds that searchCjProducts can
 // hit for relevant results (free-text search is too noisy).
-export async function getCjCategories(): Promise<CjCategoryFirst[]> {
-  const response = await cjFetch(`${CJ_BASE}/product/getCategory`);
+export async function getCjCategories(tenantCtx?: TenantContext): Promise<CjCategoryFirst[]> {
+  const response = await cjFetch(`${CJ_BASE}/product/getCategory`, {}, tenantCtx);
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`CJ getCategory failed (${response.status}): ${body.slice(0, 300)}`);
@@ -339,8 +361,8 @@ export async function getCjCategories(): Promise<CjCategoryFirst[]> {
 // Find category IDs whose name matches any of the provided keywords. Searches
 // across all three category levels (first / second / leaf) and returns the
 // most-specific match per keyword group.
-export async function findCjCategoryIds(keywords: RegExp): Promise<Array<{ id: string; path: string }>> {
-  const tree = await getCjCategories();
+export async function findCjCategoryIds(keywords: RegExp, tenantCtx?: TenantContext): Promise<Array<{ id: string; path: string }>> {
+  const tree = await getCjCategories(tenantCtx);
   const matches: Array<{ id: string; path: string }> = [];
   for (const top of tree) {
     for (const sub of top.categoryFirstList ?? []) {

@@ -88,8 +88,15 @@ export type EncryptedSecrets = {
   // Printful
   printfulApiKey?: string;
   printfulStoreId?: string;
+  // Printful default blank for auto-materialize (non-secret config). The
+  // catalog variant id of the merchant's chosen blank, and their default retail
+  // price. Stored plaintext alongside the secrets blob for one source of truth.
+  printfulDefaultVariantId?: string;
+  printfulRetailPrice?: string;
   // Klaviyo
   klaviyoApiKey?: string;
+  // Google Gemini (Nano Banana 2 image generation)
+  googleApiKey?: string;
   // CJ Dropshipping
   cjApiKey?: string;
   cjEmail?: string;
@@ -387,7 +394,7 @@ export async function setTenantSecret(
 ): Promise<Tenant> {
   const cur = await getTenant(tenantId);
   if (!cur) throw new Error(`No tenant ${tenantId}`);
-  const nonSecretKeys: Array<keyof EncryptedSecrets> = ["shopifyStoreDomain", "printfulStoreId"];
+  const nonSecretKeys: Array<keyof EncryptedSecrets> = ["shopifyStoreDomain", "printfulStoreId", "printfulDefaultVariantId", "printfulRetailPrice"];
   const secrets: EncryptedSecrets = { ...cur.secrets };
   if (!plain) {
     delete secrets[key];
@@ -402,7 +409,7 @@ export async function setTenantSecret(
 export function getTenantSecret(tenant: Tenant, key: keyof EncryptedSecrets): string {
   const raw = tenant.secrets[key];
   if (!raw) throw new Error(`Tenant ${tenant.id} is missing required secret: ${key}`);
-  const nonSecretKeys: Array<keyof EncryptedSecrets> = ["shopifyStoreDomain", "printfulStoreId"];
+  const nonSecretKeys: Array<keyof EncryptedSecrets> = ["shopifyStoreDomain", "printfulStoreId", "printfulDefaultVariantId", "printfulRetailPrice"];
   if (nonSecretKeys.includes(key)) return raw;
   return decryptString(raw);
 }

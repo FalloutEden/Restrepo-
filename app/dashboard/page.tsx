@@ -94,6 +94,7 @@ export default async function DashboardPage() {
                   - /admin/incidents filters audit feed to actor/target === tenant.id
                   - /launch renders TenantLaunchView (creds form + store-only checks)
                                                                                   */}
+            <Link href="/command-center" style={{ ...navLink, color: "#ff7a18", textShadow: "0 0 8px rgba(255,122,24,0.5)" }}>🧠 Command Center →</Link>
             <Link href="/content-studio" style={navLink}>Content studio →</Link>
             <Link href="/pipeline" style={navLink}>Pipeline →</Link>
             <Link href="/launch" style={navLink}>Launch readiness →</Link>

@@ -198,7 +198,10 @@ test("listing every CredentialName has a definition (compile-time + runtime sani
     "shopifyWebhookSecret",
     "printfulApiKey",
     "printfulStoreId",
+    "printfulDefaultVariantId",
+    "printfulRetailPrice",
     "klaviyoApiKey",
+    "googleApiKey",
     "cjApiKey",
     "cjEmail"
   ];

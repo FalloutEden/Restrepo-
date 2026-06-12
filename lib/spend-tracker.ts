@@ -56,7 +56,7 @@ const OPENAI_IMAGE_RATES: Record<string, number> = {
 
 export type SpendEntry = {
   ts: string;
-  provider: "anthropic" | "openai";
+  provider: "anthropic" | "openai" | "google";
   // What part of the system made the call (best-effort tagging).
   kind: string;
   // Tenant attribution. "_founder" for admin/dev/internal; tnt_* for real
@@ -113,6 +113,14 @@ export function priceServerTool(name: string, uses: number): number {
 export function priceOpenAIImage(quality: "standard" | "medium" | "high" = "standard", count: number = 1): number {
   const rate = OPENAI_IMAGE_RATES[`gpt-image-1:${quality}`] ?? OPENAI_IMAGE_RATES["gpt-image-1:standard"];
   return Number((rate * count).toFixed(6));
+}
+
+// Google Nano Banana 2 (gemini-3.1-flash-image) — ~$0.06/image. Update if
+// Google changes pricing. Used to attribute tenant image spend for visibility
+// and the per-tenant spend ceiling.
+const GOOGLE_IMAGE_RATE = 0.06;
+export function priceGoogleImage(count: number = 1): number {
+  return Number((GOOGLE_IMAGE_RATE * Math.max(1, count)).toFixed(6));
 }
 
 // ── Recording ─────────────────────────────────────────────────────────────

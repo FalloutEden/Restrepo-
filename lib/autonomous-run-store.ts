@@ -2,6 +2,7 @@ import "server-only";
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { sql } from "@vercel/postgres";
 import type { AgentExecutionStatus, AgentRoleId, AgentRunTrace } from "@/lib/agent-runtime";
 import type { MaterializedProduct } from "@/lib/product-materialization";
 import type { RuntimeStartupReport } from "@/lib/dataset-models";
@@ -78,8 +79,57 @@ type AutonomousRunStoreFile = {
   runs: AutonomousRunRecord[];
 };
 
+// On Vercel a single JSON file in process.cwd() is per-instance and ephemeral:
+// the instance EXECUTING a run is usually not the instance the client POLLS for
+// status/events, so the poller reads an empty store and the run looks "not
+// found" seconds after it was created. In production we therefore read/write
+// every run through Postgres (shared across instances). Local dev keeps the
+// in-memory Map + JSON file exactly as before for offline, deterministic work.
 const STORE_DIR = path.join(process.cwd(), ".openclaw");
 const STORE_PATH = path.join(STORE_DIR, "runs.json");
+
+function usingPostgresForRuns(): boolean {
+  return Boolean(process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING);
+}
+
+let runsMigrated = false;
+
+async function pgMigrateRuns(): Promise<void> {
+  if (runsMigrated) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS autonomous_runs (
+      run_id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL,
+      data JSONB NOT NULL
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_runs_tenant_created ON autonomous_runs(tenant_id, created_at DESC)`;
+  runsMigrated = true;
+}
+
+async function pgUpsertRun(record: AutonomousRunRecord): Promise<void> {
+  await pgMigrateRuns();
+  const data = JSON.stringify(record);
+  await sql`
+    INSERT INTO autonomous_runs (run_id, tenant_id, status, created_at, updated_at, data)
+    VALUES (${record.runId}, ${record.tenantId}, ${record.status}, ${record.createdAt}, ${record.updatedAt}, ${data}::jsonb)
+    ON CONFLICT (run_id) DO UPDATE SET
+      status = EXCLUDED.status,
+      updated_at = EXCLUDED.updated_at,
+      data = EXCLUDED.data
+  `;
+}
+
+async function pgReadRun(runId: string): Promise<AutonomousRunRecord | null> {
+  await pgMigrateRuns();
+  const r = await sql<{ data: AutonomousRunRecord }>`
+    SELECT data FROM autonomous_runs WHERE run_id = ${runId} LIMIT 1
+  `;
+  return r.rows[0]?.data ?? null;
+}
 
 let storePromise: Promise<Map<string, AutonomousRunRecord>> | null = null;
 let persistChain = Promise.resolve();
@@ -119,7 +169,21 @@ function queuePersist(map: Map<string, AutonomousRunRecord>) {
 }
 
 async function updateRun(runId: string, updater: (current: AutonomousRunRecord) => AutonomousRunRecord) {
+  // Serialize mutations (both modes) so concurrent appends within one instance
+  // don't clobber each other. A given run is driven by a single instance, so a
+  // Postgres read-modify-write here is single-writer in practice; other
+  // instances only ever read.
   mutationChain = mutationChain.then(async () => {
+    if (usingPostgresForRuns()) {
+      const existing = await pgReadRun(runId);
+      if (!existing) {
+        throw new Error(`Run ${runId} not found`);
+      }
+      const next = updater(existing);
+      await pgUpsertRun(next);
+      return next;
+    }
+
     const store = await getStore();
     const existing = store.get(runId);
     if (!existing) {
@@ -188,6 +252,11 @@ export async function createAutonomousRunRecord(
       }),
     withRunEvent
   );
+
+  if (usingPostgresForRuns()) {
+    await pgUpsertRun(withAgentEvents);
+    return withAgentEvents;
+  }
 
   const store = await getStore();
   store.set(runId, withAgentEvents);
@@ -313,6 +382,11 @@ export async function failAutonomousRun(runId: string, error: string, payload?: 
 }
 
 export async function getAutonomousRunRecord(runId: string) {
+  // Read straight from Postgres in prod — never from the per-instance Map,
+  // which on a polling instance would be empty and wrongly report "not found".
+  if (usingPostgresForRuns()) {
+    return pgReadRun(runId);
+  }
   const store = await getStore();
   return store.get(runId) ?? null;
 }

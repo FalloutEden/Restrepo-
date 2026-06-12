@@ -9,7 +9,7 @@ import {
   listShopifyCleanupQueue,
   publishShopifyProduct
 } from "@/lib/shopify-service";
-import { listConfiguredShopifyCredentials, resolveShopifyCredentials } from "@/lib/shopify-credentials";
+import { listConfiguredShopifyCredentials, listShopifyCredentialsForContext, resolveShopifyCredentials } from "@/lib/shopify-credentials";
 import { searchCjProducts, findCjCategoryIds } from "@/lib/cj-service";
 import { materializeProduct, type MaterializationInput, type FulfillmentType } from "@/lib/product-materialization";
 import { createAutonomousRun } from "@/lib/autonomous-run-service";
@@ -44,7 +44,7 @@ import { addMenuItem, listMenus, removeMenuItem } from "@/lib/shopify-menus";
 import { aiBackgroundReplace, cutoutComposite, sharpFlatWhiteCutout, BV_MOCK_BG_PATH } from "@/lib/bg-composite";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { getLaunchStatus, getLaunchStatusForAllBrands } from "@/lib/launch-status";
+import { getLaunchStatus, getLaunchStatusForAllBrands, getTenantLaunchStatus } from "@/lib/launch-status";
 import {
   klaviyoHealthCheck,
   klaviyoListLists,
@@ -74,51 +74,26 @@ import { patchTenantProfile, type FulfillmentLane } from "@/lib/tenant-profile";
 // The list shrinks as each underlying service lib gets the BYOK pass.
 
 const FOUNDER_ONLY_TOOLS = new Set<string>([
-  // Shopify-backed tools — the lifted list (no longer founder-only) on 2026-05-14:
-  //   list_drafts, get_recent_orders, list_cleanup_queue (read-only)
-  //   publish_listing, attach_all_to_online_store (write — non-destructive)
+  // The lifted list keeps shrinking as each underlying service lib gains a
+  // tenantCtx pass. Lifted Shopify-family tools (creds resolved per-tenant via
+  // shopify-credentials.ts):
+  //   2026-05-14: list_drafts, get_recent_orders, list_cleanup_queue,
+  //               publish_listing, attach_all_to_online_store,
+  //               relink_printful_variants
+  //   2026-06-10: delete_listing, bootstrap_store, list_menus, add_menu_item,
+  //               remove_menu_item, summarize_drafts, launch_status,
+  //               generate_policies, publish_policies (shopify-menus.ts /
+  //               store-bootstrap.ts / policies-shopify.ts / launch-status.ts
+  //               threaded with tenantCtx)
   //
-  // delete_listing stays gated overnight because destructive ops deserve a
-  // daylight review pass with real tenant testing before lifting.
-  //
-  // bootstrap_store, list_menus, add_menu_item, remove_menu_item,
-  // transparentize_brand_images, summarize_drafts, launch_status,
-  // generate_policies, publish_policies, composite_* still call helpers in
-  // lib/shopify-menus.ts / lib/store-bootstrap.ts / lib/launch-status.ts /
-  // lib/policies-* / lib/bg-composite.ts that read env vars directly. Each
-  // helper needs the same tenantCtx pass before its tool can be lifted.
-  "delete_listing",
-  "bootstrap_store",
-  "list_menus",
-  "add_menu_item",
-  "remove_menu_item",
-  "transparentize_brand_images",
+  // Still gated — each needs more than a credential thread.
+  // Composites onto the founder's BV mock-background asset (OpenAI + a brand
+  // asset a tenant doesn't have — needs a per-tenant brand background first):
   "composite_on_bv_background",
   "composite_all_brand_images",
-  "summarize_drafts",
-  "launch_status",
-  "generate_policies",
-  "publish_policies",
-  // CJ Dropshipping (needs lib/cj-service.ts BYOK refactor)
-  "search_cj_products",
-  // Printful — materialize_product still gated because product-materialization.ts
-  // (1000+ lines, direct HTTP to Printful + Shopify) needs a careful migration
-  // pass that doesn't fit in the overnight window. relink_printful_variants
-  // was lifted on 2026-05-14 once printful-credentials.ts was built and
-  // printful-link.ts was migrated.
-  "materialize_product",
-  // Klaviyo (needs lib/klaviyo.ts BYOK refactor)
-  "klaviyo_status",
-  "klaviyo_push_test_contact",
-  // Content studio (needs OpenAI BYOK + Printful for mockups)
-  "create_content_drop",
-  "list_content_drops",
-  "get_content_drop",
-  "generate_content_drop_run",
-  "mark_content_post_posted",
-  // Autonomous research pipeline (uses every credential type)
+  // Autonomous research pipeline (uses every credential type — lift last)
   "run_pipeline",
-  // CEREBRO (still blocked by gap 2 on Vercel)
+  // CEREBRO (architectural: gap 2, graphify not hosted on Vercel — not a BYOK fix)
   "cerebro_query"
 ]);
 
@@ -335,16 +310,17 @@ const search_cj_products: OperatorTool = {
     },
     required: ["categoryKeywords"]
   },
-  async run(args) {
+  async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const kw = String(args.categoryKeywords || "");
     const pageSize = typeof args.pageSize === "number" ? args.pageSize : 20;
     const regex = new RegExp(kw, "i");
-    const categories = await findCjCategoryIds(regex);
+    const categories = await findCjCategoryIds(regex, tenantCtx);
     if (categories.length === 0) {
       return { categories: [], products: [] };
     }
     const primary = categories[0];
-    const products = await searchCjProducts({ categoryId: primary.id, pageSize });
+    const products = await searchCjProducts({ categoryId: primary.id, pageSize }, tenantCtx);
     return {
       categories: categories.slice(0, 5),
       pickedCategory: primary,
@@ -365,7 +341,11 @@ const search_cj_products: OperatorTool = {
 const materialize_product: OperatorTool = {
   name: "materialize_product",
   description:
-    "Create a Shopify draft listing autonomously. Drafts are reversible and not customer-facing, so this does NOT need approval. For Printful/apparel, omit sourceProductId. For LockLayer/CJ, pass sourceProductId from search_cj_products. Brand defaults from fulfillmentType.",
+    "Create a Shopify draft listing. Drafts are reversible and not customer-facing, so this does NOT need approval. " +
+    "For a Printful/apparel product, ASK the merchant how they want the artwork — offer all options, don't pick for them: " +
+    "(1) UPLOAD their own print-ready transparent PNG (≥1800px) → pass printFileUrl; (2) GENERATE with imageProvider 'openai' (gpt-image-1) or 'google' (Nano Banana 2 — better at text); or (3) MIRROR a product they designed in Printful (use the mirror flow, not this tool). " +
+    "Surface any warnings the result returns (low-res upload, or 'review AI art before publishing'). " +
+    "For dropship/CJ, pass sourceProductId from search_cj_products. Brand defaults from fulfillmentType.",
   input_schema: {
     type: "object",
     properties: {
@@ -376,11 +356,14 @@ const materialize_product: OperatorTool = {
       brand: { type: "string", enum: Object.keys(BRANDS) },
       niche: { type: "string" },
       sourceProductId: { type: "string", description: "CJ pid when fulfillmentType is 'zendrop'." },
-      imagePrompt: { type: "string", description: "Print-on-demand artwork direction (Printful only)." }
+      imagePrompt: { type: "string", description: "Artwork direction for AI generation (used when imageProvider is set and no printFileUrl)." },
+      printFileUrl: { type: "string", description: "Printful AUTO-build: URL of the merchant's own print-ready transparent PNG (≥1800px on the long edge). Use when the merchant supplies their own art." },
+      imageProvider: { type: "string", enum: ["openai", "google"], description: "Generate the artwork instead of uploading: 'openai' (gpt-image-1) or 'google' (Nano Banana 2, gemini-3.1-flash-image — renders text far better). Ignored when printFileUrl is given. Each carries a 'review before publishing' warning." }
     },
     required: ["title", "description", "productType", "fulfillmentType"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const input: MaterializationInput = {
       runtimeId: newId("op"),
       title: String(args.title),
@@ -390,9 +373,12 @@ const materialize_product: OperatorTool = {
       brand: typeof args.brand === "string" ? args.brand : undefined,
       niche: typeof args.niche === "string" ? args.niche : undefined,
       sourceProductId: typeof args.sourceProductId === "string" ? args.sourceProductId : undefined,
-      imagePrompt: typeof args.imagePrompt === "string" ? args.imagePrompt : undefined
+      imagePrompt: typeof args.imagePrompt === "string" ? args.imagePrompt : undefined,
+      printFileUrl: typeof args.printFileUrl === "string" ? args.printFileUrl : undefined,
+      imageProvider:
+        args.imageProvider === "openai" || args.imageProvider === "google" ? args.imageProvider : undefined
     };
-    const result = await materializeProduct(input);
+    const result = await materializeProduct(input, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `materialize_product → ${result.status} "${result.title}"`,
@@ -506,10 +492,11 @@ const bootstrap_store: OperatorTool = {
     required: ["brand", "webhookCallbackUrl"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const brand = String(args.brand);
     const webhookCallbackUrl = String(args.webhookCallbackUrl);
     const skipPolicies = args.skipPolicies === true;
-    const result = await bootstrapStore(brand, { webhookCallbackUrl, skipPolicies });
+    const result = await bootstrapStore(brand, { webhookCallbackUrl, skipPolicies }, tenantCtx);
     const okSteps = result.steps.filter((s) => s.ok).length;
     await logActivity({
       kind: "tool_call",
@@ -582,8 +569,9 @@ const list_menus: OperatorTool = {
     },
     required: ["brand"]
   },
-  async run(args) {
-    return await listMenus(String(args.brand));
+  async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
+    return await listMenus(String(args.brand), tenantCtx);
   }
 };
 
@@ -606,6 +594,7 @@ const add_menu_item: OperatorTool = {
     required: ["brand", "menuHandle", "title"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const result = await addMenuItem({
       brand: String(args.brand),
       menuHandle: String(args.menuHandle),
@@ -615,7 +604,7 @@ const add_menu_item: OperatorTool = {
       collection: typeof args.collectionId === "number" ? { id: args.collectionId } : undefined,
       url: typeof args.url === "string" ? args.url : undefined,
       position: typeof args.position === "number" ? args.position : undefined
-    });
+    }, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `add_menu_item → ${args.brand} ${args.menuHandle} += ${args.title}`,
@@ -638,7 +627,8 @@ const remove_menu_item: OperatorTool = {
     required: ["brand", "menuHandle", "title"]
   },
   async run(args, ctx) {
-    const result = await removeMenuItem(String(args.brand), String(args.menuHandle), String(args.title));
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
+    const result = await removeMenuItem(String(args.brand), String(args.menuHandle), String(args.title), tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `remove_menu_item → ${args.brand} ${args.menuHandle} -= ${args.title}`,
@@ -662,11 +652,12 @@ const transparentize_brand_images: OperatorTool = {
     required: ["brand"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const brand = String(args.brand);
     const result = await transparentizeBrandImages(brand, {
       edgeOnly: args.edgeOnly === true,
       productId: typeof args.productId === "number" ? args.productId : undefined
-    });
+    }, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `transparentize_brand_images → ${brand} (${result.processed}/${result.total})`,
@@ -940,7 +931,7 @@ const run_pipeline: OperatorTool = {
     if (!goal) return { error: "goal is required" };
 
     // createAutonomousRun returns 202 + payload {runId} when accepted.
-    const result = await createAutonomousRun({ goal });
+    const result = await createAutonomousRun({ goal }, ctx.tenantId ?? FOUNDER_TENANT_ID);
     await logActivity({
       kind: "tool_call",
       message: `run_pipeline → "${goal}" (status ${result.status})`,
@@ -955,7 +946,6 @@ const run_pipeline: OperatorTool = {
 
 // ── Policy generation and publishing ──────────────────────────────────────
 
-const POLICY_OUTPUT_ROOT = path.join(process.cwd(), ".openclaw", "policies");
 
 const generate_policies: OperatorTool = {
   name: "generate_policies",
@@ -969,10 +959,13 @@ const generate_policies: OperatorTool = {
     required: ["brand"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const brandSlug = String(args.brand);
     const config = await loadPolicyConfig(brandSlug);
     const policies = generateAllPolicies(config);
-    const dir = path.join(POLICY_OUTPUT_ROOT, brandSlug);
+    // Review output goes under the tenant-aware operator root — tenant-isolated
+    // and on the writable ephemeral base on Vercel (vs. the read-only bundle).
+    const dir = path.join(tenantCtx.paths.root, "policies", brandSlug);
     await mkdir(dir, { recursive: true });
     const written: string[] = [];
     for (const policy of policies) {
@@ -1006,10 +999,11 @@ const publish_policies: OperatorTool = {
     required: ["brand"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const brandSlug = String(args.brand);
     const config = await loadPolicyConfig(brandSlug);
     const policies = generateAllPolicies(config);
-    const results = await pushAllPolicies(brandSlug, policies);
+    const results = await pushAllPolicies(brandSlug, policies, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `publish_policies → ${brandSlug} (${results.filter((r) => r.ok).length}/${results.length} ok)`,
@@ -1116,7 +1110,7 @@ const get_content_drop: OperatorTool = {
 const generate_content_drop_run: OperatorTool = {
   name: "generate_content_drop_run",
   description:
-    "Run the full content drop pipeline for a drop that already has source photos uploaded. Generates lifestyle images (gpt-image-1), videos (Runway/Luma if configured), and platform-specific captions (Claude). Long-running — typically 2–6 minutes depending on configuration. Costs roughly $0.50–$5 per drop depending on whether videos are enabled.",
+    "Run the full content drop pipeline for a drop that already has source photos uploaded. Generates lifestyle variants (deterministic crops/treatments), AI model shots (needs the merchant's OpenAI key — skipped if absent), videos (only if the merchant has a video provider configured — skipped otherwise), and platform captions (Claude). Each phase degrades gracefully: a missing key skips that phase, it doesn't fail the drop. Long-running — typically 2–6 minutes. Costs roughly $0.50–$5 per drop on the merchant's own keys.",
   input_schema: {
     type: "object",
     properties: {
@@ -1142,6 +1136,7 @@ const generate_content_drop_run: OperatorTool = {
     required: ["dropId"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const dropId = String(args.dropId);
     const drop = await readContentDrop(dropId);
     if (!drop) return { error: "drop not found" };
@@ -1154,7 +1149,7 @@ const generate_content_drop_run: OperatorTool = {
       targetPlatforms: Array.isArray(args.targetPlatforms) ? (args.targetPlatforms as Platform[]) : undefined,
       maxLifestyleImages: typeof args.maxLifestyleImages === "number" ? args.maxLifestyleImages : undefined,
       maxVideos: typeof args.maxVideos === "number" ? args.maxVideos : undefined
-    });
+    }, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `generate_content_drop_run → ${dropId} (${result?.posts.length ?? 0} posts generated)`,
@@ -1318,14 +1313,18 @@ const summarize_drafts: OperatorTool = {
       brand: { type: "string", enum: Object.keys(BRANDS), description: "Brand slug. Omit for all configured brands." }
     }
   },
-  async run(args) {
+  async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
+    // Founder enumerates every configured brand; a tenant sees only their own
+    // store — never the founder's BV/LL drafts.
+    const allCreds = listShopifyCredentialsForContext(tenantCtx);
     const brands = typeof args.brand === "string"
-      ? listConfiguredShopifyCredentials().filter((c) => c.brandSlug === args.brand)
-      : listConfiguredShopifyCredentials();
+      ? allCreds.filter((c) => c.brandSlug === args.brand)
+      : allCreds;
     type Bucket = "publish_candidate" | "off_brand_delete" | "wrong_brand_for_apparel" | "needs_decision";
     type Item = { id: number; title: string; productType?: string; tags: string[]; bucket: Bucket; reason: string; adminUrl: string };
     const results = await Promise.all(brands.map(async (c) => {
-      const drafts = await listShopifyDrafts(250, c.brandSlug);
+      const drafts = await listShopifyDrafts(250, c.brandSlug, tenantCtx);
       const buckets: Record<Bucket, Item[]> = {
         publish_candidate: [],
         off_brand_delete: [],
@@ -1431,7 +1430,13 @@ const launch_status: OperatorTool = {
       brand: { type: "string", enum: Object.keys(BRANDS), description: "Brand slug. Omit for all configured brands." }
     }
   },
-  async run(args) {
+  async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
+    // Tenants get exactly their own store's readiness via the tenant-aware
+    // path; the brand arg and all-brands enumeration are founder-only.
+    if (!tenantCtx.isFounder) {
+      return await getTenantLaunchStatus(tenantCtx);
+    }
     if (typeof args.brand === "string") {
       return await getLaunchStatus(args.brand);
     }
@@ -1447,11 +1452,12 @@ const klaviyo_status: OperatorTool = {
   description:
     "Read-only health check on the Klaviyo integration. Verifies the KLAVIYO_API_KEY is live, returns the connected account name, lists configured, and recent campaigns. Use to confirm Klaviyo is wired before recommending any flows or sends.",
   input_schema: { type: "object", properties: {} },
-  async run() {
-    const health = await klaviyoHealthCheck();
+  async run(_args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
+    const health = await klaviyoHealthCheck(tenantCtx);
     if (!health.ok) return { ok: false, detail: health.detail };
-    const lists = await klaviyoListLists().catch(() => []);
-    const campaigns = await klaviyoListCampaigns().catch(() => []);
+    const lists = await klaviyoListLists(tenantCtx).catch(() => []);
+    const campaigns = await klaviyoListCampaigns(tenantCtx).catch(() => []);
     return {
       ok: true,
       account: { id: health.accountId, organization: health.organizationName },
@@ -1482,6 +1488,7 @@ const klaviyo_push_test_contact: OperatorTool = {
     required: ["email", "listId"]
   },
   async run(args, ctx) {
+    const tenantCtx = await contextForTenantId(ctx.tenantId ?? FOUNDER_TENANT_ID);
     const email = String(args.email);
     const listId = String(args.listId);
     const upsert = await klaviyoUpsertProfile({
@@ -1489,11 +1496,11 @@ const klaviyo_push_test_contact: OperatorTool = {
       firstName: typeof args.firstName === "string" ? args.firstName : undefined,
       lastName: typeof args.lastName === "string" ? args.lastName : undefined,
       properties: { source: "operator-test", testedAt: new Date().toISOString() }
-    });
+    }, tenantCtx);
     if (!upsert.ok || !upsert.profileId) {
       return { ok: false, step: "profile_upsert", detail: upsert.detail };
     }
-    const sub = await klaviyoSubscribeProfileToList(upsert.profileId, listId);
+    const sub = await klaviyoSubscribeProfileToList(upsert.profileId, listId, tenantCtx);
     await logActivity({
       kind: "tool_call",
       message: `klaviyo_push_test_contact → ${email} → list ${listId} (profile ${upsert.profileId})`,

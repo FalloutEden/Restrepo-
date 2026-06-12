@@ -4,6 +4,7 @@ import { resolveShopifyCredentials, type ShopifyCredentials } from "@/lib/shopif
 import { loadPolicyConfig } from "@/lib/policies-config";
 import { generateAllPolicies } from "@/lib/policies-generator";
 import { pushAllPolicies } from "@/lib/policies-shopify";
+import type { TenantContext } from "@/lib/tenant-context";
 
 // Bootstrap a freshly-installed Shopify store into a "ready to sell" state.
 //
@@ -155,11 +156,11 @@ async function ensureOrdersPaidWebhook(
 }
 
 // Step 3 — push the five customer-facing policies.
-async function pushPolicies(brand: string): Promise<BootstrapStepResult> {
+async function pushPolicies(brand: string, tenantCtx?: TenantContext): Promise<BootstrapStepResult> {
   try {
     const config = await loadPolicyConfig(brand);
     const policies = generateAllPolicies(config);
-    const results = await pushAllPolicies(brand, policies);
+    const results = await pushAllPolicies(brand, policies, tenantCtx);
     const failed = results.filter((r) => !r.ok);
     if (failed.length > 0) {
       return {
@@ -322,8 +323,8 @@ export type BootstrapResultExt = BootstrapResult & {
   manualSteps: string[];
 };
 
-export async function bootstrapStore(brand: string, options: BootstrapOptions): Promise<BootstrapResultExt> {
-  const creds = resolveShopifyCredentials(brand);
+export async function bootstrapStore(brand: string, options: BootstrapOptions, tenantCtx?: TenantContext): Promise<BootstrapResultExt> {
+  const creds = resolveShopifyCredentials(brand, tenantCtx);
   const steps: BootstrapStepResult[] = [];
 
   steps.push(await verifyAccessToken(creds));
@@ -340,7 +341,7 @@ export async function bootstrapStore(brand: string, options: BootstrapOptions): 
   steps.push(await ensureOrdersPaidWebhook(creds, options.webhookCallbackUrl));
 
   if (!options.skipPolicies) {
-    steps.push(await pushPolicies(brand));
+    steps.push(await pushPolicies(brand, tenantCtx));
   }
 
   // Wire the foundation/about pages into the main menu (idempotent).

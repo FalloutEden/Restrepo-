@@ -15,6 +15,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PREFIXES = [
   "/api/webhooks/", // HMAC-protected, must remain reachable
+  "/api/shopify/", // Shopify app install/OAuth/billing bounces — each verified inline (HMAC, state, or re-queried subscription); no admin/tenant data served here
+
   "/api/stripe/webhook", // Stripe signs payloads; verified inline
   "/api/stripe/connect/callback", // OAuth bounce from Stripe — state HMAC verified inline
   "/api/onboard/start", // Public signup endpoint — no auth required to start

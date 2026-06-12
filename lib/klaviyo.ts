@@ -1,21 +1,30 @@
 import "server-only";
 
+import type { TenantContext } from "@/lib/tenant-context";
+
 // Minimal Klaviyo Admin API client. Used by the operator agent's Klaviyo
 // tools (status check, test contact push, metrics read) and any future
 // Vercel-side webhook handlers that need to push subscribers.
 //
-// Auth: Bearer with the Private API key. Pass in env as KLAVIYO_API_KEY.
+// Auth: Bearer with the Private API key. Tenant-aware: a real merchant's key
+//       comes from their encrypted vault (no env fallback — billing safety);
+//       the founder falls back to KLAVIYO_API_KEY in env.
 // Rev:  Klaviyo's API is versioned by `revision` header — pin to a known-
 //       stable version so server upgrades don't silently change behavior.
 
 const KLAVIYO_BASE = "https://a.klaviyo.com/api";
 const REVISION = "2024-10-15";
 
-function authHeaders(): Record<string, string> {
+function resolveKlaviyoKey(tenantCtx?: TenantContext): string {
+  if (tenantCtx && !tenantCtx.isFounder) return tenantCtx.requireSecret("klaviyoApiKey");
   const key = process.env.KLAVIYO_API_KEY?.trim();
   if (!key) throw new Error("Missing KLAVIYO_API_KEY in env.");
+  return key;
+}
+
+function authHeaders(tenantCtx?: TenantContext): Record<string, string> {
   return {
-    Authorization: `Klaviyo-API-Key ${key}`,
+    Authorization: `Klaviyo-API-Key ${resolveKlaviyoKey(tenantCtx)}`,
     revision: REVISION,
     accept: "application/vnd.api+json",
     "content-type": "application/vnd.api+json"
@@ -24,12 +33,13 @@ function authHeaders(): Record<string, string> {
 
 async function klaviyo<T>(
   path: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  tenantCtx?: TenantContext
 ): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
   try {
     const r = await fetch(`${KLAVIYO_BASE}${path}`, {
       ...init,
-      headers: { ...authHeaders(), ...(init.headers ?? {}) }
+      headers: { ...authHeaders(tenantCtx), ...(init.headers ?? {}) }
     });
     const text = await r.text();
     if (!r.ok) {
@@ -52,7 +62,7 @@ export type KlaviyoHealthReport = {
   detail: string;
 };
 
-export async function klaviyoHealthCheck(): Promise<KlaviyoHealthReport> {
+export async function klaviyoHealthCheck(tenantCtx?: TenantContext): Promise<KlaviyoHealthReport> {
   // Hit /lists/ instead of /accounts/ since the operator's API key is
   // scoped without Accounts:Read (intentionally — we follow least-privilege
   // and Accounts has no operationally useful info that justifies the scope).
@@ -60,7 +70,7 @@ export async function klaviyoHealthCheck(): Promise<KlaviyoHealthReport> {
   const r = await klaviyo<{
     data: Array<{ id: string; attributes: { name: string } }>;
     meta?: { total_count?: number };
-  }>("/lists/?page[size]=1");
+  }>("/lists/?page[size]=1", {}, tenantCtx);
   if (!r.ok) {
     if (r.status === 401 || r.status === 403) {
       return {
@@ -83,13 +93,13 @@ export async function klaviyoHealthCheck(): Promise<KlaviyoHealthReport> {
 
 export type KlaviyoList = { id: string; name: string; created: string; updated: string };
 
-export async function klaviyoListLists(): Promise<KlaviyoList[]> {
+export async function klaviyoListLists(tenantCtx?: TenantContext): Promise<KlaviyoList[]> {
   const r = await klaviyo<{
     data: Array<{
       id: string;
       attributes: { name: string; created: string; updated: string };
     }>;
-  }>("/lists/");
+  }>("/lists/", {}, tenantCtx);
   if (!r.ok) throw new Error(`Klaviyo lists fetch failed (${r.status}): ${r.error.slice(0, 200)}`);
   return r.data.data.map((l) => ({
     id: l.id,
@@ -106,7 +116,7 @@ export async function klaviyoUpsertProfile(input: {
   firstName?: string;
   lastName?: string;
   properties?: Record<string, unknown>;
-}): Promise<{ ok: boolean; profileId?: string; detail: string }> {
+}, tenantCtx?: TenantContext): Promise<{ ok: boolean; profileId?: string; detail: string }> {
   const body = {
     data: {
       type: "profile",
@@ -123,7 +133,7 @@ export async function klaviyoUpsertProfile(input: {
   const r = await klaviyo<{ data: { id: string } }>("/profiles/", {
     method: "POST",
     body: JSON.stringify(body)
-  });
+  }, tenantCtx);
   if (r.ok) {
     return { ok: true, profileId: r.data.data.id, detail: "Profile created." };
   }
@@ -131,7 +141,7 @@ export async function klaviyoUpsertProfile(input: {
   if (r.status === 409) {
     const existing = await klaviyo<{
       data: Array<{ id: string }>;
-    }>(`/profiles/?filter=equals(email,"${encodeURIComponent(input.email)}")`);
+    }>(`/profiles/?filter=equals(email,"${encodeURIComponent(input.email)}")`, {}, tenantCtx);
     if (existing.ok && existing.data.data[0]) {
       return { ok: true, profileId: existing.data.data[0].id, detail: "Profile already exists." };
     }
@@ -141,12 +151,13 @@ export async function klaviyoUpsertProfile(input: {
 
 export async function klaviyoSubscribeProfileToList(
   profileId: string,
-  listId: string
+  listId: string,
+  tenantCtx?: TenantContext
 ): Promise<{ ok: boolean; detail: string }> {
   const r = await klaviyo(`/lists/${listId}/relationships/profiles/`, {
     method: "POST",
     body: JSON.stringify({ data: [{ type: "profile", id: profileId }] })
-  });
+  }, tenantCtx);
   if (r.ok) return { ok: true, detail: "Subscribed to list." };
   return { ok: false, detail: `Subscribe failed (${r.status}): ${r.error.slice(0, 200)}` };
 }
@@ -231,7 +242,7 @@ export type KlaviyoCampaign = {
   sentAt?: string;
 };
 
-export async function klaviyoListCampaigns(): Promise<KlaviyoCampaign[]> {
+export async function klaviyoListCampaigns(tenantCtx?: TenantContext): Promise<KlaviyoCampaign[]> {
   const r = await klaviyo<{
     data: Array<{
       id: string;
@@ -242,7 +253,7 @@ export async function klaviyoListCampaigns(): Promise<KlaviyoCampaign[]> {
         send_time?: string;
       };
     }>;
-  }>("/campaigns/?filter=equals(messages.channel,'email')");
+  }>("/campaigns/?filter=equals(messages.channel,'email')", {}, tenantCtx);
   if (!r.ok) throw new Error(`Klaviyo campaigns fetch failed (${r.status}): ${r.error.slice(0, 200)}`);
   return r.data.data.map((c) => ({
     id: c.id,

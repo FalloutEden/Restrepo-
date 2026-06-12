@@ -46,6 +46,22 @@ export const BRANDS: Record<string, Brand> = {
       "Premium lifestyle buyers shopping the elevated-essentials tier at department stores (Dillard's, Nordstrom Men's) and specialty boutiques. Skews 28–55, values material and construction over branding, willing to pay $40–80 for a tee because it feels different on.",
     domain: "blackvaultapparel.com",
     defaultFulfillment: "printful"
+  },
+  // GthicPrintables sells on ETSY, not Shopify. Its Printful store is an
+  // Etsy-platform store (API CANNOT create products/templates there — UI only).
+  // Programmatic management is gated on the Etsy Open API (app pending personal
+  // approval as of 2026-06-11). Registered here so the operator is brand-aware
+  // and can generate designs + Etsy SEO; store ops stay manual until Etsy API.
+  "gthic-printables": {
+    slug: "gthic-printables",
+    name: "GthicPrintables",
+    tagline: "Romantic gothic, made to keep.",
+    voice:
+      "Romantic gothic / witchy — refined, never edgy-for-its-own-sake. Dramatic but tasteful: dark academia, occult, celestial, memento mori. Speaks to lovers of black cats, tarot, death's-head moths, moon phases, skeletal botanicals, ravens. Elegant serif sensibility with gold/cream-on-black or vintage-antique palettes. Comparable in tone to Killstar (dialed back), Disturbia, and vintage apothecary/occult print shops. Avoids: edgelord clichés, gore, try-hard 'spooky', mass-merch slogans, all-caps shouting. ETSY SEO-FIRST: every listing needs a keyword-rich descriptive title and all 13 tags (the channel is pure search).",
+    audience:
+      "Etsy shoppers in the gothic / witchy / dark-academia aesthetic — skews 18–40, buys stickers (fastest test), black apparel, wall art, tote bags; values vibe + craft; finds products by aesthetic keyword search.",
+    domain: "etsy.com/shop/GthicPrintables",
+    defaultFulfillment: "printful"
   }
 };
 

@@ -481,6 +481,90 @@ const agentDefaults: Agent[] = [
     updatedAt: "just now",
     queueDepth: 0,
     owner: "Research Quality Cell"
+  },
+  {
+    id: "etsy-design-12",
+    name: "Hex",
+    role: "Etsy Design Research Agent",
+    avatar: "/agents/Wesker/glasses-1.png",
+    background: "/backgrounds/wesker-room.png",
+    avatarFrames: ["/agents/Wesker/glasses-1.png"],
+    status: "Running",
+    latestOutputPreview: "Scouting romantic-goth Etsy bestsellers — moths, tarot, celestial, skeletal botanicals — and scoring whitespace.",
+    latestOutput: "Compiled a romantic-goth opportunity board with tag-demand scores and design directions for GthicPrintables.",
+    updatedAt: "just now",
+    queueDepth: 6,
+    owner: "Market Intelligence Group"
+  },
+  {
+    id: "bv-curator-13",
+    name: "Vault",
+    role: "Black Vault Curator Agent",
+    avatar: "/agents/Ada/standing-rest.png",
+    background: "/backgrounds/ada-room.png",
+    avatarFrames: ["/agents/Ada/standing-rest.png"],
+    status: "Running",
+    latestOutputPreview: "Refining the Black Vault line — placement, premium materials, and catalog gaps to fill next.",
+    latestOutput: "Drafted the next BV drops and tightened placement standards across the catalog.",
+    updatedAt: "1 minute ago",
+    queueDepth: 3,
+    owner: "Design Direction"
+  },
+  {
+    id: "platform-14",
+    name: "Sable",
+    role: "Platform Engineering Agent",
+    avatar: "/agents/Hunk/standing-rest.png",
+    background: "/backgrounds/hunk-room.png",
+    avatarFrames: ["/agents/Hunk/standing-rest.png"],
+    status: "Idle",
+    latestOutputPreview: "Hardening the operator app — performance, UX, and reliability passes.",
+    latestOutput: "Logged app-improvement candidates and shipped incremental UX fixes.",
+    updatedAt: "5 minutes ago",
+    queueDepth: 2,
+    owner: "Vault Systems"
+  },
+  {
+    id: "shopify-app-15",
+    name: "Conduit",
+    role: "Shopify App Agent",
+    avatar: "/agents/Nemesis/standing-rest.png",
+    background: "/backgrounds/nemesis-room.png",
+    avatarFrames: ["/agents/Nemesis/standing-rest.png"],
+    status: "Running",
+    latestOutputPreview: "Advancing the embedded Shopify app — install flow, billing, and merchant onboarding.",
+    latestOutput: "Progressed the Shopify app toward review-ready: OAuth, GDPR webhooks, and billing wiring.",
+    updatedAt: "3 minutes ago",
+    queueDepth: 4,
+    owner: "Special Operations"
+  },
+  {
+    id: "seo-16",
+    name: "Lexicon",
+    role: "SEO & Listing Agent",
+    avatar: "/agents/Zeno/idle-1.png",
+    background: "/backgrounds/Zeno.png",
+    avatarFrames: ["/agents/Zeno/idle-1.png"],
+    status: "Idle",
+    latestOutputPreview: "Writing keyword-rich titles and 13-tag sets for new listings across channels.",
+    latestOutput: "Generated SEO title + tag packs ready to paste into Etsy and Shopify listings.",
+    updatedAt: "just now",
+    queueDepth: 1,
+    owner: "Market Intelligence Group"
+  },
+  {
+    id: "render-17",
+    name: "Atelier",
+    role: "Mockup & Render Agent",
+    avatar: "/agents/Gideon/adjust-1.png",
+    background: "/backgrounds/Gideon.webp",
+    avatarFrames: ["/agents/Gideon/adjust-1.png"],
+    status: "Running",
+    latestOutputPreview: "Generating print-ready files and garment mockups from approved designs.",
+    latestOutput: "Vectorized designs to 500 DPI and rendered product mockups for review.",
+    updatedAt: "just now",
+    queueDepth: 2,
+    owner: "Product Strategy Group"
   }
 ];
 
@@ -508,7 +592,13 @@ const rawAgentPayloads: AgentPayload[] = [
   agentDefaults[7],
   agentDefaults[8],
   agentDefaults[9],
-  agentDefaults[10]
+  agentDefaults[10],
+  agentDefaults[11],
+  agentDefaults[12],
+  agentDefaults[13],
+  agentDefaults[14],
+  agentDefaults[15],
+  agentDefaults[16]
 ];
 
 const validStatuses = new Set<AgentStatus>(["Running", "Retrying", "Idle", "Completed", "Blocked", "Failed", "Error"]);

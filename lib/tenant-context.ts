@@ -72,7 +72,10 @@ export type CredentialName =
   | "shopifyWebhookSecret"
   | "printfulApiKey"
   | "printfulStoreId"
+  | "printfulDefaultVariantId"
+  | "printfulRetailPrice"
   | "klaviyoApiKey"
+  | "googleApiKey"
   | "cjApiKey"
   | "cjEmail";
 
@@ -121,10 +124,25 @@ const CREDENTIAL_DEFS: Record<CredentialName, CredentialDef> = {
     envFallback: ["PRINTFUL_STORE_ID"],
     label: "Printful store id"
   },
+  printfulDefaultVariantId: {
+    secretKey: "printfulDefaultVariantId",
+    envFallback: ["PRINTFUL_DEFAULT_VARIANT_ID"],
+    label: "Printful default blank variant id"
+  },
+  printfulRetailPrice: {
+    secretKey: "printfulRetailPrice",
+    envFallback: ["PRINTFUL_RETAIL_PRICE", "DEFAULT_RETAIL_PRICE"],
+    label: "Printful default retail price"
+  },
   klaviyoApiKey: {
     secretKey: "klaviyoApiKey",
     envFallback: ["KLAVIYO_API_KEY"],
     label: "Klaviyo API key"
+  },
+  googleApiKey: {
+    secretKey: "googleApiKey",
+    envFallback: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+    label: "Google Gemini API key (Nano Banana 2 image generation)"
   },
   cjApiKey: {
     secretKey: "cjApiKey",

@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
 import { deleteShopifyProduct } from "@/lib/shopify-service";
+import { resolveTenantContext } from "@/lib/tenant-context";
 
 export const runtime = "nodejs";
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  // Founder-only. This route deletes from a founder brand's Shopify store
+  // (resolved from the ?brand= slug → founder credentials). A tenant operates
+  // on its own store via the tenant-scoped operator tools, never here — without
+  // this gate any tenant bearer could delete products from any founder brand.
+  const ctx = await resolveTenantContext(request);
+  if (!ctx.isFounder) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id } = await context.params;
   const productId = Number(id);
 

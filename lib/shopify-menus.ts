@@ -1,6 +1,7 @@
 import "server-only";
 
 import { resolveShopifyCredentials, type ShopifyCredentials } from "@/lib/shopify-credentials";
+import type { TenantContext } from "@/lib/tenant-context";
 
 // Manage Shopify storefront navigation menus via the Admin GraphQL API.
 // Requires the `read_online_store_navigation` and `write_online_store_navigation`
@@ -41,8 +42,7 @@ async function shopifyGraphQL<T>(
   return parsed.data as T;
 }
 
-export async function listMenus(brand?: string): Promise<MenuSummary[]> {
-  const creds = resolveShopifyCredentials(brand);
+async function fetchMenus(creds: ShopifyCredentials): Promise<MenuSummary[]> {
   const data = await shopifyGraphQL<{
     menus: { edges: Array<{ node: { id: string; handle: string; title: string; items: MenuItemWithId[] } }> };
   }>(
@@ -54,10 +54,15 @@ export async function listMenus(brand?: string): Promise<MenuSummary[]> {
   return data.menus.edges.map((e) => e.node);
 }
 
+export async function listMenus(brand?: string, tenantCtx?: TenantContext): Promise<MenuSummary[]> {
+  return fetchMenus(resolveShopifyCredentials(brand, tenantCtx));
+}
+
 async function getMenuByHandle(creds: ShopifyCredentials, handle: string): Promise<MenuSummary | null> {
   // Shopify's `menu(handle:)` query is unreliable across API versions — use
-  // the list-and-filter approach instead.
-  const all = await listMenus(creds.brandSlug);
+  // the list-and-filter approach instead. Reuse the already-resolved creds so
+  // a tenant call doesn't fall back to the founder env path.
+  const all = await fetchMenus(creds);
   return all.find((m) => m.handle === handle) ?? null;
 }
 
@@ -76,8 +81,8 @@ export type AddMenuItemInput = {
   position?: number;
 };
 
-export async function addMenuItem(input: AddMenuItemInput): Promise<MenuSummary> {
-  const creds = resolveShopifyCredentials(input.brand);
+export async function addMenuItem(input: AddMenuItemInput, tenantCtx?: TenantContext): Promise<MenuSummary> {
+  const creds = resolveShopifyCredentials(input.brand, tenantCtx);
   const menu = await getMenuByHandle(creds, input.menuHandle);
   if (!menu) throw new Error(`Menu with handle "${input.menuHandle}" not found`);
 
@@ -138,8 +143,8 @@ export async function addMenuItem(input: AddMenuItemInput): Promise<MenuSummary>
   };
 }
 
-export async function removeMenuItem(brand: string | undefined, menuHandle: string, title: string): Promise<MenuSummary> {
-  const creds = resolveShopifyCredentials(brand);
+export async function removeMenuItem(brand: string | undefined, menuHandle: string, title: string, tenantCtx?: TenantContext): Promise<MenuSummary> {
+  const creds = resolveShopifyCredentials(brand, tenantCtx);
   const menu = await getMenuByHandle(creds, menuHandle);
   if (!menu) throw new Error(`Menu with handle "${menuHandle}" not found`);
   const items = menu.items
